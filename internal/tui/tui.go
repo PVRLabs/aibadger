@@ -1,0 +1,477 @@
+package tui
+
+// This file owns the high-level Bubble Tea model, message handling, and
+// workflow transitions for the TUI.
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/PVRLabs/aibadger/internal/engine"
+	"github.com/PVRLabs/aibadger/internal/extractor"
+	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/workflow"
+	"github.com/PVRLabs/aibadger/internal/writer"
+	"github.com/charmbracelet/bubbles/textarea"
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+type state int
+
+const (
+	stateHome state = iota
+	stateOnboarding
+	stateScanning
+	stateScanComplete
+	stateWaitingForExtractions
+	stateContextReady
+	stateWaitingForCode
+	stateTextResponse
+	stateWritePreview
+	stateWriting
+	stateManualCopy
+	stateHelp
+	stateReviewHelp
+	statePromptFileReveal
+)
+
+const (
+	topologyPromptKind    = workflow.TopologyPromptKind
+	codeContextPromptKind = workflow.CodeContextPromptKind
+	helpCommand           = "/help"
+	reviewCommand         = "/review"
+)
+
+type Model struct {
+	root string
+	cfg  Config
+
+	state  state
+	goal   string
+	status tuiMessage
+	err    error
+
+	goalInput textarea.Model
+	paste     textarea.Model
+
+	eng      *engine.Engine
+	session  *workflow.Session
+	schemaA  string
+	schemaB  string
+	commands []extractor.Command
+	metadata []protocol.ExtractionMetadata
+	updates  []writer.FileUpdate
+	response string
+
+	onboardingCompletionSaved bool
+
+	manualCopyKind string
+	manualCopyText string
+
+	promptFileKind string
+	promptFilePath string
+
+	largeProjectPending bool
+	scanFrame           int
+	width               int
+	height              int
+}
+
+type scanDoneMsg struct {
+	eng *engine.Engine
+	err error
+}
+
+type tickMsg time.Time
+
+type copyDoneMsg struct {
+	kind string
+	text string
+	err  error
+}
+
+type savePromptDoneMsg struct {
+	kind      string
+	path      string
+	canReveal bool
+	err       error
+}
+
+type openPromptFileDoneMsg struct {
+	kind string
+	path string
+	err  error
+}
+
+type contextDoneMsg struct {
+	schema   string
+	metadata []protocol.ExtractionMetadata
+	err      error
+}
+
+type writeDoneMsg struct {
+	updates []writer.FileUpdate
+	errs    []error
+}
+
+// Run starts the interactive Bubble Tea TUI.
+func Run(root string) error {
+	return RunWithConfig(root, DefaultConfig())
+}
+
+func RunWithConfig(root string, cfg Config) error {
+	if err := engine.CheckDisabledAndExit(root, os.Stdout); err != nil {
+		return nil
+	}
+	_, err := tea.NewProgram(NewModel(root, cfg), tea.WithAltScreen()).Run()
+	return err
+}
+
+func NewModel(root string, cfg Config) Model {
+	cfg = cfg.withDefaults()
+	goalInput := textarea.New()
+	goalInput.Placeholder = "Describe the coding task..."
+	goalInput.Prompt = "> "
+	goalInput.CharLimit = 0
+	goalInput.SetWidth(76)
+	goalInput.SetHeight(3)
+	goalInput.Focus()
+
+	paste := textarea.New()
+	paste.Placeholder = "Paste here..."
+	paste.Prompt = "  "
+	paste.CharLimit = 0
+	paste.SetWidth(76)
+	paste.SetHeight(12)
+	paste.Blur()
+
+	m := Model{
+		root:      root,
+		cfg:       cfg,
+		state:     stateHome,
+		goalInput: goalInput,
+		paste:     paste,
+		session:   workflow.NewSession(nil, cfg.WhitespaceMode),
+	}
+
+	settings, showOnboarding, onboardingCompleted := loadSettingsState(cfg.SettingsPath)
+	if settings.WhitespaceMode != "" {
+		cfg.WhitespaceMode = writer.WhitespaceMode(settings.WhitespaceMode)
+		m.cfg = cfg
+		m.session.WhitespaceMode = cfg.WhitespaceMode
+	}
+	m.onboardingCompletionSaved = onboardingCompleted
+	if showOnboarding {
+		m.state = stateOnboarding
+		m.goalInput.Blur()
+	}
+	return m
+}
+
+func loadSettingsState(settingsPath string) (Settings, bool, bool) {
+	if settingsPath == "" {
+		return Settings{}, false, true
+	}
+	settings, err := LoadSettings(settingsPath)
+	if err != nil {
+		return Settings{}, true, false
+	}
+	return settings, !settings.FirstRunOnboardingCompleted, settings.FirstRunOnboardingCompleted
+}
+
+func (m Model) Init() tea.Cmd {
+	return textarea.Blink
+}
+
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.goalInput.SetWidth(clamp(msg.Width-8, 40, 100))
+		m.paste.SetWidth(clamp(msg.Width-8, 40, 100))
+		m.paste.SetHeight(clamp(msg.Height-14, 8, 18))
+		return m, tea.ClearScreen
+	case tickMsg:
+		if m.state != stateScanning {
+			return m, nil
+		}
+		m.scanFrame++
+		return m, scanTick()
+	case scanDoneMsg:
+		if msg.err != nil {
+			m.state = stateHome
+			m.err = msg.err
+			m.status = tuiMessage{}
+			m.goalInput.Focus()
+			return m, textarea.Blink
+		}
+		m.eng = msg.eng
+		workflow.ConfigureEngine(m.eng, m.engineOptions(0))
+		m.session = workflow.NewSession(m.eng, m.cfg.WhitespaceMode)
+		m.err = nil
+		m.state = stateScanComplete
+		m.largeProjectPending = totalFiles(m.eng.Topology) > m.cfg.LargeProjectFileThreshold
+		if !m.largeProjectPending {
+			m.schemaA = m.session.GenerateMap(m.goal)
+		}
+		return m, nil
+	case copyDoneMsg:
+		if msg.err != nil {
+			m.state = stateManualCopy
+			m.status = warningMessage(fmt.Sprintf("%s clipboard copy failed: %v", msg.kind, msg.err))
+			m.manualCopyKind = msg.kind
+			m.manualCopyText = msg.text
+			return m, nil
+		}
+		m.status = successMessage(fmt.Sprintf("%s copied to clipboard.", msg.kind))
+		return m.advanceAfterCopy(msg.kind, false)
+	case savePromptDoneMsg:
+		if msg.err != nil {
+			m.status = errorMessage(fmt.Sprintf("Could not save %s to temp file: %v", msg.kind, msg.err))
+			return m, nil
+		}
+		if msg.canReveal {
+			m.state = statePromptFileReveal
+			m.promptFileKind = msg.kind
+			m.promptFilePath = msg.path
+			m.status = successMessage(fmt.Sprintf("Saved %s to temp file:\n\n%s", msg.kind, msg.path))
+			return m, nil
+		}
+		return m.advanceAfterTempFile(msg.kind, msg.path)
+	case openPromptFileDoneMsg:
+		if msg.err != nil {
+			m.status = warningMessage(fmt.Sprintf("Could not open the file manager automatically.\nAttach this file to your AI chat:\n\n%s", msg.path))
+		} else {
+			m.status = successMessage(fmt.Sprintf("Saved %s to temp file:\n\n%s\n\nAttach this file to your AI chat.", msg.kind, msg.path))
+		}
+		return m.advanceAfterTempFileWithStatus(msg.kind, msg.path, m.status)
+	case contextDoneMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.status = tuiMessage{}
+			return m, nil
+		}
+		m.schemaB = msg.schema
+		m.metadata = msg.metadata
+		m.state = stateContextReady
+		m.status = neutralMessage("Code context ready. Review the file list before copying Prompt 2.")
+		m.err = nil
+		return m, nil
+	case writeDoneMsg:
+		m.state = stateHome
+		m.goal = ""
+		m.schemaA = ""
+		m.schemaB = ""
+		m.commands = nil
+		m.updates = nil
+		m.response = ""
+		m.goalInput.SetValue("")
+		m.goalInput.Focus()
+		m.paste.Blur()
+		if len(msg.errs) > 0 {
+			m.status = errorMessage(fmt.Sprintf("Finished with %d apply error(s).", len(msg.errs)))
+		} else {
+			writes, deletes := countAppliedKinds(msg.updates)
+			switch {
+			case writes > 0 && deletes > 0:
+				m.status = successMessage(fmt.Sprintf("Applied %d write(s) and %d delete(s). Ready for the next goal.", writes, deletes))
+			case deletes > 0:
+				m.status = successMessage(fmt.Sprintf("Deleted %d file(s). Ready for the next goal.", deletes))
+			default:
+				m.status = successMessage(fmt.Sprintf("Wrote %d file(s). Ready for the next goal.", writes))
+			}
+		}
+		return m, textarea.Blink
+	case tea.KeyMsg:
+		return m.handleKey(msg)
+	}
+
+	var cmd tea.Cmd
+	switch m.state {
+	case stateHome:
+		m.goalInput, cmd = m.goalInput.Update(msg)
+	case stateWaitingForExtractions, stateWaitingForCode:
+		m.paste, cmd = m.paste.Update(msg)
+	}
+	return m, cmd
+}
+
+func (m Model) submitGoal() (tea.Model, tea.Cmd) {
+	goal := strings.TrimSpace(m.goalInput.Value())
+	if goal == "" {
+		return m, nil
+	}
+	if goal == m.cfg.ExitCommand {
+		return m, tea.Quit
+	}
+	if goal == helpCommand {
+		m.state = stateHelp
+		m.goalInput.Blur()
+		m.status = tuiMessage{}
+		return m, nil
+	}
+	if goal == reviewCommand {
+		m.state = stateReviewHelp
+		m.goalInput.Blur()
+		m.status = tuiMessage{}
+		return m, nil
+	}
+
+	m.goal = goal
+	m.status = tuiMessage{}
+	m.err = nil
+	m.state = stateScanning
+	m.scanFrame = 0
+	m.goalInput.Blur()
+	return m, tea.Batch(scanProjectCmd(m.root), scanTick())
+}
+
+func (m Model) advanceAfterCopy(kind string, manual bool) (tea.Model, tea.Cmd) {
+	m.manualCopyKind = ""
+	m.manualCopyText = ""
+	switch kind {
+	case topologyPromptKind:
+		if manual {
+			m.status = neutralMessage("Prompt 1: Topology shown for manual copy. Paste it into any LLM chat interface, then paste extraction commands.")
+		} else {
+			m.status = successMessage("Prompt 1: Topology copied. Paste it into any LLM chat interface, then paste extraction commands.")
+		}
+		m.state = stateWaitingForExtractions
+		m.resetPaste(pasteSpecForState(m.state).placeholder)
+	case codeContextPromptKind:
+		// Both paths mean Prompt 2 has been handed off; only the status copy
+		// differs so the user knows whether it was copied or shown manually.
+		if manual {
+			m.status = neutralMessage("Prompt 2: Code Context shown for manual copy. Next: paste the final AI response.")
+		} else {
+			m.status = successMessage("Prompt 2: Code Context copied. Next: paste the final AI response.")
+		}
+		m.markOnboardingCompleted()
+		m.state = stateWaitingForCode
+		m.resetPaste(pasteSpecForState(m.state).placeholder)
+	}
+	return m, textarea.Blink
+}
+
+func (m Model) advanceAfterTempFile(kind, path string) (tea.Model, tea.Cmd) {
+	return m.advanceAfterTempFileWithStatus(kind, path, successMessage(fmt.Sprintf("Saved %s to temp file:\n\n%s\n\nAttach this file to your AI chat, or open it and copy from it manually.", kind, path)))
+}
+
+func (m Model) advanceAfterTempFileWithStatus(kind, path string, status tuiMessage) (tea.Model, tea.Cmd) {
+	m.manualCopyKind = ""
+	m.manualCopyText = ""
+	m.promptFileKind = ""
+	m.promptFilePath = ""
+	m.status = status
+	switch kind {
+	case topologyPromptKind:
+		m.state = stateWaitingForExtractions
+		m.resetPaste(pasteSpecForState(m.state).placeholder)
+	case codeContextPromptKind:
+		m.markOnboardingCompleted()
+		m.state = stateWaitingForCode
+		m.resetPaste(pasteSpecForState(m.state).placeholder)
+	}
+	return m, textarea.Blink
+}
+
+func (m Model) cancelPromptDelivery(kind string) (tea.Model, tea.Cmd) {
+	switch kind {
+	case topologyPromptKind:
+		m.status = neutralMessage("Prompt 1: Topology was not copied.")
+		m.state = stateWaitingForExtractions
+		m.resetPaste(pasteSpecForState(m.state).placeholder)
+	case codeContextPromptKind:
+		m.status = neutralMessage("Prompt 2: Code Context was not copied.")
+		m.state = stateWaitingForCode
+		m.resetPaste(pasteSpecForState(m.state).placeholder)
+	}
+	return m, textarea.Blink
+}
+
+func (m Model) submitExtractions() (tea.Model, tea.Cmd) {
+	input := strings.TrimSpace(m.paste.Value())
+	session := m.workflowSession()
+	result := session.ParseExtractionInput(input)
+	m.commands = result.Commands
+	if result.Empty {
+		m.status = tuiMessage{}
+		m.err = fmt.Errorf("No extraction commands found. Paste FILE/PREFIX/NEAR commands and press Enter.")
+		return m, nil
+	}
+	m.status = successMessage(fmt.Sprintf("Parsed %d extraction command(s).", result.Count))
+	m.err = nil
+	return m, contextCmd(session, m.goal, m.commands)
+}
+
+func (m Model) submitFinalResponse() (tea.Model, tea.Cmd) {
+	input := strings.TrimSpace(m.paste.Value())
+	final := m.workflowSession().ParseFinalResponse(input)
+	m.updates = final.Parse.Updates
+	m.response = final.Parse.Text
+	if final.HasErrors {
+		m.state = stateWaitingForCode
+		m.status = tuiMessage{}
+		m.err = errors.Join(final.Parse.Errors...)
+		return m, nil
+	}
+	if !final.HasUpdates {
+		m.state = stateTextResponse
+		m.status = tuiMessage{}
+		m.paste.Blur()
+		return m, nil
+	}
+	m.state = stateWritePreview
+	if final.HasNotes {
+		m.status = successMessage(fmt.Sprintf("Parsed %d file operation(s). AI also included notes.", len(m.updates)))
+	} else {
+		m.status = successMessage(fmt.Sprintf("Parsed %d file operation(s).", len(m.updates)))
+	}
+	return m, nil
+}
+
+func (m Model) submitPasteState() (tea.Model, tea.Cmd) {
+	switch m.state {
+	case stateWaitingForExtractions:
+		return m.submitExtractions()
+	case stateWaitingForCode:
+		return m.submitFinalResponse()
+	default:
+		return m, nil
+	}
+}
+
+func (m Model) returnHome(status tuiMessage) (tea.Model, tea.Cmd) {
+	m.state = stateHome
+	m.status = status
+	m.err = nil
+	m.goal = ""
+	m.schemaA = ""
+	m.schemaB = ""
+	m.commands = nil
+	m.updates = nil
+	m.response = ""
+	m.goalInput.SetValue("")
+	m.goalInput.Focus()
+	m.paste.Blur()
+	return m, textarea.Blink
+}
+
+func (m *Model) resetPaste(placeholder string) {
+	m.paste.SetValue("")
+	m.paste.Placeholder = placeholder
+	m.paste.Focus()
+	m.goalInput.Blur()
+}
+
+func (m *Model) markOnboardingCompleted() {
+	if m.cfg.SettingsPath == "" || m.onboardingCompletionSaved {
+		return
+	}
+	_ = SaveSettings(m.cfg.SettingsPath, Settings{FirstRunOnboardingCompleted: true})
+	m.onboardingCompletionSaved = true
+}

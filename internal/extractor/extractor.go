@@ -111,6 +111,9 @@ func (e *Extractor) processCommand(cmd Command) (string, bool, error) {
 	}
 
 	absolutePath := filepath.Join(e.ProjectRoot, resolvedPath)
+	if !isWithinProjectRoot(e.ProjectRoot, absolutePath) {
+		return "", false, fmt.Errorf("file not found: %s", cmd.Path)
+	}
 	kind := filekind.Classify(absolutePath)
 	if kind == model.FileKindBinary {
 		return "", false, errPrompt2Excluded
@@ -138,6 +141,12 @@ func (e *Extractor) processCommand(cmd Command) (string, bool, error) {
 		return "", false, err
 	}
 	return extracted, fullFile, nil
+}
+
+func isWithinProjectRoot(root, absPath string) bool {
+	rootClean := filepath.Clean(root)
+	absClean := filepath.Clean(absPath)
+	return absClean == rootClean || strings.HasPrefix(absClean, rootClean+string(filepath.Separator))
 }
 
 func summarizeBinaryFile(path string, size int, kind string) string {

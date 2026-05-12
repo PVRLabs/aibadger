@@ -787,3 +787,175 @@ func TestLineMatchesCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestIsWithinProjectRoot(t *testing.T) {
+	tests := []struct {
+		name    string
+		root    string
+		absPath string
+		want    bool
+	}{
+		{
+			name:    "file under root",
+			root:    "/home/user/proj",
+			absPath: "/home/user/proj/src/main.go",
+			want:    true,
+		},
+		{
+			name:    "root itself",
+			root:    "/home/user/proj",
+			absPath: "/home/user/proj",
+			want:    true,
+		},
+		{
+			name:    "root with trailing slash",
+			root:    "/home/user/proj/",
+			absPath: "/home/user/proj/internal/foo.go",
+			want:    true,
+		},
+		{
+			name:    "parent traversal escape",
+			root:    "/home/user/proj",
+			absPath: "/home/user/other/file.go",
+			want:    false,
+		},
+		{
+			name:    "absolute path injection",
+			root:    "/home/user/proj",
+			absPath: "/etc/passwd",
+			want:    false,
+		},
+		{
+			name:    "sibling directory",
+			root:    "/home/user/proj",
+			absPath: "/home/user/other",
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isWithinProjectRoot(tt.root, tt.absPath); got != tt.want {
+				t.Fatalf("isWithinProjectRoot(%q, %q) = %v, want %v", tt.root, tt.absPath, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestProcessCommandRejectsParentTraversal(t *testing.T) {
+	tempDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tempDir, "legit.go"), []byte("package legit\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a file one level above the project root
+	outsideContent := "this should not be readable\n"
+	if err := os.WriteFile(filepath.Join(filepath.Dir(tempDir), "outside.txt"), []byte(outsideContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(tempDir, nil)
+
+	tests := []struct {
+		name string
+		cmd  Command
+	}{
+		{
+			name: "parent traversal via ..",
+			cmd:  Command{Type: "FILE", Path: "../outside.txt"},
+		},
+		{
+			name: "deep parent traversal",
+			cmd:  Command{Type: "FILE", Path: "../../etc/passwd"},
+		},
+		{
+			name: "absolute path",
+			cmd:  Command{Type: "FILE", Path: "/etc/passwd"},
+		},
+		{
+			name: "absolute with traversal",
+			cmd:  Command{Type: "FILE", Path: "/etc/../etc/passwd"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content, fullFile, err := e.processCommand(tt.cmd)
+			if err == nil {
+				t.Fatalf("processCommand() error = nil, want error")
+			}
+			if content != "" {
+				t.Fatalf("processCommand() content = %q, want empty", content)
+			}
+			if fullFile {
+				t.Fatalf("processCommand() fullFile = true, want false")
+			}
+			if strings.Contains(err.Error(), outsideContent) {
+				t.Fatalf("processCommand() error leaks content: %v", err)
+			}
+		})
+	}
+}
+
+func TestProcessCommandAllowsLegitPath(t *testing.T) {
+	tempDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tempDir, "legit.go"), []byte("package legit\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(tempDir, nil)
+	content, fullFile, err := e.processCommand(Command{Type: "FILE", Path: "legit.go"})
+	if err != nil {
+		t.Fatalf("processCommand() error = %v, want nil", err)
+	}
+	if !fullFile {
+		t.Fatal("processCommand() fullFile = false, want true")
+	}
+	if content != "package legit\n" {
+		t.Fatalf("processCommand() content = %q, want %q", content, "package legit\n")
+	}
+}
+
+func TestExtractRejectsTraversalPath(t *testing.T) {
+	tempDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tempDir, "legit.go"), []byte("package legit\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(tempDir, nil)
+	_, err := e.Extract([]Command{
+		{Type: "FILE", Path: "legit.go"},
+		{Type: "FILE", Path: "../outside.txt"},
+	})
+	if err == nil {
+		t.Fatal("Extract() error = nil, want error for traversal path")
+	}
+	if !strings.Contains(err.Error(), "../outside.txt") {
+		t.Fatalf("Extract() error = %q, should name the traversal path", err.Error())
+	}
+}
+
+func TestExtractAllowAllWithinRoot(t *testing.T) {
+	tempDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tempDir, "a.go"), []byte("package a\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tempDir, "sub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "sub", "b.go"), []byte("package b\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(tempDir, nil)
+	results, err := e.Extract([]Command{
+		{Type: "FILE", Path: "a.go"},
+		{Type: "FILE", Path: "sub/b.go"},
+	})
+	if err != nil {
+		t.Fatalf("Extract() error = %v, want nil", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %d, want 2", len(results))
+	}
+}

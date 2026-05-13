@@ -1,8 +1,18 @@
-# AIBadger
+# AI Badger
 
-AIBadger is a local context bridge for bringing codebase context to an AI chat. It scans a project on your machine, builds compact prompts, and helps apply AI-written file updates only after you review them.
+AI Badger is a local context bridge for using any AI chat with your codebase.
+
+It scans a project on your machine, maps the important project structure into a compact prompt, and helps you extract only the files or code spans the AI needs. Paste a diff, include project topology/context, and turn any AI chat into a lightweight code reviewer before committing.
 
 It stays local by default: no telemetry, no file uploads, and no network connection required for normal use.
+
+No API keys. No cloud dependency. No vendor lock-in.
+
+## Why Badger?
+
+- **Works with any AI chat** — Badger prepares local code context for manual paste into ChatGPT, Claude, Gemini, or any other chat interface.
+- **Local-first by design** — normal use requires no API keys, no cloud service, no telemetry, and no network connection.
+- **Precise context extraction** — AI can ask for `FILE:`, `PREFIX:`, or `NEAR:` references, and Badger extracts the relevant file or nearby logical code block instead of dumping the whole repository.
 
 ## Install
 
@@ -18,28 +28,48 @@ For source builds, release builds, and version checks, see
 
 ## Usage
 
-Run AIBadger from the root of the project you want to inspect:
+Run Badger from the root of the project you want to inspect:
 
 ```bash
 badger
 ```
 
+## Workflow
+
+1. Run `badger` from your project root.
+2. Copy the generated project context into your AI chat.
+3. Ask the AI to review a diff, explain code, or request more context.
+4. Use Badger's plain-text selectors to extract focused files or spans.
+5. Review any AI-written updates before applying them.
+
+Example review prompt:
+
+```text
+Review this diff for concrete bugs, edge cases, maintainability issues, and unintended behavior changes.
+
+Focus on issues I should fix before committing.
+
+[Paste Badger project context here]
+
+[Paste git diff here]
+```
+
 For the workflow and `.badger-context`, see [docs/usage.md](docs/usage.md).
 
-## Privacy And Safety
+## Privacy and safety
 
 See [docs/privacy.md](docs/privacy.md).
 
-## Supported Projects
+## Supported projects
 
 See [docs/usage.md](docs/usage.md) for the supported project model and
 [docs/limitations.md](docs/limitations.md) for the current scan boundaries.
 
-## Known Limits
+## Known limits
 
 See [docs/limitations.md](docs/limitations.md).
 
-## Go Package
+## Go package
 
 The public facade is `github.com/PVRLabs/aibadger/pkg/badger`.
 

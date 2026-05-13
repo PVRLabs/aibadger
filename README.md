@@ -6,7 +6,7 @@ AIBadger does not call AI providers, upload files, run telemetry, or require a n
 
 ## Install
 
-The first public release is planned as `v0.1.0`. Until packaged binaries are published, build from source:
+The current public release is `v0.1.1`. Until packaged binaries are published, build from source:
 
 ```bash
 go build -o badger ./cmd/badger
@@ -27,7 +27,7 @@ Check the version:
 Expected output:
 
 ```text
-badger v0.1.0
+badger v0.1.1
 ```
 
 For release instructions, see [docs/releasing.md](docs/releasing.md).

@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"testing"
+
+	"github.com/PVRLabs/aibadger/internal/version"
 )
 
 func TestLoadConfigHelp(t *testing.T) {
@@ -34,7 +36,7 @@ func TestPrintVersion(t *testing.T) {
 
 	printVersion(&out)
 
-	if got, want := out.String(), "badger v0.1.0\n"; got != want {
+	if got, want := out.String(), "badger "+version.Version+"\n"; got != want {
 		t.Fatalf("printVersion() = %q, want %q", got, want)
 	}
 }

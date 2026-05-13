@@ -2,7 +2,7 @@
 
 This document describes the current public OSS release process for AIBadger.
 
-The first published release is `v0.1.0`. Future releases should follow the same
+The current published release is `v0.1.1`. Future releases should follow the same
 flow unless the release workflow changes.
 
 ## What Gets Released

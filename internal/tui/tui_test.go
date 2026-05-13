@@ -11,6 +11,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/engine"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/version"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 	tea "github.com/charmbracelet/bubbletea"
@@ -553,7 +554,7 @@ func TestViewShowsPersistentHeader(t *testing.T) {
 
 	view := m.View()
 
-	if !strings.Contains(view, "🦡 AIBADGER v0.1.0") {
+	if !strings.Contains(view, "🦡 AIBADGER "+version.Version) {
 		t.Fatalf("home view missing compact version header:\n%s", view)
 	}
 	if !strings.Contains(view, "Local-first code-to-LLM bridge") {
@@ -1022,13 +1023,13 @@ func TestHelpDocumentsCtrlU(t *testing.T) {
 
 func TestHelpShowsVersion(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.BuildInfo = "Version: v0.1.0 · Build: development · Dev flags: enabled"
+	cfg.BuildInfo = "Version: " + version.Version + " · Build: development · Dev flags: enabled"
 	m := NewModel("/tmp/project", cfg)
 	m.state = stateHelp
 
 	view := m.View()
 
-	if !strings.Contains(view, "Version: v0.1.0 · Build: development · Dev flags: enabled") {
+	if !strings.Contains(view, "Version: "+version.Version+" · Build: development · Dev flags: enabled") {
 		t.Fatalf("help view missing build info:\n%s", view)
 	}
 }

@@ -1,0 +1,46 @@
+# Install AIBadger
+
+This document covers install and build paths for the public OSS binary.
+
+## Homebrew
+
+Install from the public tap:
+
+```bash
+brew tap pvrlabs/aibadger
+brew install pvrlabs/aibadger/badger
+```
+
+The tap pulls release tarballs from GitHub Releases.
+
+## Build From Source
+
+Development build:
+
+```bash
+go build -o badger ./cmd/badger
+```
+
+Release-style build:
+
+```bash
+go build -tags aibadger_release -ldflags="-s -w" -o badger ./cmd/badger
+```
+
+## Verify
+
+Check the binary version:
+
+```bash
+./badger --version
+```
+
+Expected output:
+
+```text
+badger v0.1.1
+```
+
+## Release Notes
+
+For release publishing and artifact details, see [releasing.md](releasing.md).

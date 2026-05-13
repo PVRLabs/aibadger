@@ -1,0 +1,14 @@
+# Limitations
+
+AIBadger is a context bridge, not an AI provider or autonomous coding agent.
+
+## Current Constraints
+
+- It does not solve tasks by itself; your AI chat remains the reasoning layer.
+- Extraction commands are intentionally simple: `FILE:`, `PREFIX:`, and `NEAR:`.
+- Release builds hide development-only headless automation flags.
+- Binary and generated files are intentionally excluded or minimized to keep prompts compact.
+
+## Scope Notes
+
+The supported language detectors improve ranking for common project shapes, but AIBadger is designed to work across arbitrary repositories.

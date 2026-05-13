@@ -92,3 +92,17 @@ func TestConfigCustomPromptInstructions(t *testing.T) {
 		t.Fatalf("SchemaBConstraint = %q, want custom b", tuiCfg.SchemaBConstraint)
 	}
 }
+
+func TestConfigPassesCustomMetadataToTUI(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.TUIVersion = "v9.9.9-test"
+	cfg.BuildInfo = "badger v9.9.9-test (custom)"
+
+	tuiCfg := cfg.tuiConfig()
+	if tuiCfg.Version != "v9.9.9-test" {
+		t.Fatalf("Version = %q, want custom version", tuiCfg.Version)
+	}
+	if tuiCfg.BuildInfo != "badger v9.9.9-test (custom)" {
+		t.Fatalf("BuildInfo = %q, want custom build info", tuiCfg.BuildInfo)
+	}
+}

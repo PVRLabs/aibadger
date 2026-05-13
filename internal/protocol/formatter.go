@@ -59,10 +59,34 @@ func (f *Formatter) GenerateSchemaA(t *model.ProjectTopology, query string) stri
 		}
 	}
 
+	f.writeExternalContextSection(&sb, t)
 	sb.WriteString("\n")
 	sb.WriteString(fmt.Sprintf(f.Instructions.SchemaAConstraint, query))
 
 	return sb.String()
+}
+
+func (f *Formatter) writeExternalContextSection(sb *strings.Builder, t *model.ProjectTopology) {
+	if t == nil || len(t.ExternalContext) == 0 {
+		return
+	}
+	sb.WriteString("\n[EXTERNAL CONTEXT]\n")
+	for _, ctx := range t.ExternalContext {
+		sb.WriteString(fmt.Sprintf("%s [read-only]\n", ctx.Path))
+		if len(ctx.Top) == 0 {
+			sb.WriteString("Top: none\n")
+			continue
+		}
+		parts := make([]string, 0, len(ctx.Top))
+		for _, item := range ctx.Top {
+			name := item.Name
+			if item.IsDir {
+				name += "/"
+			}
+			parts = append(parts, name)
+		}
+		sb.WriteString(fmt.Sprintf("Top: %s\n", strings.Join(parts, ", ")))
+	}
 }
 
 func (f *Formatter) writeTopologySection(sb *strings.Builder, t *model.ProjectTopology, activeExtractions int) {

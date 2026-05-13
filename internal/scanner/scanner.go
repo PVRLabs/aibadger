@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/PVRLabs/aibadger/internal/externalcontext"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
 
@@ -26,6 +27,12 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 		ProjectRoot: s.ProjectRoot,
 		Modules:     []model.Module{},
 	}
+
+	externalContext, err := externalcontext.Load(s.ProjectRoot)
+	if err != nil {
+		return nil, err
+	}
+	topology.ExternalContext = externalContext
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex

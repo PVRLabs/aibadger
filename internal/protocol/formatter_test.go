@@ -135,6 +135,39 @@ func TestGenerateSchemaAReportsPrimaryOnlyForMultipleLanguages(t *testing.T) {
 	}
 }
 
+func TestGenerateSchemaAIncludesExternalContextSection(t *testing.T) {
+	formatter := NewFormatter()
+	topology := &model.ProjectTopology{
+		Languages: []string{"Go"},
+		ExternalContext: []model.ExternalContext{
+			{
+				Path: "../badger-sidecar/docs",
+				Top: []model.ExternalContextItem{
+					{Name: "spec.md"},
+					{Name: "ui-spec.md"},
+					{Name: "plans", IsDir: true},
+				},
+			},
+		},
+	}
+
+	output := formatter.GenerateSchemaA(topology, "use private specs")
+
+	for _, want := range []string{
+		"[EXTERNAL CONTEXT]",
+		"../badger-sidecar/docs [read-only]",
+		"Top: spec.md, ui-spec.md, plans/",
+		"\n[SOURCE TREE]\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("Prompt 1 missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Index(output, "[SOURCE TREE]") > strings.Index(output, "[EXTERNAL CONTEXT]") {
+		t.Fatalf("external context rendered before source tree:\n%s", output)
+	}
+}
+
 func TestGenerateSchemaAReportsTopFilesRelativeToPackage(t *testing.T) {
 	formatter := NewFormatter()
 	topology := &model.ProjectTopology{

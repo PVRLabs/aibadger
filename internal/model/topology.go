@@ -10,14 +10,29 @@ const (
 
 // ProjectTopology represents the complete structure of the project.
 type ProjectTopology struct {
-	Name            string        `json:"name"`
-	Languages       []string      `json:"languages"`        // e.g. ["Java", "JavaScript"]
-	PrimaryLanguage string        `json:"primary_language"` // e.g. "Java"
-	Stack           []string      `json:"stack"`            // e.g. ["Maven", "Go Modules", "Node.js"]
-	Structure       string        `json:"structure"`        // e.g. "Single Module", "Multi-Module"
-	Modules         []Module      `json:"modules"`
-	ScanTime        time.Duration `json:"scan_time"`
-	ProjectRoot     string        `json:"project_root"`
+	Name            string            `json:"name"`
+	Languages       []string          `json:"languages"`        // e.g. ["Java", "JavaScript"]
+	PrimaryLanguage string            `json:"primary_language"` // e.g. "Java"
+	Stack           []string          `json:"stack"`            // e.g. ["Maven", "Go Modules", "Node.js"]
+	Structure       string            `json:"structure"`        // e.g. "Single Module", "Multi-Module"
+	Modules         []Module          `json:"modules"`
+	ExternalContext []ExternalContext `json:"external_context,omitempty"`
+	ScanTime        time.Duration     `json:"scan_time"`
+	ProjectRoot     string            `json:"project_root"`
+}
+
+// ExternalContext represents an explicitly configured read-only context
+// directory outside, or separate from, the normal project source topology.
+type ExternalContext struct {
+	Path    string                `json:"path"`     // As listed in .badger-context, cleaned for display
+	AbsPath string                `json:"abs_path"` // Absolute path used for local validation only
+	Top     []ExternalContextItem `json:"top,omitempty"`
+}
+
+// ExternalContextItem stores a compact top-level summary entry for Prompt 1.
+type ExternalContextItem struct {
+	Name  string `json:"name"`
+	IsDir bool   `json:"is_dir,omitempty"`
 }
 
 // Module represents a logical unit of code (e.g., a Maven module or a Go package).

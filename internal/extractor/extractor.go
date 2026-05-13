@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/PVRLabs/aibadger/internal/externalcontext"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
@@ -26,13 +27,18 @@ var (
 
 // Extractor handles code extraction from the filesystem.
 type Extractor struct {
-	ProjectRoot string
-	Topology    *model.ProjectTopology
+	ProjectRoot     string
+	Topology        *model.ProjectTopology
+	ExternalContext []model.ExternalContext
 }
 
 // NewExtractor creates a new Extractor instance.
 func NewExtractor(root string, t *model.ProjectTopology) *Extractor {
-	return &Extractor{ProjectRoot: root, Topology: t}
+	var external []model.ExternalContext
+	if t != nil {
+		external = t.ExternalContext
+	}
+	return &Extractor{ProjectRoot: root, Topology: t, ExternalContext: external}
 }
 
 // Extract performs the extraction for all commands in parallel.
@@ -101,6 +107,12 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 }
 
 func (e *Extractor) processCommand(cmd Command) (string, bool, error) {
+	if cmd.Type == "FILE" {
+		if content, ok, err := e.processExternalFileCommand(cmd.Path); ok || err != nil {
+			return content, true, err
+		}
+	}
+
 	resolvedPath := e.resolveCommandPath(cmd.Path)
 	if resolvedPath == "" {
 		return "", false, fmt.Errorf("file not found: %s", cmd.Path)
@@ -141,6 +153,35 @@ func (e *Extractor) processCommand(cmd Command) (string, bool, error) {
 		return "", false, err
 	}
 	return extracted, fullFile, nil
+}
+
+func (e *Extractor) processExternalFileCommand(requestPath string) (string, bool, error) {
+	if len(e.ExternalContext) == 0 {
+		return "", false, nil
+	}
+	_, absolutePath, ok := externalcontext.ContainsFile(e.ProjectRoot, e.ExternalContext, requestPath)
+	if !ok {
+		return "", false, nil
+	}
+	if promptpolicy.IsSensitivePath(requestPath) {
+		return "", true, errPrompt2Excluded
+	}
+	kind := filekind.Classify(absolutePath)
+	if kind == model.FileKindBinary {
+		return "", true, errPrompt2Excluded
+	}
+	if kind == model.FileKindAsset {
+		info, err := os.Stat(absolutePath)
+		if err != nil {
+			return "", true, fmt.Errorf("file not found: %s", requestPath)
+		}
+		return summarizeBinaryFile(requestPath, int(info.Size()), kind), true, nil
+	}
+	data, err := os.ReadFile(absolutePath)
+	if err != nil {
+		return "", true, fmt.Errorf("file not found: %s", requestPath)
+	}
+	return string(data), true, nil
 }
 
 func isWithinProjectRoot(root, absPath string) bool {

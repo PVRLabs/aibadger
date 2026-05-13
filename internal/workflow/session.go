@@ -105,7 +105,7 @@ func (s *Session) GenerateContextFromInput(goal, input string) ([]extractor.Comm
 }
 
 func (s *Session) ParseWritePlan(input string) writer.ParseResult {
-	return writer.ParseAIResponseDetailed(input)
+	return s.Engine.ParseWritePlanDetailed(input)
 }
 
 func (s *Session) ParseFinalResponse(input string) FinalResponseResult {

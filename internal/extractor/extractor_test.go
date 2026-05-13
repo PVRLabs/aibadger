@@ -959,3 +959,43 @@ func TestExtractAllowAllWithinRoot(t *testing.T) {
 		t.Fatalf("results = %d, want 2", len(results))
 	}
 }
+
+func TestExtractAllowsExplicitExternalContextFile(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "aibadger")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(external, 0755); err != nil {
+		t.Fatal(err)
+	}
+	specPath := filepath.Join(external, "spec.md")
+	if err := os.WriteFile(specPath, []byte("# Spec\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{
+			{
+				Path:    "../badger-sidecar/docs",
+				AbsPath: external,
+			},
+		},
+	})
+	results, err := e.Extract([]Command{
+		{Type: "FILE", Path: "../badger-sidecar/docs/spec.md"},
+	})
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	if results[0].Path != "../badger-sidecar/docs/spec.md" {
+		t.Fatalf("result path = %q, want requested external path", results[0].Path)
+	}
+	if results[0].Content != "# Spec\n" {
+		t.Fatalf("content = %q, want external file content", results[0].Content)
+	}
+}

@@ -1,6 +1,10 @@
 package engine
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/PVRLabs/aibadger/internal/externalcontext"
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/protocol"
@@ -89,22 +93,80 @@ func (e *Engine) GenerateContext(goal string, commands []extractor.Command) (str
 // mutating disk. Keep planning separate from applying so callers can preview,
 // audit, and require explicit consent.
 func (e *Engine) ParseWritePlan(input string) []writer.FileUpdate {
-	return writer.ParseAIResponse(input)
+	return e.ParseWritePlanDetailed(input).Updates
 }
 
 // ParseWritePlanDetailed extracts planned file operations, preserves non-file
 // text, and surfaces protocol validation errors.
 func (e *Engine) ParseWritePlanDetailed(input string) writer.ParseResult {
-	return writer.ParseAIResponseDetailed(input)
+	result := writer.ParseAIResponseDetailed(input)
+	for _, path := range e.externalWriteTargets(input) {
+		result.Errors = append(result.Errors, externalContextWriteError(path))
+	}
+	return e.rejectExternalContextUpdates(result)
 }
 
 // ApplyUpdate applies a single planned file operation relative to the project
 // root.
 func (e *Engine) ApplyUpdate(update writer.FileUpdate, mode writer.WhitespaceMode) error {
+	if e.isExternalContextPath(update.Path) {
+		return externalContextWriteError(update.Path)
+	}
 	return writer.WriteFile(e.Root, update, mode)
 }
 
 // ApplyWrite applies a single planned file update relative to the project root.
 func (e *Engine) ApplyWrite(update writer.FileUpdate, mode writer.WhitespaceMode) error {
 	return e.ApplyUpdate(update, mode)
+}
+
+func (e *Engine) rejectExternalContextUpdates(result writer.ParseResult) writer.ParseResult {
+	if e == nil || e.Topology == nil || len(e.Topology.ExternalContext) == 0 {
+		return result
+	}
+	kept := result.Updates[:0]
+	for _, update := range result.Updates {
+		if e.isExternalContextPath(update.Path) {
+			result.Errors = append(result.Errors, externalContextWriteError(update.Path))
+			continue
+		}
+		kept = append(kept, update)
+	}
+	result.Updates = kept
+	return result
+}
+
+func (e *Engine) isExternalContextPath(path string) bool {
+	return e != nil && e.Topology != nil && externalcontext.ContainsPath(e.Root, e.Topology.ExternalContext, path)
+}
+
+func (e *Engine) externalWriteTargets(input string) []string {
+	if e == nil || e.Topology == nil || len(e.Topology.ExternalContext) == 0 {
+		return nil
+	}
+	var paths []string
+	for _, rawLine := range strings.Split(input, "\n") {
+		line := strings.TrimSpace(rawLine)
+		path, ok := parseWriteTargetLine(line)
+		if !ok {
+			continue
+		}
+		if e.isExternalContextPath(path) {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+func parseWriteTargetLine(line string) (string, bool) {
+	for _, prefix := range []string{"--- File: ", "--- Delete File: "} {
+		if strings.HasPrefix(line, prefix) && strings.HasSuffix(line, " ---") {
+			return strings.TrimSuffix(strings.TrimPrefix(line, prefix), " ---"), true
+		}
+	}
+	return "", false
+}
+
+func externalContextWriteError(path string) error {
+	return fmt.Errorf("Cannot apply patch outside project root: %s\nExternal context paths are read-only.", path)
 }

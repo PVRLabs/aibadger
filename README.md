@@ -2,15 +2,15 @@
 
 AI Badger is a local context bridge for using any AI chat with your codebase.
 
-It scans a project on your machine, maps the important project structure into a compact prompt, and helps you extract only the files or code spans the AI needs. Paste a diff, include project topology/context, and turn any AI chat into a lightweight code reviewer before committing.
+It scans a project on your machine, maps the important project structure into a compact prompt, and helps you extract only the files or code spans the AI needs. Paste a diff, include project topology/context, and use any AI chat as a lightweight code reviewer before committing.
 
-It stays local by default: no telemetry, no file uploads, and no network connection required for normal use.
+It stays local by default: no telemetry, no file uploads, and no cloud service required to prepare code context.
 
 No API keys. No cloud dependency. No vendor lock-in.
 
 ## Why Badger?
 
-- **Works with any AI chat** — Badger prepares local code context for manual paste into ChatGPT, Claude, Gemini, or any other chat interface.
+- **Works with any AI chat** — Badger prepares local code context for manual paste into ChatGPT, Claude, Gemini, or any other chat interface when you choose to use one.
 - **Local-first by design** — normal use requires no API keys, no cloud service, no telemetry, and no network connection.
 - **Precise context extraction** — AI can ask for `FILE:`, `PREFIX:`, or `NEAR:` references, and Badger extracts the relevant file or nearby logical code block instead of dumping the whole repository.
 

@@ -30,6 +30,8 @@ Expected output:
 badger v0.1.0
 ```
 
+For release instructions, see [docs/releasing.md](docs/releasing.md).
+
 ## Usage
 
 Run AIBadger from the root of the project you want to inspect:

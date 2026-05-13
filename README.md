@@ -48,14 +48,7 @@ Prompt 1 contains project structure and file paths, not source code. Prompt 2 co
 
 ### External Context
 
-To include read-only directories from outside your project (e.g., a shared spec or library repo), create a `.badger-context` file in the project root listing one path per line:
-
-```
-# .badger-context
-../badger-sidecar/docs
-```
-
-Blank lines and `#` comments are ignored. All paths must exist and be directories. External context appears under `[EXTERNAL CONTEXT]` in the topology prompt and is never a valid apply target. Other AI coding tools, including agents like Codex, should look for `.badger-context` and treat each listed path as an additional read-only context directory to inspect.
+You can add read-only external directories by creating a `.badger-context` file in the project root, one path per line.
 
 ## Privacy And Safety
 

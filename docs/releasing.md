@@ -55,12 +55,25 @@ git push origin v0.1.1
 The release workflow lives in `.github/workflows/release.yml` and is triggered by
 tag pushes and published releases.
 
+## Public Availability
+
+The public Homebrew tap lives at `https://github.com/PVRLabs/homebrew-aibadger`.
+After a release is published, update the tap's `Formula/badger.rb` with the new
+version and release checksums, then verify the public install path:
+
+```bash
+brew tap pvrlabs/aibadger
+brew install pvrlabs/aibadger/badger
+badger --version
+```
+
 ## Verification Checklist
 
 - The GitHub Release page exists for the new tag.
 - All expected `.tar.gz` and `.sha256` assets are attached.
 - Downloading an asset yields the expected binary archive.
 - `./badger --version` reports the release version.
+- The public Homebrew tap installs `badger` from GitHub Releases.
 
 ## Manual Fallback
 

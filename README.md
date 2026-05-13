@@ -8,11 +8,15 @@ AIBadger does not call AI providers, upload files, run telemetry, or require a n
 
 The current public release is `v0.1.1`.
 
-Install from Homebrew:
+Install from the public Homebrew tap:
 
 ```bash
+brew tap pvrlabs/aibadger
 brew install pvrlabs/aibadger/badger
 ```
+
+The tap is published at `https://github.com/PVRLabs/homebrew-aibadger` and
+pulls release tarballs from GitHub Releases.
 
 If you prefer to build from source:
 

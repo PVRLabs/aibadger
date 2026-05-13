@@ -28,7 +28,7 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		Subtitle:                  "Local-first code-to-LLM bridge",
+		Subtitle:                  "Local-first code context for any AI chat",
 		Version:                   version.Version,
 		ScanFrames:                defaultScanFrames(),
 		ExitCommand:               workflow.ExitCommand,

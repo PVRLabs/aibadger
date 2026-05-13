@@ -557,7 +557,7 @@ func TestViewShowsPersistentHeader(t *testing.T) {
 	if !strings.Contains(view, "🦡 AIBADGER "+version.Version) {
 		t.Fatalf("home view missing compact version header:\n%s", view)
 	}
-	if !strings.Contains(view, "Local-first code-to-LLM bridge") {
+	if !strings.Contains(view, "Local-first code context for any AI chat") {
 		t.Fatalf("home view missing descriptor header:\n%s", view)
 	}
 	if !strings.Contains(view, "Pipeline: [Map] → Extract → Apply") {

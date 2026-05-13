@@ -6,7 +6,15 @@ AIBadger does not call AI providers, upload files, run telemetry, or require a n
 
 ## Install
 
-The current public release is `v0.1.1`. Until packaged binaries are published, build from source:
+The current public release is `v0.1.1`.
+
+Install from Homebrew:
+
+```bash
+brew install pvrlabs/aibadger/badger
+```
+
+If you prefer to build from source:
 
 ```bash
 go build -o badger ./cmd/badger

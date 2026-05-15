@@ -77,6 +77,17 @@ func (m Model) viewContextReady() string {
 }
 
 func (m Model) viewContextWarning() string {
+	var availableLines []string
+	for _, meta := range m.pendingMetadata {
+		status := ""
+		if meta.Dropped {
+			status = " [DROPPED - EXCEEDS TOTAL LIMIT]"
+		} else if meta.Truncated {
+			status = " [TRUNCATED]"
+		}
+		availableLines = append(availableLines, fmt.Sprintf("  - %s%s", meta.Path, status))
+	}
+
 	var failureLines []string
 	for _, failure := range m.pendingFailedCommands {
 		failureLines = append(failureLines, "  - "+failure)
@@ -102,6 +113,9 @@ func (m Model) viewContextWarning() string {
 	summary := fmt.Sprintf("Extracted %d %s, but %d %s %s attention:", m.pendingExtractedCount, extractedLabel, issueCount, issueLabel, verb)
 
 	sections := []string{renderWarningLine(summary), ""}
+	if len(availableLines) > 0 {
+		sections = append(sections, renderBold("Available context:"), strings.Join(availableLines, "\n"), "")
+	}
 	if len(failureLines) > 0 {
 		sections = append(sections, renderBold("Failed:"), strings.Join(failureLines, "\n"), "")
 	}

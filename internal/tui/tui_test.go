@@ -1173,15 +1173,47 @@ func TestPartialExtractionWarningViewShowsFailedRequests(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.state = stateContextWarning
 	m.pendingExtractedCount = 3
+	m.pendingMetadata = []protocol.ExtractionMetadata{
+		{Path: "pom.xml"},
+		{Path: "src/main/java/App.java"},
+		{Path: "src/test/java/AppTest.java"},
+	}
 	m.pendingFailedCommands = []string{".mvn/jvm.config: file not found: .mvn/jvm.config"}
 
 	view := m.viewContextWarning()
 
 	for _, want := range []string{
 		"Extracted 3 files, but 1 request needs attention:",
+		"Available context:",
+		"  - pom.xml",
+		"  - src/main/java/App.java",
+		"  - src/test/java/AppTest.java",
 		"Failed:",
 		"  - .mvn/jvm.config: file not found: .mvn/jvm.config",
 		"Proceed with available context? (y/N)",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("partial extraction warning missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestPartialExtractionWarningViewShowsContextTrimmingStatus(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.state = stateContextWarning
+	m.pendingExtractedCount = 2
+	m.pendingMetadata = []protocol.ExtractionMetadata{
+		{Path: "large.go", Truncated: true},
+		{Path: "overflow.go", Dropped: true},
+	}
+	m.pendingFailedCommands = []string{"missing.go: file not found: missing.go"}
+
+	view := m.viewContextWarning()
+
+	for _, want := range []string{
+		"Available context:",
+		"  - large.go [TRUNCATED]",
+		"  - overflow.go [DROPPED - EXCEEDS TOTAL LIMIT]",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("partial extraction warning missing %q:\n%s", want, view)
@@ -1193,12 +1225,15 @@ func TestPartialExtractionWarningViewShowsSafetyExclusions(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.state = stateContextWarning
 	m.pendingExtractedCount = 1
+	m.pendingMetadata = []protocol.ExtractionMetadata{{Path: "app.env.example"}}
 	m.pendingSafetyExclusions = []string{".env: excluded from Prompt 2"}
 
 	view := m.viewContextWarning()
 
 	for _, want := range []string{
 		"Extracted 1 file, but 1 request needs attention:",
+		"Available context:",
+		"  - app.env.example",
 		"Excluded by Prompt 2 safety rules:",
 		"  - .env: excluded from Prompt 2",
 		"Proceed with available context? (y/N)",

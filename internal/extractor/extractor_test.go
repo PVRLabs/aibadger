@@ -35,6 +35,80 @@ INVALID:something
 	}
 }
 
+func TestParseCommandsRecoversClaudeStyleEmbeddedFileTokens(t *testing.T) {
+	e := NewExtractor("", nil)
+	input := `Claude responded: FILE:CLAUDE.FILE:CLAUDE.md
+FILE:AGENTS.md
+FILE:.mvn/jvm.config
+FILE:pom.xml
+`
+	commands := e.ParseCommands(input)
+
+	want := []Command{
+		{Type: "FILE", Path: "CLAUDE"},
+		{Type: "FILE", Path: "CLAUDE.md"},
+		{Type: "FILE", Path: "AGENTS.md"},
+		{Type: "FILE", Path: ".mvn/jvm.config"},
+		{Type: "FILE", Path: "pom.xml"},
+	}
+	if len(commands) != len(want) {
+		t.Fatalf("ParseCommands() count = %d, want %d: %+v", len(commands), len(want), commands)
+	}
+	for i := range want {
+		if commands[i] != want[i] {
+			t.Fatalf("ParseCommands()[%d] = %+v, want %+v", i, commands[i], want[i])
+		}
+	}
+}
+
+func TestParseCommandsSplitsAdjacentFileTokens(t *testing.T) {
+	e := NewExtractor("", nil)
+	commands := e.ParseCommands("FILE:CLAUDE.FILE:CLAUDE.md")
+
+	want := []Command{
+		{Type: "FILE", Path: "CLAUDE"},
+		{Type: "FILE", Path: "CLAUDE.md"},
+	}
+	if len(commands) != len(want) {
+		t.Fatalf("ParseCommands() count = %d, want %d: %+v", len(commands), len(want), commands)
+	}
+	for i := range want {
+		if commands[i] != want[i] {
+			t.Fatalf("ParseCommands()[%d] = %+v, want %+v", i, commands[i], want[i])
+		}
+	}
+}
+
+func TestParseCommandsIgnoresFileTypos(t *testing.T) {
+	e := NewExtractor("", nil)
+	commands := e.ParseCommands("FLLE:pom.xml")
+
+	if len(commands) != 0 {
+		t.Fatalf("ParseCommands() = %+v, want no commands", commands)
+	}
+}
+
+func TestParseCommandsDoesNotRecoverFileTokensInsidePrefixOrNearPatterns(t *testing.T) {
+	e := NewExtractor("", nil)
+	input := `PREFIX:src/service.go#literal FILE:example.FILE:other
+NEAR:src/service.go#another FILE:example.FILE:other
+`
+	commands := e.ParseCommands(input)
+
+	want := []Command{
+		{Type: "PREFIX", Path: "src/service.go", Pattern: "literal FILE:example.FILE:other"},
+		{Type: "NEAR", Path: "src/service.go", Pattern: "another FILE:example.FILE:other"},
+	}
+	if len(commands) != len(want) {
+		t.Fatalf("ParseCommands() count = %d, want %d: %+v", len(commands), len(want), commands)
+	}
+	for i := range want {
+		if commands[i] != want[i] {
+			t.Fatalf("ParseCommands()[%d] = %+v, want %+v", i, commands[i], want[i])
+		}
+	}
+}
+
 func TestParseCommandLine(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -1178,8 +1178,29 @@ func TestPartialExtractionWarningViewShowsFailedRequests(t *testing.T) {
 	view := m.viewContextWarning()
 
 	for _, want := range []string{
-		"Extracted 3 files, but 1 request failed:",
+		"Extracted 3 files, but 1 request needs attention:",
+		"Failed:",
 		"  - .mvn/jvm.config: file not found: .mvn/jvm.config",
+		"Proceed with available context? (y/N)",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("partial extraction warning missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestPartialExtractionWarningViewShowsSafetyExclusions(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.state = stateContextWarning
+	m.pendingExtractedCount = 1
+	m.pendingSafetyExclusions = []string{".env: excluded from Prompt 2"}
+
+	view := m.viewContextWarning()
+
+	for _, want := range []string{
+		"Extracted 1 file, but 1 request needs attention:",
+		"Excluded by Prompt 2 safety rules:",
+		"  - .env: excluded from Prompt 2",
 		"Proceed with available context? (y/N)",
 	} {
 		if !strings.Contains(view, want) {
@@ -1333,7 +1354,7 @@ func TestPartialExtractionWarningEnterReturnsToExtractionInput(t *testing.T) {
 	if got.schemaB != "" || len(got.metadata) != 0 {
 		t.Fatalf("partial context was not discarded: schemaB=%q metadata=%v", got.schemaB, got.metadata)
 	}
-	if got.pendingSchemaB != "" || len(got.pendingFailedCommands) != 0 {
+	if got.pendingSchemaB != "" || len(got.pendingFailedCommands) != 0 || len(got.pendingSafetyExclusions) != 0 {
 		t.Fatalf("pending warning state was not cleared: %#v", got)
 	}
 	if !got.paste.Focused() {
@@ -1366,7 +1387,7 @@ func TestPartialExtractionWarningYProceedsWithAvailableContext(t *testing.T) {
 	if len(got.metadata) != 1 || got.metadata[0].Path != "present.go" {
 		t.Fatalf("metadata = %#v, want pending metadata", got.metadata)
 	}
-	if got.pendingSchemaB != "" || len(got.pendingFailedCommands) != 0 {
+	if got.pendingSchemaB != "" || len(got.pendingFailedCommands) != 0 || len(got.pendingSafetyExclusions) != 0 {
 		t.Fatalf("pending warning state was not cleared: %#v", got)
 	}
 	if cmd != nil {

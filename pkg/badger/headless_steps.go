@@ -21,11 +21,12 @@ func runHeadlessStep(w io.Writer, session *workflow.Session, opts HeadlessOption
 	case opts.Step == "extraction":
 		handleExtractionCommands(w, opts.Goal, session, opts)
 	case isCodeContextStep(opts.Step):
-		_, schemaB, metadata, err := session.GenerateContextFromInput(opts.Goal, readInput(w, opts))
+		_, schemaB, metadata, extractedCount, failedCommands, safetyExclusions, err := session.GenerateContextDetailedFromInput(opts.Goal, readInput(w, opts))
 		if err != nil {
 			fmt.Fprintf(w, "Extraction error: %v\n", err)
 			return
 		}
+		printExtractionWarnings(w, extractedCount, failedCommands, safetyExclusions)
 		printExtractionMetadata(w, metadata)
 		fmt.Fprintln(w, schemaB)
 	case isWritePlanStep(opts.Step):

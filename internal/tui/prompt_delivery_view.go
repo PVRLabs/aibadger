@@ -77,30 +77,40 @@ func (m Model) viewContextReady() string {
 }
 
 func (m Model) viewContextWarning() string {
-	var lines []string
+	var failureLines []string
 	for _, failure := range m.pendingFailedCommands {
-		lines = append(lines, "  - "+failure)
+		failureLines = append(failureLines, "  - "+failure)
 	}
-	if len(lines) == 0 {
-		lines = append(lines, "  - no failed requests listed")
+	var exclusionLines []string
+	for _, exclusion := range m.pendingSafetyExclusions {
+		exclusionLines = append(exclusionLines, "  - "+exclusion)
 	}
 
 	extractedLabel := "file"
 	if m.pendingExtractedCount != 1 {
 		extractedLabel = "files"
 	}
-	failedLabel := "request"
-	if len(m.pendingFailedCommands) != 1 {
-		failedLabel = "requests"
+	issueCount := len(m.pendingFailedCommands) + len(m.pendingSafetyExclusions)
+	issueLabel := "request"
+	if issueCount != 1 {
+		issueLabel = "requests"
 	}
+	verb := "needs"
+	if issueCount != 1 {
+		verb = "need"
+	}
+	summary := fmt.Sprintf("Extracted %d %s, but %d %s %s attention:", m.pendingExtractedCount, extractedLabel, issueCount, issueLabel, verb)
 
-	return strings.Join([]string{
-		renderWarningLine(fmt.Sprintf("Extracted %d %s, but %d %s failed:", m.pendingExtractedCount, extractedLabel, len(m.pendingFailedCommands), failedLabel)),
-		"",
-		strings.Join(lines, "\n"),
-		"",
-		renderBold("Proceed with available context? (y/N)"),
-	}, "\n")
+	sections := []string{renderWarningLine(summary), ""}
+	if len(failureLines) > 0 {
+		sections = append(sections, renderBold("Failed:"), strings.Join(failureLines, "\n"), "")
+	}
+	if len(exclusionLines) > 0 {
+		sections = append(sections, renderBold("Excluded by Prompt 2 safety rules:"), strings.Join(exclusionLines, "\n"), "")
+	}
+	sections = append(sections, renderBold("Proceed with available context? (y/N)"))
+
+	return strings.Join(sections, "\n")
 }
 
 func (m Model) promptDeliveryText(kind string) string {

@@ -117,6 +117,54 @@ func TestRunHeadlessContextStepIncludesExplicitGoal(t *testing.T) {
 	}
 }
 
+func TestRunHeadlessContextStepWarnsAndContinuesWithUsablePartialExtraction(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module example.com/context\n"), 0644); err != nil {
+		t.Fatalf("WriteFile(go.mod) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("WriteFile(main.go) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("SECRET=1\n"), 0644); err != nil {
+		t.Fatalf("WriteFile(.env) error = %v", err)
+	}
+
+	inputFile := writeTempInput(t, strings.Join([]string{
+		"FILE:main.go",
+		"FILE:missing.go",
+		"FILE:.env",
+	}, "\n"))
+	cfg := DefaultConfig()
+	cfg.Root = tmpDir
+
+	var output bytes.Buffer
+	if err := RunHeadless(cfg, HeadlessOptions{
+		Step:      "context",
+		InputPath: inputFile,
+		Goal:      "review partial extraction",
+		Stdout:    &output,
+	}); err != nil {
+		t.Fatalf("RunHeadless() error = %v", err)
+	}
+
+	for _, want := range []string{
+		"[!] Extracted 1 file with warnings.",
+		"Failed requests:",
+		"missing.go: file not found: missing.go",
+		"Excluded by Prompt 2 safety rules:",
+		".env: excluded from Prompt 2",
+		"[CONTEXT]",
+		"--- File: main.go (Full File) ---",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("RunHeadless() partial extraction output missing %q:\n%s", want, output.String())
+		}
+	}
+	if strings.Contains(output.String(), "SECRET=1") {
+		t.Fatalf("RunHeadless() leaked excluded file content:\n%s", output.String())
+	}
+}
+
 func TestRunHeadlessContextStepRejectsOnlyExcludedFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module example.com/context\n"), 0644); err != nil {

@@ -63,12 +63,13 @@ func runGoalFlow(w io.Writer, reader *bufio.Reader, session *workflow.Session, g
 		return false
 	}
 
-	schemaB, metadata, err := session.GenerateContext(effectiveGoal, commands)
+	schemaB, metadata, extractedCount, failedCommands, safetyExclusions, err := session.GenerateContextDetailed(effectiveGoal, commands)
 	if err != nil {
 		fmt.Fprintf(w, "Extraction error: %v\n", err)
 		return true
 	}
 
+	printExtractionWarnings(w, extractedCount, failedCommands, safetyExclusions)
 	printExtractionMetadata(w, metadata)
 
 	if handleContextCopy(w, reader, schemaB, opts) {

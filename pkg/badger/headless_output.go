@@ -26,6 +26,29 @@ func printExtractionMetadata(w io.Writer, metadata []protocol.ExtractionMetadata
 	}
 }
 
+func printExtractionWarnings(w io.Writer, extractedCount int, failedCommands, safetyExclusions []string) {
+	if len(failedCommands) == 0 && len(safetyExclusions) == 0 {
+		return
+	}
+	fileLabel := "file"
+	if extractedCount != 1 {
+		fileLabel = "files"
+	}
+	fmt.Fprintf(w, "\n[!] Extracted %d %s with warnings.\n", extractedCount, fileLabel)
+	if len(failedCommands) > 0 {
+		fmt.Fprintln(w, "Failed requests:")
+		for _, failure := range failedCommands {
+			fmt.Fprintf(w, "  - %s\n", failure)
+		}
+	}
+	if len(safetyExclusions) > 0 {
+		fmt.Fprintln(w, "Excluded by Prompt 2 safety rules:")
+		for _, exclusion := range safetyExclusions {
+			fmt.Fprintf(w, "  - %s\n", exclusion)
+		}
+	}
+}
+
 func handleProjectMap(w io.Writer, reader *bufio.Reader, schemaA string, opts HeadlessOptions) bool {
 	if isTopologyStep(opts.Step) {
 		fmt.Fprintln(w, schemaA)

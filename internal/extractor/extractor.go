@@ -122,13 +122,14 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 	if len(extracted) == 0 && excluded > 0 && len(failures) == 0 {
 		return nil, ErrNoSafePrompt2Files
 	}
-	if len(failures) > 0 {
-		if len(extracted) > 0 && excluded == 0 {
-			return extracted, &ExtractionError{
-				Failures:   append([]string(nil), failures...),
-				CanProceed: true,
-			}
+	if len(extracted) > 0 && (len(failures) > 0 || excluded > 0) {
+		return extracted, &ExtractionError{
+			Failures:   append([]string(nil), failures...),
+			Excluded:   append([]string(nil), excludedFailures...),
+			CanProceed: true,
 		}
+	}
+	if len(failures) > 0 {
 		return extracted, &ExtractionError{
 			Failures: append([]string(nil), failures...),
 			Excluded: append([]string(nil), excludedFailures...),

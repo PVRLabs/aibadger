@@ -47,13 +47,14 @@ func openPromptFileCmd(kind, path string) tea.Cmd {
 
 func contextCmd(session *workflow.Session, goal string, commands []extractor.Command) tea.Cmd {
 	return func() tea.Msg {
-		schema, metadata, extractedCount, failedCommands, err := session.GenerateContextDetailed(goal, commands)
+		schema, metadata, extractedCount, failedCommands, safetyExclusions, err := session.GenerateContextDetailed(goal, commands)
 		return contextDoneMsg{
-			schema:         schema,
-			metadata:       metadata,
-			extractedCount: extractedCount,
-			failedCommands: failedCommands,
-			err:            err,
+			schema:           schema,
+			metadata:         metadata,
+			extractedCount:   extractedCount,
+			failedCommands:   failedCommands,
+			safetyExclusions: safetyExclusions,
+			err:              err,
 		}
 	}
 }

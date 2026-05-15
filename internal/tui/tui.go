@@ -58,18 +58,19 @@ type Model struct {
 	goalInput textarea.Model
 	paste     textarea.Model
 
-	eng                   *engine.Engine
-	session               *workflow.Session
-	schemaA               string
-	schemaB               string
-	commands              []extractor.Command
-	metadata              []protocol.ExtractionMetadata
-	pendingSchemaB        string
-	pendingMetadata       []protocol.ExtractionMetadata
-	pendingExtractedCount int
-	pendingFailedCommands []string
-	updates               []writer.FileUpdate
-	response              string
+	eng                     *engine.Engine
+	session                 *workflow.Session
+	schemaA                 string
+	schemaB                 string
+	commands                []extractor.Command
+	metadata                []protocol.ExtractionMetadata
+	pendingSchemaB          string
+	pendingMetadata         []protocol.ExtractionMetadata
+	pendingExtractedCount   int
+	pendingFailedCommands   []string
+	pendingSafetyExclusions []string
+	updates                 []writer.FileUpdate
+	response                string
 
 	onboardingCompletionSaved bool
 
@@ -112,11 +113,12 @@ type openPromptFileDoneMsg struct {
 }
 
 type contextDoneMsg struct {
-	schema         string
-	metadata       []protocol.ExtractionMetadata
-	extractedCount int
-	failedCommands []string
-	err            error
+	schema           string
+	metadata         []protocol.ExtractionMetadata
+	extractedCount   int
+	failedCommands   []string
+	safetyExclusions []string
+	err              error
 }
 
 type writeDoneMsg struct {
@@ -262,15 +264,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingMetadata = nil
 			m.pendingExtractedCount = 0
 			m.pendingFailedCommands = nil
+			m.pendingSafetyExclusions = nil
 			m.err = msg.err
 			m.status = tuiMessage{}
 			return m, nil
 		}
-		if len(msg.failedCommands) > 0 {
+		if len(msg.failedCommands) > 0 || len(msg.safetyExclusions) > 0 {
 			m.pendingSchemaB = msg.schema
 			m.pendingMetadata = append([]protocol.ExtractionMetadata(nil), msg.metadata...)
 			m.pendingExtractedCount = msg.extractedCount
 			m.pendingFailedCommands = append([]string(nil), msg.failedCommands...)
+			m.pendingSafetyExclusions = append([]string(nil), msg.safetyExclusions...)
 			m.state = stateContextWarning
 			m.status = warningMessage("Partial extraction detected. Review the warning below.")
 			m.err = nil
@@ -436,8 +440,9 @@ func (m Model) acceptPartialExtractionWarning() (tea.Model, tea.Cmd) {
 	m.pendingMetadata = nil
 	m.pendingExtractedCount = 0
 	m.pendingFailedCommands = nil
+	m.pendingSafetyExclusions = nil
 	m.state = stateContextReady
-	m.status = warningMessage("Proceeding with available context after partial extraction failures.")
+	m.status = warningMessage("Proceeding with available context after extraction warnings.")
 	m.err = nil
 	return m, nil
 }
@@ -447,6 +452,7 @@ func (m Model) rejectPartialExtractionWarning() (tea.Model, tea.Cmd) {
 	m.pendingMetadata = nil
 	m.pendingExtractedCount = 0
 	m.pendingFailedCommands = nil
+	m.pendingSafetyExclusions = nil
 	m.schemaB = ""
 	m.metadata = nil
 	m.state = stateWaitingForExtractions
@@ -506,6 +512,7 @@ func (m Model) returnHome(status tuiMessage) (tea.Model, tea.Cmd) {
 	m.pendingMetadata = nil
 	m.pendingExtractedCount = 0
 	m.pendingFailedCommands = nil
+	m.pendingSafetyExclusions = nil
 	m.updates = nil
 	m.response = ""
 	m.goalInput.SetValue("")

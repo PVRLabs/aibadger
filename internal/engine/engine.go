@@ -84,6 +84,11 @@ func (e *Engine) ParseCommands(input string) []extractor.Command {
 func (e *Engine) GenerateContext(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, error) {
 	extractions, err := e.extractor.Extract(commands)
 	if err != nil {
+		var extractionErr *extractor.ExtractionError
+		if errors.As(err, &extractionErr) && extractionErr.CanProceed && len(extractions) > 0 {
+			schema, metadata := e.formatter.GenerateSchemaB(e.Topology, extractions, goal)
+			return schema, metadata, nil
+		}
 		return "", nil, err
 	}
 	schema, metadata := e.formatter.GenerateSchemaB(e.Topology, extractions, goal)
@@ -91,20 +96,20 @@ func (e *Engine) GenerateContext(goal string, commands []extractor.Command) (str
 }
 
 // GenerateContextDetailed extracts requested source and returns partial
-// missing-file failures separately so callers can warn and continue with the
-// usable context.
-func (e *Engine) GenerateContextDetailed(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, int, []string, error) {
+// failures and safety exclusions separately so callers can warn and continue
+// with the usable context.
+func (e *Engine) GenerateContextDetailed(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, int, []string, []string, error) {
 	extractions, err := e.extractor.Extract(commands)
 	if err != nil {
 		var extractionErr *extractor.ExtractionError
 		if errors.As(err, &extractionErr) && extractionErr.CanProceed && len(extractions) > 0 {
 			schema, metadata := e.formatter.GenerateSchemaB(e.Topology, extractions, goal)
-			return schema, metadata, len(extractions), append([]string(nil), extractionErr.Failures...), nil
+			return schema, metadata, len(extractions), append([]string(nil), extractionErr.Failures...), append([]string(nil), extractionErr.Excluded...), nil
 		}
-		return "", nil, 0, nil, err
+		return "", nil, 0, nil, nil, err
 	}
 	schema, metadata := e.formatter.GenerateSchemaB(e.Topology, extractions, goal)
-	return schema, metadata, len(extractions), nil, nil
+	return schema, metadata, len(extractions), nil, nil, nil
 }
 
 // ParseWritePlan extracts planned file operations from an AI response without

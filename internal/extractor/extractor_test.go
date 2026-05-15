@@ -337,8 +337,12 @@ func TestExtractSkipsPrompt2SensitiveAndBinaryFiles(t *testing.T) {
 		{Type: "FILE", Path: "src/notes.txt"},
 		{Type: "FILE", Path: "nested/.azure/token"},
 	})
-	if err != nil {
-		t.Fatalf("Extract() error = %v", err)
+	var extractionErr *ExtractionError
+	if !errors.As(err, &extractionErr) {
+		t.Fatalf("Extract() error = %T, want *ExtractionError for safety exclusions", err)
+	}
+	if !extractionErr.CanProceed {
+		t.Fatal("Extract() safety-exclusion warning did not allow proceeding")
 	}
 	if len(results) != 3 {
 		t.Fatalf("results = %d, want 3 safe files", len(results))
@@ -380,8 +384,55 @@ func TestExtractIgnoresSafetyExclusionsWhenUsableFilesExist(t *testing.T) {
 		{Type: "FILE", Path: "bin/native"},
 		{Type: "FILE", Path: "src/main.go"},
 	})
-	if err != nil {
-		t.Fatalf("Extract() error = %v, want nil when only excluded files are skipped", err)
+	var extractionErr *ExtractionError
+	if !errors.As(err, &extractionErr) {
+		t.Fatalf("Extract() error = %T, want *ExtractionError for safety exclusions", err)
+	}
+	if !extractionErr.CanProceed {
+		t.Fatal("Extract() safety-exclusion warning did not allow proceeding")
+	}
+	if len(results) != 1 || results[0].Path != "src/main.go" {
+		t.Fatalf("results = %+v, want only usable file", results)
+	}
+}
+
+func TestExtractAllowsMissingFilesWhenUsableFilesAndSafetyExclusionsExist(t *testing.T) {
+	tempDir := t.TempDir()
+	files := map[string][]byte{
+		".env":        []byte("SECRET=1\n"),
+		"src/main.go": []byte("package main\n"),
+	}
+	for path, content := range files {
+		fullPath := filepath.Join(tempDir, path)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fullPath, content, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	e := NewExtractor(tempDir, nil)
+	results, err := e.Extract([]Command{
+		{Type: "FILE", Path: ".env"},
+		{Type: "FILE", Path: "missing.go"},
+		{Type: "FILE", Path: "src/main.go"},
+	})
+	if err == nil {
+		t.Fatal("Extract() error = nil, want partial extraction warning")
+	}
+	var extractionErr *ExtractionError
+	if !errors.As(err, &extractionErr) {
+		t.Fatalf("Extract() error = %T, want *ExtractionError", err)
+	}
+	if !extractionErr.CanProceed {
+		t.Fatal("Extract() partial missing-file error did not allow proceeding")
+	}
+	if len(extractionErr.Failures) != 1 || !strings.Contains(extractionErr.Failures[0], "missing.go") {
+		t.Fatalf("Failures = %v, want missing.go only", extractionErr.Failures)
+	}
+	if len(extractionErr.Excluded) != 1 || !strings.Contains(extractionErr.Excluded[0], ".env") {
+		t.Fatalf("Excluded = %v, want .env exclusion tracked separately", extractionErr.Excluded)
 	}
 	if len(results) != 1 || results[0].Path != "src/main.go" {
 		t.Fatalf("results = %+v, want only usable file", results)

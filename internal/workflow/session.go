@@ -98,7 +98,7 @@ func (s *Session) GenerateContext(goal string, commands []extractor.Command) (st
 	return s.Engine.GenerateContext(goal, commands)
 }
 
-func (s *Session) GenerateContextDetailed(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, int, []string, error) {
+func (s *Session) GenerateContextDetailed(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, int, []string, []string, error) {
 	return s.Engine.GenerateContextDetailed(goal, commands)
 }
 
@@ -106,6 +106,12 @@ func (s *Session) GenerateContextFromInput(goal, input string) ([]extractor.Comm
 	result := s.ParseExtractionInput(input)
 	schema, metadata, err := s.GenerateContext(goal, result.Commands)
 	return result.Commands, schema, metadata, err
+}
+
+func (s *Session) GenerateContextDetailedFromInput(goal, input string) ([]extractor.Command, string, []protocol.ExtractionMetadata, int, []string, []string, error) {
+	result := s.ParseExtractionInput(input)
+	schema, metadata, extractedCount, failedCommands, safetyExclusions, err := s.GenerateContextDetailed(goal, result.Commands)
+	return result.Commands, schema, metadata, extractedCount, failedCommands, safetyExclusions, err
 }
 
 func (s *Session) ParseWritePlan(input string) writer.ParseResult {

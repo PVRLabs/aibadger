@@ -101,7 +101,7 @@ func TestGenerateContextDetailedAllowsMissingFilesWhenSomeContentIsUsable(t *tes
 	eng := FromTopology(root, &model.ProjectTopology{
 		Languages: []string{"Go"},
 	})
-	schema, metadata, count, failedCommands, err := eng.GenerateContextDetailed("keep going", []extractor.Command{
+	schema, metadata, count, failedCommands, safetyExclusions, err := eng.GenerateContextDetailed("keep going", []extractor.Command{
 		{Type: "FILE", Path: "present.go"},
 		{Type: "FILE", Path: "missing.go"},
 	})
@@ -113,6 +113,9 @@ func TestGenerateContextDetailedAllowsMissingFilesWhenSomeContentIsUsable(t *tes
 	}
 	if len(failedCommands) != 1 || !strings.Contains(failedCommands[0], "missing.go") {
 		t.Fatalf("failedCommands = %v, want missing.go warning", failedCommands)
+	}
+	if len(safetyExclusions) != 0 {
+		t.Fatalf("safetyExclusions = %v, want none", safetyExclusions)
 	}
 	if len(metadata) != 1 {
 		t.Fatalf("metadata = %d entries, want 1", len(metadata))

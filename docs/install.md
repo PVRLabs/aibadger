@@ -38,11 +38,11 @@ Check the binary version:
 Expected output:
 
 ```text
-badger v0.1.1
+badger v0.1.2
 ```
 
 Published installs should report the current release version. Source builds from
-`main` may report the next development version, for example `badger v0.1.2-dev`,
+`main` may report the next development version, for example `badger v0.1.3-dev`,
 until the next release is prepared.
 
 ## Release Notes

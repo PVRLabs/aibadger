@@ -6,13 +6,59 @@ AIBadger runs from the root of the project you want to inspect:
 badger
 ```
 
-## Workflow
+## Walkthrough
 
-1. Map: AIBadger scans your project and prepares Prompt 1: Topology.
-2. Extract: You paste the AI's requested `FILE:`, `PREFIX:`, or `NEAR:` commands back into AIBadger, and AIBadger prepares Prompt 2: Code Context.
-3. Apply: You paste the AI's final response, review the write plan, and confirm before files are written.
+This example traces a full session end-to-end using a code review task.
 
-Prompt 1 contains project structure, file paths, and your goal, not source code. Prompt 2 contains selected source context based on the extraction commands you approve.
+### Step 1: State your goal
+
+```bash
+cd your-project
+badger
+```
+
+Type a goal and paste a git diff:
+
+```text
+Review my uncommitted changes for bugs, edge cases, and performance issues.
+
+diff --git a/internal/tui/tui.go b/internal/tui/tui.go
+index abc..def 100644
+--- a/internal/tui/tui.go
++++ b/internal/tui/tui.go
+@@ -42,6 +42,8 @@ func (m *Model) handleKeypress(key string) {
++    if key == "ctrl+c" {
++        return m.quit()
++    }
+```
+
+Press Enter.
+
+### Step 2: Copy Prompt 1 (Topology) to your AI chat
+
+AIBadger scans the project and shows **Prompt 1: Topology** — a compact map of the project's structure, key files, and your goal. Copy it and paste into your AI chat (Claude, ChatGPT, Gemini, etc.).
+
+Prompt 1 contains file paths and structure only — your source code stays local.
+
+### Step 3: Paste the AI's extraction commands back
+
+The AI reads the topology and asks for specific files:
+
+```text
+To review the change, I need to see the TUI event handler:
+FILE:internal/tui/tui.go
+NEAR:internal/tui/tui.go#handleKeypress
+```
+
+Copy those lines, paste them into AIBadger, and press Enter. AIBadger fetches only those files and prepares **Prompt 2: Code Context**.
+
+### Step 4: Copy Prompt 2 back to the AI chat
+
+Copy Prompt 2 and paste it into your AI chat. The AI now has both the project structure and the actual source code. It responds with its analysis and any suggested changes.
+
+### Step 5: Apply the AI's changes
+
+Paste the AI's full response into AIBadger. AIBadger parses any file changes, shows you a write plan listing what will be written to each file, and asks for confirmation. Review the plan and confirm to apply.
 
 ## Example Tasks
 

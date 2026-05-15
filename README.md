@@ -26,26 +26,15 @@ brew install pvrlabs/aibadger/badger
 For source builds, release builds, and version checks, see
 [docs/install.md](docs/install.md).
 
-## Usage
+## Quick start
 
-Run `badger` from the root of the project you want to inspect:
+1. **Goal** — Run `badger` in your project, type a goal like `Review this change for bugs`, paste a git diff, and press Enter.
+2. **Map** — AIBadger scans your project and shows **Prompt 1: Topology** (project structure and files, not source code). Copy it and paste into any AI chat (Claude, ChatGPT, Gemini, etc.).
+3. **Extract** — The AI asks for the files it needs. Copy its reply (e.g. `FILE:internal/scanner/scanner.go`) and paste it back into AIBadger. AIBadger prepares **Prompt 2: Code Context** with the relevant source.
+4. **Analyze** — Copy Prompt 2 back to the AI chat. The AI reads the code and responds with analysis or code changes.
+5. **Apply** — Paste the AI's final response into AIBadger, review the write plan, and confirm.
 
-```bash
-badger
-```
-
-## Workflow
-
-AI Badger follows a simple local workflow:
-
-1. **Map**: AIBadger scans your project and prepares Prompt 1: Topology.
-2. **Extract**: paste the AI's requested `FILE:`, `PREFIX:`, or `NEAR:` commands back into AIBadger, and AIBadger prepares Prompt 2: Code Context.
-3. **Apply**: paste the AI's final response, review the write plan, and confirm before files are written.
-
-Prompt 1 contains project structure, file paths, and your goal, not source code.
-Prompt 2 contains selected source context based on the extraction commands you approve.
-
-AIBadger works for code review, bug and performance analysis, code explanation, planning, and focused implementation requests. Start by typing or pasting a goal into AIBadger.
+AIBadger works for code review, bug and performance analysis, code explanation, planning, and focused implementation requests. See [docs/usage.md](docs/usage.md) for a full walkthrough and more examples.
 
 ## Example tasks
 
@@ -62,11 +51,11 @@ Review my current change for bugs.
 [Paste git diff here]
 ```
 
-For the workflow and `.badger-context`, see [docs/usage.md](docs/usage.md).
+For `.badger-context` and more examples, see [docs/usage.md](docs/usage.md).
 
 ## Context selectors
 
-AI Badger can extract focused context from selector-style requests such as:
+In step 3 of the workflow, paste extraction commands like these back into AIBadger to fetch only the files or code blocks the AI needs:
 
 ```text
 FILE:internal/scanner/scanner.go
@@ -74,7 +63,9 @@ PREFIX:internal/scanner/scanner.go#func ScanProject(
 NEAR:internal/scanner/scanner.go#detect project language
 ```
 
-These are examples of the plain-text selectors you can use to ask for more context without pasting the whole repository.
+- `FILE:path` — extracts the entire file.
+- `PREFIX:path#symbol` — extracts a declaration starting with that prefix (works for functions, types, methods, etc.).
+- `NEAR:path#keyword` — extracts the code block around the first matching line.
 
 ## Privacy and safety
 

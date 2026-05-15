@@ -77,6 +77,14 @@ brew install pvrlabs/aibadger/badger
 badger --version
 ```
 
+Verify the curl installer against the new release:
+
+```bash
+tmp_dir="$(mktemp -d)"
+curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | BADGER_VERSION="${RELEASE_VERSION}" BADGER_INSTALL_DIR="${tmp_dir}" sh
+"${tmp_dir}/badger" --version
+```
+
 ## Verification Checklist
 
 - The GitHub Release page exists for the new tag.
@@ -85,6 +93,7 @@ badger --version
 - `./badger --version` reports the release version.
 - Source builds from `main` after the release report the next `-dev` version.
 - The public Homebrew tap installs `badger` from GitHub Releases.
+- The curl installer downloads, verifies, and runs the release binary.
 
 ## Manual Fallback
 

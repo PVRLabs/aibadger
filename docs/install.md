@@ -13,6 +13,31 @@ brew install pvrlabs/aibadger/badger
 
 The tap pulls release tarballs from GitHub Releases.
 
+## Curl Installer
+
+Install the latest release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | sh
+```
+
+The installer downloads the matching GitHub Release tarball for your platform,
+verifies its SHA-256 checksum, and installs `badger` into `~/.local/bin` by
+default. If that directory is not on your `PATH`, add it before running
+`badger`.
+
+Install a specific release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | BADGER_VERSION=v0.1.2 sh
+```
+
+Install into a custom directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | BADGER_INSTALL_DIR="$HOME/bin" sh
+```
+
 ## Build From Source
 
 Development build:

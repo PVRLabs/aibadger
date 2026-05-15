@@ -23,6 +23,12 @@ brew tap pvrlabs/aibadger
 brew install pvrlabs/aibadger/badger
 ```
 
+Or install the latest release with curl:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | sh
+```
+
 For source builds, release builds, and version checks, see
 [docs/install.md](docs/install.md).
 

@@ -2,7 +2,7 @@
 
 AI Badger helps you use any AI chat with your local codebase without uploading your repository or requiring an AI provider API key.
 
-It scans a project on your machine, maps the important project structure into a compact prompt, and helps you extract only the files or code spans the AI needs. Paste a diff, include project topology/context, and use any AI chat as a lightweight code reviewer before committing.
+It scans a project on your machine, maps the important project structure into a compact prompt, and helps you extract only the files or code spans your AI chat requests. You stay in control of what gets copied, reviewed, and written back.
 
 It stays local by default: no telemetry, no file uploads, and no cloud service required to prepare code context.
 
@@ -38,19 +38,26 @@ badger
 
 AI Badger follows a simple local workflow:
 
-1. **Map** your project into compact structure/context.
-2. **Ask** your AI chat to review a diff, explain code, or request more context.
-3. **Extract** focused files or spans using plain-text selectors.
-4. **Review** any AI-written updates before applying them.
+1. **Map**: AIBadger scans your project and prepares Prompt 1: Topology.
+2. **Extract**: paste the AI's requested `FILE:`, `PREFIX:`, or `NEAR:` commands back into AIBadger, and AIBadger prepares Prompt 2: Code Context.
+3. **Apply**: paste the AI's final response, review the write plan, and confirm before files are written.
 
-Example review prompt:
+Prompt 1 contains project structure, file paths, and your goal, not source code.
+Prompt 2 contains selected source context based on the extraction commands you approve.
+
+AIBadger works for code review, bug and performance analysis, code explanation, planning, and focused implementation requests. Start by typing or pasting a goal into AIBadger.
+
+## Example tasks
+
+1. Review a change before committing.
+2. Find bugs or performance issues in a focused area.
+3. Understand an unfamiliar part of a codebase.
+4. Make a focused implementation request.
+
+Example review goal:
 
 ```text
-Review this diff for concrete bugs, edge cases, maintainability issues, and unintended behavior changes.
-
-Focus on issues I should fix before committing.
-
-[Paste AI Badger project context here]
+Review my current change for bugs.
 
 [Paste git diff here]
 ```

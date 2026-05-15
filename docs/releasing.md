@@ -1,9 +1,10 @@
 # Releasing AIBadger
 
-This document describes the current public OSS release process for AIBadger.
+This document describes the public OSS release process for AIBadger.
 
-The current published release is `v0.1.1`. Future releases should follow the same
-flow unless the release workflow changes.
+Release tags use exact versions, such as `vX.Y.Z`. The `main` branch should
+carry the next development version, such as `vX.Y.Z-dev`, so source builds are
+clearly distinguishable from published release binaries.
 
 ## What Gets Released
 
@@ -19,7 +20,8 @@ matching `.sha256` file.
 
 ## Before Releasing
 
-1. Update the version constant in `internal/version/version.go`.
+1. Replace the development version constant in `internal/version/version.go`
+   with the exact release version.
 2. Update user-facing version references in the README if needed.
 3. Run the test suite:
 
@@ -36,21 +38,29 @@ go build -tags aibadger_release -ldflags="-s -w" -o badger ./cmd/badger
 
 ## Release Steps
 
-1. Commit the version bump and any release notes changes.
-2. Create a Git tag that matches the version, for example:
+Set the release version once:
 
 ```bash
-git tag v0.1.1
+RELEASE_VERSION=vX.Y.Z
+```
+
+1. Commit the version bump and any release notes changes.
+2. Create a Git tag that matches the version:
+
+```bash
+git tag "${RELEASE_VERSION}"
 ```
 
 3. Push the tag to GitHub:
 
 ```bash
-git push origin v0.1.1
+git push origin "${RELEASE_VERSION}"
 ```
 
 4. Publish the GitHub Release for that tag.
 5. Confirm the release workflow builds and uploads the release archives.
+6. After the release is public, bump `internal/version/version.go` on `main` to
+   the next development version.
 
 The release workflow lives in `.github/workflows/release.yml` and is triggered by
 tag pushes and published releases.
@@ -73,6 +83,7 @@ badger --version
 - All expected `.tar.gz` and `.sha256` assets are attached.
 - Downloading an asset yields the expected binary archive.
 - `./badger --version` reports the release version.
+- Source builds from `main` after the release report the next `-dev` version.
 - The public Homebrew tap installs `badger` from GitHub Releases.
 
 ## Manual Fallback

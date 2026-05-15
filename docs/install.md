@@ -41,6 +41,10 @@ Expected output:
 badger v0.1.1
 ```
 
+Published installs should report the current release version. Source builds from
+`main` may report the next development version, for example `badger v0.1.2-dev`,
+until the next release is prepared.
+
 ## Release Notes
 
 For release publishing and artifact details, see [releasing.md](releasing.md).

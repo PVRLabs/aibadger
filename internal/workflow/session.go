@@ -98,6 +98,10 @@ func (s *Session) GenerateContext(goal string, commands []extractor.Command) (st
 	return s.Engine.GenerateContext(goal, commands)
 }
 
+func (s *Session) GenerateContextDetailed(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, int, []string, error) {
+	return s.Engine.GenerateContextDetailed(goal, commands)
+}
+
 func (s *Session) GenerateContextFromInput(goal, input string) ([]extractor.Command, string, []protocol.ExtractionMetadata, error) {
 	result := s.ParseExtractionInput(input)
 	schema, metadata, err := s.GenerateContext(goal, result.Commands)

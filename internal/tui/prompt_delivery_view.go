@@ -76,6 +76,33 @@ func (m Model) viewContextReady() string {
 	return note
 }
 
+func (m Model) viewContextWarning() string {
+	var lines []string
+	for _, failure := range m.pendingFailedCommands {
+		lines = append(lines, "  - "+failure)
+	}
+	if len(lines) == 0 {
+		lines = append(lines, "  - no failed requests listed")
+	}
+
+	extractedLabel := "file"
+	if m.pendingExtractedCount != 1 {
+		extractedLabel = "files"
+	}
+	failedLabel := "request"
+	if len(m.pendingFailedCommands) != 1 {
+		failedLabel = "requests"
+	}
+
+	return strings.Join([]string{
+		renderWarningLine(fmt.Sprintf("Extracted %d %s, but %d %s failed:", m.pendingExtractedCount, extractedLabel, len(m.pendingFailedCommands), failedLabel)),
+		"",
+		strings.Join(lines, "\n"),
+		"",
+		renderBold("Proceed with available context? (y/N)"),
+	}, "\n")
+}
+
 func (m Model) promptDeliveryText(kind string) string {
 	switch kind {
 	case topologyPromptKind:

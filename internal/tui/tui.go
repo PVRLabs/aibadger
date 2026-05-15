@@ -27,6 +27,7 @@ const (
 	stateScanning
 	stateScanComplete
 	stateWaitingForExtractions
+	stateContextWarning
 	stateContextReady
 	stateWaitingForCode
 	stateTextResponse
@@ -57,14 +58,18 @@ type Model struct {
 	goalInput textarea.Model
 	paste     textarea.Model
 
-	eng      *engine.Engine
-	session  *workflow.Session
-	schemaA  string
-	schemaB  string
-	commands []extractor.Command
-	metadata []protocol.ExtractionMetadata
-	updates  []writer.FileUpdate
-	response string
+	eng                   *engine.Engine
+	session               *workflow.Session
+	schemaA               string
+	schemaB               string
+	commands              []extractor.Command
+	metadata              []protocol.ExtractionMetadata
+	pendingSchemaB        string
+	pendingMetadata       []protocol.ExtractionMetadata
+	pendingExtractedCount int
+	pendingFailedCommands []string
+	updates               []writer.FileUpdate
+	response              string
 
 	onboardingCompletionSaved bool
 
@@ -107,9 +112,11 @@ type openPromptFileDoneMsg struct {
 }
 
 type contextDoneMsg struct {
-	schema   string
-	metadata []protocol.ExtractionMetadata
-	err      error
+	schema         string
+	metadata       []protocol.ExtractionMetadata
+	extractedCount int
+	failedCommands []string
+	err            error
 }
 
 type writeDoneMsg struct {
@@ -251,8 +258,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.advanceAfterTempFileWithStatus(msg.kind, msg.path, m.status)
 	case contextDoneMsg:
 		if msg.err != nil {
+			m.pendingSchemaB = ""
+			m.pendingMetadata = nil
+			m.pendingExtractedCount = 0
+			m.pendingFailedCommands = nil
 			m.err = msg.err
 			m.status = tuiMessage{}
+			return m, nil
+		}
+		if len(msg.failedCommands) > 0 {
+			m.pendingSchemaB = msg.schema
+			m.pendingMetadata = append([]protocol.ExtractionMetadata(nil), msg.metadata...)
+			m.pendingExtractedCount = msg.extractedCount
+			m.pendingFailedCommands = append([]string(nil), msg.failedCommands...)
+			m.state = stateContextWarning
+			m.status = warningMessage("Partial extraction detected. Review the warning below.")
+			m.err = nil
 			return m, nil
 		}
 		m.schemaB = msg.schema
@@ -408,6 +429,34 @@ func (m Model) submitExtractions() (tea.Model, tea.Cmd) {
 	return m, contextCmd(session, m.goal, m.commands)
 }
 
+func (m Model) acceptPartialExtractionWarning() (tea.Model, tea.Cmd) {
+	m.schemaB = m.pendingSchemaB
+	m.metadata = append([]protocol.ExtractionMetadata(nil), m.pendingMetadata...)
+	m.pendingSchemaB = ""
+	m.pendingMetadata = nil
+	m.pendingExtractedCount = 0
+	m.pendingFailedCommands = nil
+	m.state = stateContextReady
+	m.status = warningMessage("Proceeding with available context after partial extraction failures.")
+	m.err = nil
+	return m, nil
+}
+
+func (m Model) rejectPartialExtractionWarning() (tea.Model, tea.Cmd) {
+	m.pendingSchemaB = ""
+	m.pendingMetadata = nil
+	m.pendingExtractedCount = 0
+	m.pendingFailedCommands = nil
+	m.schemaB = ""
+	m.metadata = nil
+	m.state = stateWaitingForExtractions
+	m.status = neutralMessage("Returned to extraction input. Adjust the file requests and try again.")
+	m.err = nil
+	m.paste.Focus()
+	m.goalInput.Blur()
+	return m, textarea.Blink
+}
+
 func (m Model) submitFinalResponse() (tea.Model, tea.Cmd) {
 	input := strings.TrimSpace(m.paste.Value())
 	final := m.workflowSession().ParseFinalResponse(input)
@@ -453,6 +502,10 @@ func (m Model) returnHome(status tuiMessage) (tea.Model, tea.Cmd) {
 	m.schemaA = ""
 	m.schemaB = ""
 	m.commands = nil
+	m.pendingSchemaB = ""
+	m.pendingMetadata = nil
+	m.pendingExtractedCount = 0
+	m.pendingFailedCommands = nil
 	m.updates = nil
 	m.response = ""
 	m.goalInput.SetValue("")

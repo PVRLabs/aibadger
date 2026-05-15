@@ -25,6 +25,26 @@ var (
 	ErrNoSafePrompt2Files = errors.New("no safe files available for Prompt 2 after excluding binary and sensitive files")
 )
 
+// ExtractionError reports a mix of usable extraction results and failures.
+// When CanProceed is true, the caller may continue with the successful
+// extractions and surface the failures as a warning.
+type ExtractionError struct {
+	Failures   []string
+	Excluded   []string
+	CanProceed bool
+}
+
+func (e *ExtractionError) Error() string {
+	var parts []string
+	if len(e.Failures) > 0 {
+		parts = append(parts, fmt.Sprintf("extraction failed for %d command(s): %s", len(e.Failures), strings.Join(e.Failures, "; ")))
+	}
+	if len(e.Excluded) > 0 {
+		parts = append(parts, fmt.Sprintf("%d command(s) excluded from Prompt 2 safety rules: %s", len(e.Excluded), strings.Join(e.Excluded, "; ")))
+	}
+	return strings.Join(parts, "; ")
+}
+
 // Extractor handles code extraction from the filesystem.
 type Extractor struct {
 	ProjectRoot     string
@@ -76,6 +96,7 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 	extracted := make([]protocol.ExtractionResult, 0, len(commands))
 	emittedFile := make(map[string]bool, len(commands))
 	failures := make([]string, 0)
+	excludedFailures := make([]string, 0)
 	excluded := 0
 	for i, result := range results {
 		if fileRequested[commands[i].Path] {
@@ -90,6 +111,7 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 		if errs[i] != nil {
 			if errors.Is(errs[i], errPrompt2Excluded) {
 				excluded++
+				excludedFailures = append(excludedFailures, fmt.Sprintf("%s: excluded from Prompt 2", commands[i].Path))
 				continue
 			}
 			failures = append(failures, fmt.Sprintf("%s: %v", commands[i].Path, errs[i]))
@@ -101,7 +123,16 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 		return nil, ErrNoSafePrompt2Files
 	}
 	if len(failures) > 0 {
-		return extracted, fmt.Errorf("extraction failed for %d command(s): %s", len(failures), strings.Join(failures, "; "))
+		if len(extracted) > 0 && excluded == 0 {
+			return extracted, &ExtractionError{
+				Failures:   append([]string(nil), failures...),
+				CanProceed: true,
+			}
+		}
+		return extracted, &ExtractionError{
+			Failures: append([]string(nil), failures...),
+			Excluded: append([]string(nil), excludedFailures...),
+		}
 	}
 	return extracted, nil
 }

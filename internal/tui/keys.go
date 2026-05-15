@@ -129,6 +129,10 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		// automatically; see forwardKeyToInput below).
 		next, cmd := m.submitPasteState()
 		return next, cmd, true
+
+	case stateContextWarning:
+		next, cmd := m.rejectPartialExtractionWarning()
+		return next, cmd, true
 	}
 	return m, nil, false // key not applicable in current state
 }
@@ -147,6 +151,10 @@ func (m Model) handleKeyConfirm() (tea.Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 		return m, copyCmd(codeContextPromptKind, m.schemaB), true
+	}
+	if m.state == stateContextWarning {
+		next, cmd := m.acceptPartialExtractionWarning()
+		return next, cmd, true
 	}
 	if m.state == stateWritePreview {
 		m.state = stateWriting
@@ -170,6 +178,10 @@ func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
 	}
 	if m.state == stateContextReady {
 		next, cmd := m.cancelPromptDelivery(codeContextPromptKind)
+		return next, cmd, true
+	}
+	if m.state == stateContextWarning {
+		next, cmd := m.rejectPartialExtractionWarning()
 		return next, cmd, true
 	}
 	if m.state == stateWritePreview {
@@ -304,6 +316,8 @@ func keyboardHintsForState(st state) []string {
 		hints = []string{"Enter submit", "Ctrl+U clear line", "Ctrl+C quit"}
 	case stateWaitingForExtractions, stateWaitingForCode:
 		hints = []string{"Enter submit", "Ctrl+U clear line", "Esc cancel", "Ctrl+C quit"}
+	case stateContextWarning:
+		hints = []string{"Enter return", "Y proceed", "N return", "Esc cancel", "Ctrl+C quit"}
 	case stateScanning, stateWriting:
 		// Ctrl+C only.
 	default:

@@ -52,6 +52,8 @@ func (m Model) View() string {
 		b.WriteString(m.viewScanComplete())
 	case stateWaitingForExtractions:
 		b.WriteString(m.viewPaste(stateWaitingForExtractions))
+	case stateContextWarning:
+		b.WriteString(m.viewContextWarning())
 	case stateContextReady:
 		b.WriteString(m.viewContextReady())
 	case stateWaitingForCode:
@@ -179,7 +181,7 @@ func (m Model) pipelineView() string {
 	stages := []string{"Map", "Extract", "Apply"}
 	active := 0
 	switch m.state {
-	case stateWaitingForExtractions, stateContextReady:
+	case stateWaitingForExtractions, stateContextWarning, stateContextReady:
 		active = 1
 	case stateWaitingForCode, stateTextResponse:
 		active = 2

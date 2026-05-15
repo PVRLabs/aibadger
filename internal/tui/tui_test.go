@@ -1169,6 +1169,25 @@ func TestCopyCodeContextDialogShowsPayloadSize(t *testing.T) {
 	}
 }
 
+func TestPartialExtractionWarningViewShowsFailedRequests(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.state = stateContextWarning
+	m.pendingExtractedCount = 3
+	m.pendingFailedCommands = []string{".mvn/jvm.config: file not found: .mvn/jvm.config"}
+
+	view := m.viewContextWarning()
+
+	for _, want := range []string{
+		"Extracted 3 files, but 1 request failed:",
+		"  - .mvn/jvm.config: file not found: .mvn/jvm.config",
+		"Proceed with available context? (y/N)",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("partial extraction warning missing %q:\n%s", want, view)
+		}
+	}
+}
+
 func TestLargeCodeContextPromptShowsDeliveryMenu(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.LargePromptByteThreshold = 8
@@ -1291,6 +1310,67 @@ func TestLargePromptCancelAdvancesWorkflow(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("cancel did not return textarea blink command")
+	}
+}
+
+func TestPartialExtractionWarningEnterReturnsToExtractionInput(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.state = stateContextWarning
+	m.pendingSchemaB = "context payload"
+	m.pendingMetadata = []protocol.ExtractionMetadata{{Path: "present.go"}}
+	m.pendingExtractedCount = 1
+	m.pendingFailedCommands = []string{"missing.go: file not found: missing.go"}
+	m.paste.SetValue("FILE:present.go\nFILE:missing.go")
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.state != stateWaitingForExtractions {
+		t.Fatalf("state = %v, want %v", got.state, stateWaitingForExtractions)
+	}
+	if got.schemaB != "" || len(got.metadata) != 0 {
+		t.Fatalf("partial context was not discarded: schemaB=%q metadata=%v", got.schemaB, got.metadata)
+	}
+	if got.pendingSchemaB != "" || len(got.pendingFailedCommands) != 0 {
+		t.Fatalf("pending warning state was not cleared: %#v", got)
+	}
+	if !got.paste.Focused() {
+		t.Fatal("paste input was not focused after returning to extraction input")
+	}
+	if cmd == nil {
+		t.Fatal("warning dismissal did not return textarea blink command")
+	}
+}
+
+func TestPartialExtractionWarningYProceedsWithAvailableContext(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.state = stateContextWarning
+	m.pendingSchemaB = "context payload"
+	m.pendingMetadata = []protocol.ExtractionMetadata{{Path: "present.go"}}
+	m.pendingExtractedCount = 1
+	m.pendingFailedCommands = []string{"missing.go: file not found: missing.go"}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.state != stateContextReady {
+		t.Fatalf("state = %v, want %v", got.state, stateContextReady)
+	}
+	if got.schemaB != "context payload" {
+		t.Fatalf("schemaB = %q, want pending context", got.schemaB)
+	}
+	if len(got.metadata) != 1 || got.metadata[0].Path != "present.go" {
+		t.Fatalf("metadata = %#v, want pending metadata", got.metadata)
+	}
+	if got.pendingSchemaB != "" || len(got.pendingFailedCommands) != 0 {
+		t.Fatalf("pending warning state was not cleared: %#v", got)
+	}
+	if cmd != nil {
+		t.Fatal("proceed shortcut returned unexpected command")
 	}
 }
 

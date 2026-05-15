@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
@@ -88,6 +89,36 @@ func TestGenerateContextFallsBackForMissingSelectorAnchors(t *testing.T) {
 	}
 	if !strings.Contains(schema, "package badger") {
 		t.Fatalf("schema missing fallback file content:\n%s", schema)
+	}
+}
+
+func TestGenerateContextDetailedAllowsMissingFilesWhenSomeContentIsUsable(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "present.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	eng := FromTopology(root, &model.ProjectTopology{
+		Languages: []string{"Go"},
+	})
+	schema, metadata, count, failedCommands, err := eng.GenerateContextDetailed("keep going", []extractor.Command{
+		{Type: "FILE", Path: "present.go"},
+		{Type: "FILE", Path: "missing.go"},
+	})
+	if err != nil {
+		t.Fatalf("GenerateContextDetailed() error = %v, want nil for partial warning", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+	if len(failedCommands) != 1 || !strings.Contains(failedCommands[0], "missing.go") {
+		t.Fatalf("failedCommands = %v, want missing.go warning", failedCommands)
+	}
+	if len(metadata) != 1 {
+		t.Fatalf("metadata = %d entries, want 1", len(metadata))
+	}
+	if !strings.Contains(schema, "present.go") {
+		t.Fatalf("schema missing usable extraction:\n%s", schema)
 	}
 }
 

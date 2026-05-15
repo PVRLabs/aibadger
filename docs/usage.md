@@ -17,7 +17,10 @@ cd your-project
 badger
 ```
 
-Type a goal and paste a git diff:
+Type a goal. You can also paste a git diff if you want to provide details of the change.
+
+> [!TIP]
+> AIBadger never reads your source code ahead of time — you explicitly provide context (like a diff or error output) so only what's needed leaves your machine.
 
 ```text
 Review my uncommitted changes for bugs, edge cases, and performance issues.
@@ -38,7 +41,8 @@ Press Enter.
 
 AIBadger scans the project and shows **Prompt 1: Topology** — a compact map of the project's structure, key files, and your goal. Copy it and paste into your AI chat (Claude, ChatGPT, Gemini, etc.).
 
-Prompt 1 contains file paths and structure only — your source code stays local.
+> [!NOTE]
+> Prompt 1 contains file paths and structure only — your source code stays local.
 
 ### Step 3: Paste the AI's extraction commands back
 

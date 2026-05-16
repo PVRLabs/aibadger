@@ -1,3 +1,4 @@
+![AI Badger](assets/hero.png)
 # AI Badger
 
 AI Badger helps you use any AI chat with your local codebase without uploading your repository or requiring an AI provider API key.

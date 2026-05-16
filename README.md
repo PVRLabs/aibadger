@@ -58,23 +58,10 @@ Review my current change for bugs.
 
 For walkthroughs and more examples, see [docs/usage.md](docs/usage.md).
 
-## Context selectors
-
-In step 3 of the workflow, paste extraction commands like these back into AIBadger to fetch only the files or code blocks the AI needs:
-
-```text
-FILE:internal/scanner/scanner.go
-PREFIX:internal/scanner/scanner.go#func ScanProject(
-NEAR:internal/scanner/scanner.go#detect project language
-```
-
-- `FILE:path` — extracts the entire file.
-- `PREFIX:path#symbol` — extracts a declaration starting with that prefix (works for functions, types, methods, etc.).
-- `NEAR:path#keyword` — extracts the code block around the first matching line.
-
 ## Learn more
 
 - [Usage walkthrough and examples](docs/usage.md)
+- [Protocol reference](docs/protocol.md)
 - [Supported project model and limitations](docs/limitations.md)
 - [Privacy and safety](docs/privacy.md)
 - [Contributor guide](docs/development.md)

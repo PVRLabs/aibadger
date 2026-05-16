@@ -35,6 +35,8 @@ For source builds, release builds, and version checks, see
 
 ## Quick start
 
+[**Watch the demo**](https://pvrlabs.xyz/aibadger/demo.html) - See how AI Badger works in a simple animated walkthrough.
+
 1. **Goal** — Run `badger` in your project, type a goal like `Review this change for bugs`, paste a git diff, and press Enter.
 2. **Map** — AIBadger scans your project and shows **Prompt 1: Topology** (project structure and files, not source code). Copy it and paste into any AI chat (Claude, ChatGPT, Gemini, etc.).
 3. **Extract** — The AI asks for the files it needs. Copy its reply (e.g. `FILE:internal/scanner/scanner.go`) and paste it back into AIBadger. AIBadger prepares **Prompt 2: Code Context** with the relevant source.

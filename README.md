@@ -41,8 +41,6 @@ For source builds, release builds, and version checks, see
 4. **Analyze** — Copy Prompt 2 back to the AI chat. The AI reads the code and responds with analysis or code changes.
 5. **Apply** — Paste the AI's final response into AIBadger, review the write plan, and confirm.
 
-AIBadger works for code review, bug and performance analysis, code explanation, planning, and focused implementation requests. See [docs/usage.md](docs/usage.md) for a full walkthrough and more examples.
-
 ## Example tasks
 
 1. Review a change before committing.
@@ -58,7 +56,7 @@ Review my current change for bugs.
 [Paste git diff here]
 ```
 
-For `.badger-context` and more examples, see [docs/usage.md](docs/usage.md).
+For walkthroughs and more examples, see [docs/usage.md](docs/usage.md).
 
 ## Context selectors
 
@@ -74,18 +72,9 @@ NEAR:internal/scanner/scanner.go#detect project language
 - `PREFIX:path#symbol` — extracts a declaration starting with that prefix (works for functions, types, methods, etc.).
 - `NEAR:path#keyword` — extracts the code block around the first matching line.
 
-## Privacy and safety
+## Learn more
 
-See [docs/privacy.md](docs/privacy.md).
-
-## Supported projects
-
-See [docs/usage.md](docs/usage.md) for the supported project model and
-[docs/limitations.md](docs/limitations.md) for the current scan boundaries and
-limits.
-
-## Go package
-
-The public facade is `github.com/PVRLabs/aibadger/pkg/badger`.
-
-For contributor-facing notes, see [docs/development.md](docs/development.md).
+- [Usage walkthrough and examples](docs/usage.md)
+- [Supported project model and limitations](docs/limitations.md)
+- [Privacy and safety](docs/privacy.md)
+- [Contributor guide](docs/development.md)

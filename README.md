@@ -30,8 +30,8 @@ Or install the latest release with curl:
 curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | sh
 ```
 
-For source builds, release builds, and version checks, see
-[docs/install.md](docs/install.md).
+For source builds, release builds, version checks, and Windows install
+instructions, see [docs/install.md](docs/install.md).
 
 ## Quick start
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PVRLabs/aibadger/internal/clipboard"
 	"github.com/PVRLabs/aibadger/internal/engine"
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/protocol"
@@ -100,10 +101,12 @@ type copyDoneMsg struct {
 }
 
 type savePromptDoneMsg struct {
-	kind      string
-	path      string
-	canReveal bool
-	err       error
+	kind         string
+	text         string
+	path         string
+	canReveal    bool
+	clipboardErr error
+	err          error
 }
 
 type openPromptFileDoneMsg struct {
@@ -230,15 +233,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case copyDoneMsg:
 		if msg.err != nil {
-			m.state = stateManualCopy
 			m.status = warningMessage(fmt.Sprintf("%s clipboard copy failed: %v", msg.kind, msg.err))
-			m.manualCopyKind = msg.kind
-			m.manualCopyText = msg.text
-			return m, nil
+			return m, savePromptAfterClipboardFailureCmd(msg.kind, msg.text, msg.err)
 		}
 		m.status = successMessage(fmt.Sprintf("%s copied to clipboard.", msg.kind))
 		return m.advanceAfterCopy(msg.kind, false)
 	case savePromptDoneMsg:
+		if msg.clipboardErr != nil {
+			return m.handleClipboardFallbackSave(msg)
+		}
 		if msg.err != nil {
 			m.status = errorMessage(fmt.Sprintf("Could not save %s to temp file: %v", msg.kind, msg.err))
 			return m, nil
@@ -323,6 +326,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.paste, cmd = m.paste.Update(msg)
 	}
 	return m, cmd
+}
+
+func (m Model) handleClipboardFallbackSave(msg savePromptDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.state = stateManualCopy
+		m.status = errorMessage(fmt.Sprintf(
+			"%s clipboard copy failed: %v\nFor instructions on installing a clipboard tool visit %s\nCould not save %s to temp file: %v\nManually copy from the block below.",
+			msg.kind,
+			msg.clipboardErr,
+			clipboard.DocsURL,
+			msg.kind,
+			msg.err,
+		))
+		m.manualCopyKind = msg.kind
+		m.manualCopyText = msg.text
+		return m, nil
+	}
+
+	status := warningMessage(fmt.Sprintf(
+		"%s clipboard copy failed: %v\nFor instructions on installing a clipboard tool visit %s\nSaved %s to temp file:\n\n%s",
+		msg.kind,
+		msg.clipboardErr,
+		clipboard.DocsURL,
+		msg.kind,
+		msg.path,
+	))
+	if msg.canReveal {
+		m.state = statePromptFileReveal
+		m.promptFileKind = msg.kind
+		m.promptFilePath = msg.path
+		m.status = status
+		return m, nil
+	}
+	return m.advanceAfterTempFileWithStatus(msg.kind, msg.path, warningMessage(fmt.Sprintf(
+		"%s\n\nAttach this file to your AI chat, or open it and copy from it manually.",
+		status.text,
+	)))
 }
 
 func (m Model) submitGoal() (tea.Model, tea.Cmd) {

@@ -35,7 +35,14 @@ func copyCmd(kind, text string) tea.Cmd {
 func savePromptCmd(kind, text string) tea.Cmd {
 	return func() tea.Msg {
 		path, err := savePromptToTemp(kind, text)
-		return savePromptDoneMsg{kind: kind, path: path, canReveal: err == nil && promptFileRevealAvailable(path), err: err}
+		return savePromptDoneMsg{kind: kind, text: text, path: path, canReveal: err == nil && promptFileRevealAvailable(path), err: err}
+	}
+}
+
+func savePromptAfterClipboardFailureCmd(kind, text string, clipboardErr error) tea.Cmd {
+	return func() tea.Msg {
+		path, err := savePromptToTemp(kind, text)
+		return savePromptDoneMsg{kind: kind, text: text, path: path, canReveal: err == nil && promptFileRevealAvailable(path), clipboardErr: clipboardErr, err: err}
 	}
 }
 

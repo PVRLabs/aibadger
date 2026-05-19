@@ -1683,7 +1683,7 @@ func TestWritePreviewUsesWarningSymbol(t *testing.T) {
 	}
 }
 
-func TestClipboardFailureShowsManualCopyPayload(t *testing.T) {
+func TestClipboardFailureStartsTempFileFallback(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	payload := "[PROJECT TOPOLOGY]\nGo project"
 
@@ -1696,20 +1696,128 @@ func TestClipboardFailureShowsManualCopyPayload(t *testing.T) {
 	if !ok {
 		t.Fatalf("Update returned %T, want tui.Model", next)
 	}
-	if cmd != nil {
-		t.Fatal("clipboard failure returned unexpected command")
+	if cmd == nil {
+		t.Fatal("clipboard failure did not return temp-file save command")
 	}
-	if got.state != stateManualCopy {
-		t.Fatalf("state = %v, want %v", got.state, stateManualCopy)
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want unchanged stateHome before save completes", got.state)
 	}
 	view := got.View()
 	if !strings.Contains(view, "⚠️") ||
 		!strings.Contains(view, "pbcopy unavailable") ||
-		!strings.Contains(view, "Clipboard is unavailable") ||
-		!strings.Contains(view, clipboard.DocsURL) ||
-		!strings.Contains(view, "[PROJECT TOPOLOGY]") ||
-		!strings.Contains(view, "Go project") {
-		t.Fatalf("manual copy view missing payload:\n%s", view)
+		!strings.Contains(view, "clipboard copy failed") ||
+		strings.Contains(view, "[PROJECT TOPOLOGY]") ||
+		strings.Contains(view, "Go project") {
+		t.Fatalf("clipboard failure view did not preserve warning while hiding payload:\n%s", view)
+	}
+}
+
+func TestClipboardFailureTempFileFallbackShowsPathAndDocs(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	path := filepath.Join(t.TempDir(), "prompt-1-topology.txt")
+
+	next, cmd := m.Update(savePromptDoneMsg{
+		kind:         topologyPromptKind,
+		text:         "[PROJECT TOPOLOGY]\nGo project",
+		path:         path,
+		canReveal:    true,
+		clipboardErr: errors.New("pbcopy unavailable"),
+	})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if cmd != nil {
+		t.Fatal("supported fallback reveal returned unexpected command before consent")
+	}
+	if got.state != statePromptFileReveal {
+		t.Fatalf("state = %v, want %v", got.state, statePromptFileReveal)
+	}
+	view := got.View()
+	for _, want := range []string{
+		"⚠️",
+		"Prompt 1: Topology clipboard copy failed: pbcopy unavailable",
+		clipboard.DocsURL,
+		"Saved Prompt 1: Topology to temp file:",
+		path,
+		"Open containing folder? (y/N)",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("fallback temp-file view missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "[PROJECT TOPOLOGY]") || strings.Contains(view, "Go project") {
+		t.Fatalf("fallback temp-file view rendered prompt payload:\n%s", view)
+	}
+}
+
+func TestPrompt2ClipboardFailureTempFileFallbackPersistsOnboardingCompletion(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), ".badger", "settings.json")
+	cfg := DefaultConfig()
+	cfg.SettingsPath = settingsPath
+	m := NewModel("/tmp/project", cfg)
+	path := filepath.Join(t.TempDir(), "prompt-2-code-context.txt")
+
+	next, cmd := m.Update(savePromptDoneMsg{
+		kind:         codeContextPromptKind,
+		text:         "context payload",
+		path:         path,
+		clipboardErr: errors.New("xclip unavailable"),
+	})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if got.state != stateWaitingForCode {
+		t.Fatalf("state = %v, want %v", got.state, stateWaitingForCode)
+	}
+	if got.status.severity != messageWarning ||
+		!strings.Contains(got.status.text, "xclip unavailable") ||
+		!strings.Contains(got.status.text, clipboard.DocsURL) ||
+		!strings.Contains(got.status.text, path) {
+		t.Fatalf("status missing clipboard fallback guidance: %#v", got.status)
+	}
+	if cmd == nil {
+		t.Fatal("Prompt 2 fallback completion did not return textarea blink command")
+	}
+
+	settings, err := LoadSettings(settingsPath)
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+	if !settings.FirstRunOnboardingCompleted {
+		t.Fatal("FirstRunOnboardingCompleted = false, want true")
+	}
+}
+
+func TestClipboardFailureTempFileFailureFallsBackToManualCopy(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	payload := "[PROJECT TOPOLOGY]\nGo project"
+
+	next, cmd := m.Update(savePromptDoneMsg{
+		kind:         topologyPromptKind,
+		text:         payload,
+		clipboardErr: errors.New("xclip unavailable"),
+		err:          errors.New("permission denied"),
+	})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if cmd != nil {
+		t.Fatal("failed temp-file fallback returned unexpected command")
+	}
+	if got.state != stateManualCopy {
+		t.Fatalf("state = %v, want %v", got.state, stateManualCopy)
+	}
+	if got.status.severity != messageError ||
+		!strings.Contains(got.status.text, "xclip unavailable") ||
+		!strings.Contains(got.status.text, clipboard.DocsURL) ||
+		!strings.Contains(got.status.text, "permission denied") {
+		t.Fatalf("status missing combined fallback errors: %#v", got.status)
+	}
+	if got.manualCopyKind != topologyPromptKind || got.manualCopyText != payload {
+		t.Fatalf("manual fallback payload not preserved: kind=%q text=%q", got.manualCopyKind, got.manualCopyText)
 	}
 }
 

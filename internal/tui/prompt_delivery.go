@@ -17,8 +17,8 @@ func savePromptToTemp(kind, text string) (string, error) {
 }
 
 func savePromptToTempAt(kind, text, tempRoot string, now time.Time) (string, error) {
-	dir := filepath.Join(tempRoot, "badger")
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	dir, err := promptTempDir(tempRoot)
+	if err != nil {
 		return "", err
 	}
 
@@ -46,6 +46,17 @@ func savePromptToTempAt(kind, text, tempRoot string, now time.Time) (string, err
 		return path, nil
 	}
 	return "", fmt.Errorf("could not create unique temp prompt file")
+}
+
+func promptTempDir(tempRoot string) (string, error) {
+	for _, name := range []string{"badger", "badger_tmp"} {
+		dir := filepath.Join(tempRoot, name)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			continue
+		}
+		return dir, nil
+	}
+	return "", fmt.Errorf("could not create temp prompt directory under %s", tempRoot)
 }
 
 func promptFileSlug(kind string) string {

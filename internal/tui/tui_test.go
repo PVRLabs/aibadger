@@ -1819,6 +1819,15 @@ func TestClipboardFailureTempFileFailureFallsBackToManualCopy(t *testing.T) {
 	if got.manualCopyKind != topologyPromptKind || got.manualCopyText != payload {
 		t.Fatalf("manual fallback payload not preserved: kind=%q text=%q", got.manualCopyKind, got.manualCopyText)
 	}
+	view := got.View()
+	if strings.Count(view, clipboard.DocsURL) != 1 {
+		t.Fatalf("manual fallback duplicated clipboard docs URL:\n%s", view)
+	}
+	if !strings.Contains(view, "Manually copy Prompt 1: Topology from the block below") ||
+		!strings.Contains(view, "--- BEGIN Prompt 1: Topology ---") ||
+		!strings.Contains(view, "[PROJECT TOPOLOGY]") {
+		t.Fatalf("manual fallback view missing copy guidance or payload:\n%s", view)
+	}
 }
 
 func TestWriteDoneWithErrorsRendersErrorStatus(t *testing.T) {

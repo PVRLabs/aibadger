@@ -62,6 +62,40 @@ func TestSavePromptToTempAtRetriesReadableNameOnCollision(t *testing.T) {
 	}
 }
 
+func TestSavePromptToTempAtFallsBackWhenBadgerPathIsFile(t *testing.T) {
+	tempRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tempRoot, "badger"), []byte("binary"), 0600); err != nil {
+		t.Fatalf("WriteFile(badger) error = %v", err)
+	}
+	when := time.Date(2026, 5, 1, 14, 32, 0, 0, time.Local)
+
+	path, err := savePromptToTempAt(topologyPromptKind, "prompt", tempRoot, when)
+	if err != nil {
+		t.Fatalf("savePromptToTempAt() error = %v", err)
+	}
+	if !strings.HasSuffix(path, filepath.Join("badger_tmp", "prompt-1-topology-2026-05-01-1432.txt")) {
+		t.Fatalf("path = %q, want badger_tmp fallback", path)
+	}
+}
+
+func TestSavePromptToTempAtFailsWhenBothPromptDirsAreFiles(t *testing.T) {
+	tempRoot := t.TempDir()
+	for _, name := range []string{"badger", "badger_tmp"} {
+		if err := os.WriteFile(filepath.Join(tempRoot, name), []byte("binary"), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", name, err)
+		}
+	}
+	when := time.Date(2026, 5, 1, 14, 32, 0, 0, time.Local)
+
+	_, err := savePromptToTempAt(topologyPromptKind, "prompt", tempRoot, when)
+	if err == nil {
+		t.Fatal("savePromptToTempAt() error = nil, want directory creation failure")
+	}
+	if !strings.Contains(err.Error(), "could not create temp prompt directory") {
+		t.Fatalf("error = %v, want temp prompt directory failure", err)
+	}
+}
+
 func TestIsLargePromptUsesStrictThreshold(t *testing.T) {
 	if isLargePrompt("12345", 5) {
 		t.Fatal("prompt at threshold was treated as large")

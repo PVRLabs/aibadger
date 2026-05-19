@@ -38,6 +38,29 @@ Install into a custom directory:
 curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | BADGER_INSTALL_DIR="$HOME/bin" sh
 ```
 
+## Windows
+
+PowerShell one-liner (default install to `%USERPROFILE%\.local\bin`):
+
+```powershell
+irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
+```
+
+Custom directory or version:
+
+```powershell
+$env:BADGER_INSTALL_DIR = "$HOME\bin"; irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
+$env:BADGER_VERSION = "v0.1.3"; irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
+```
+
+Manual: download `badger_<version>_windows_amd64.zip` from the [latest release](https://github.com/PVRLabs/aibadger/releases/latest) and extract `badger.exe` to your `PATH`.
+
+Build from source:
+
+```powershell
+go install github.com/PVRLabs/aibadger/cmd/badger@latest
+```
+
 ## Build From Source
 
 Development build:
@@ -69,46 +92,6 @@ badger v0.1.3
 Published installs should report the current release version. Source builds from
 `main` may report the next development version, for example `badger v0.1.4-dev`,
 until the next release is prepared.
-
-## Windows
-
-Install on Windows via PowerShell, manual download, or source build.
-
-### PowerShell one-liner
-
-```powershell
-irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
-```
-
-The installer downloads the matching GitHub Release `.zip` for Windows and
-places `badger.exe` into `%USERPROFILE%\.local\bin` by default. If that
-directory is not on your `PATH`, the installer prints instructions.
-
-Override the install directory:
-
-```powershell
-$env:BADGER_INSTALL_DIR = "$HOME\bin"
-irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
-```
-
-Install a specific version:
-
-```powershell
-$env:BADGER_VERSION = "v0.1.3"
-irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
-```
-
-### Manual download
-
-1. Open the [latest release](https://github.com/PVRLabs/aibadger/releases/latest).
-2. Download `badger_<version>_windows_amd64.zip`.
-3. Extract `badger.exe` and place it in a directory on your `PATH`.
-
-### Build from source
-
-```powershell
-go install github.com/PVRLabs/aibadger/cmd/badger@latest
-```
 
 ## Release Notes
 

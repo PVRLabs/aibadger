@@ -20,7 +20,7 @@ sudo pacman -S xclip
 # openSUSE
 sudo zypper install xclip
 ```
-
+[!IMPORTANT]
 > `xclip` is not available on every Linux distribution by default. If it is
 > missing, you will see a "clipboard copy failed" error. Install it using one
 > of the commands above.

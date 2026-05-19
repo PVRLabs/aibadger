@@ -3,7 +3,13 @@ package tui
 // This file owns status message types, rendering helpers, and shared TUI
 // styles.
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"os"
+	"runtime"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 type messageSeverity int
 
@@ -17,6 +23,13 @@ const (
 type tuiMessage struct {
 	severity messageSeverity
 	text     string
+}
+
+type displaySymbols struct {
+	success     string
+	warning     string
+	error       string
+	pipelineSep string
 }
 
 func neutralMessage(text string) tuiMessage {
@@ -39,14 +52,55 @@ func (m tuiMessage) empty() bool {
 	return m.text == ""
 }
 
+func defaultDisplaySymbols() displaySymbols {
+	return displaySymbolsForRuntime(runtime.GOOS, os.Getenv)
+}
+
+func displaySymbolsForRuntime(goos string, getenv func(string) string) displaySymbols {
+	if !terminalLikelySupportsUnicode(goos, getenv) {
+		return displaySymbols{
+			success:     "[OK]",
+			warning:     "[!]",
+			error:       "[X]",
+			pipelineSep: " -> ",
+		}
+	}
+	return displaySymbols{
+		success:     "✓",
+		warning:     "⚠️",
+		error:       "⛔",
+		pipelineSep: " → ",
+	}
+}
+
+func terminalLikelySupportsUnicode(goos string, getenv func(string) string) bool {
+	if getenv == nil {
+		getenv = func(string) string { return "" }
+	}
+	if getenv("BADGER_ASCII") != "" || getenv("NO_UNICODE") != "" {
+		return false
+	}
+	if getenv("WT_SESSION") != "" || getenv("ConEmuANSI") == "ON" || getenv("TERM_PROGRAM") != "" {
+		return true
+	}
+	for _, key := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		value := strings.ToLower(getenv(key))
+		if strings.Contains(value, "utf-8") || strings.Contains(value, "utf8") {
+			return true
+		}
+	}
+	return goos != "windows"
+}
+
 func renderMessage(msg tuiMessage) string {
+	symbols := defaultDisplaySymbols()
 	switch msg.severity {
 	case messageSuccess:
-		return successMarkerStyle.Render("✓") + "  " + msg.text
+		return successMarkerStyle.Render(symbols.success) + "  " + msg.text
 	case messageWarning:
-		return warningMarkerStyle.Render("⚠️") + "  " + msg.text
+		return warningMarkerStyle.Render(symbols.warning) + "  " + msg.text
 	case messageError:
-		return errorMarkerStyle.Render("⛔") + "  " + msg.text
+		return errorMarkerStyle.Render(symbols.error) + "  " + msg.text
 	default:
 		return msg.text
 	}

@@ -18,6 +18,48 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+func testDisplaySymbols() displaySymbols {
+	return defaultDisplaySymbols()
+}
+
+func testGetenv(values map[string]string) func(string) string {
+	return func(key string) string {
+		return values[key]
+	}
+}
+
+func TestDisplaySymbolsUseASCIIFallbackWithoutUnicodeSignalsOnWindows(t *testing.T) {
+	got := displaySymbolsForRuntime("windows", testGetenv(nil))
+
+	if got.success != "[OK]" || got.warning != "[!]" || got.error != "[X]" || got.pipelineSep != " -> " {
+		t.Fatalf("windows symbols = %#v, want ASCII fallback", got)
+	}
+}
+
+func TestDisplaySymbolsUseUnicodeForWindowsTerminal(t *testing.T) {
+	got := displaySymbolsForRuntime("windows", testGetenv(map[string]string{"WT_SESSION": "session-id"}))
+
+	if got.success != "✓" || got.warning != "⚠️" || got.error != "⛔" || got.pipelineSep != " → " {
+		t.Fatalf("windows terminal symbols = %#v, want unicode symbols", got)
+	}
+}
+
+func TestDisplaySymbolsUseUnicodeForUTF8Locale(t *testing.T) {
+	got := displaySymbolsForRuntime("windows", testGetenv(map[string]string{"LANG": "en_US.UTF-8"}))
+
+	if got.success != "✓" || got.warning != "⚠️" || got.error != "⛔" || got.pipelineSep != " → " {
+		t.Fatalf("utf-8 symbols = %#v, want unicode symbols", got)
+	}
+}
+
+func TestDisplaySymbolsUseASCIIFallbackWhenForced(t *testing.T) {
+	got := displaySymbolsForRuntime("darwin", testGetenv(map[string]string{"BADGER_ASCII": "1", "LANG": "en_US.UTF-8"}))
+
+	if got.success != "[OK]" || got.warning != "[!]" || got.error != "[X]" || got.pipelineSep != " -> " {
+		t.Fatalf("forced ascii symbols = %#v, want ASCII fallback", got)
+	}
+}
+
 func TestNewModelStartsAtHomeWithoutScanning(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 
@@ -552,6 +594,7 @@ func TestFormatReviewGitShowTip(t *testing.T) {
 
 func TestViewShowsPersistentHeader(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
+	symbols := testDisplaySymbols()
 
 	view := m.View()
 
@@ -561,7 +604,7 @@ func TestViewShowsPersistentHeader(t *testing.T) {
 	if !strings.Contains(view, "Local-first code context for any AI chat") {
 		t.Fatalf("home view missing descriptor header:\n%s", view)
 	}
-	if !strings.Contains(view, "Pipeline: [Map] → Extract → Apply") {
+	if !strings.Contains(view, "Pipeline: [Map]"+symbols.pipelineSep+"Extract"+symbols.pipelineSep+"Apply") {
 		t.Fatalf("home view missing pipeline indicator:\n%s", view)
 	}
 	if !strings.Contains(view, " /\\_/\\") || !strings.Contains(view, "( o.o )") || !strings.Contains(view, " > ^ <") {
@@ -610,10 +653,11 @@ func TestPipelineIndicatorTracksManualCodeContextCopy(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.state = stateManualCopy
 	m.manualCopyKind = codeContextPromptKind
+	symbols := testDisplaySymbols()
 
 	view := m.View()
 
-	if !strings.Contains(view, "Pipeline: ✓ Map → [Extract] → Apply") {
+	if !strings.Contains(view, "Pipeline: "+symbols.success+" Map"+symbols.pipelineSep+"[Extract]"+symbols.pipelineSep+"Apply") {
 		t.Fatalf("manual code context view missing active context pipeline:\n%s", view)
 	}
 }
@@ -638,6 +682,7 @@ func TestHelpEnterReturnsHome(t *testing.T) {
 func TestNeutralStatusRendersWithoutSeverityMarker(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.state = stateHelp
+	symbols := testDisplaySymbols()
 
 	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	got, ok := next.(Model)
@@ -649,7 +694,7 @@ func TestNeutralStatusRendersWithoutSeverityMarker(t *testing.T) {
 	if !strings.Contains(view, "Ready for a goal.") {
 		t.Fatalf("neutral status text missing:\n%s", view)
 	}
-	for _, marker := range []string{"✓", "⚠️", "⛔"} {
+	for _, marker := range []string{symbols.success, symbols.warning, symbols.error} {
 		if strings.Contains(view, marker+" Ready for a goal.") {
 			t.Fatalf("neutral status rendered severity marker %q:\n%s", marker, view)
 		}
@@ -670,6 +715,7 @@ func TestBoldStylesAreScopedToStructuralUI(t *testing.T) {
 
 func TestSuccessStatusRendersMarkerOnly(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
+	symbols := testDisplaySymbols()
 
 	next, _ := m.Update(copyDoneMsg{
 		kind: topologyPromptKind,
@@ -681,7 +727,7 @@ func TestSuccessStatusRendersMarkerOnly(t *testing.T) {
 	}
 
 	view := got.View()
-	if !strings.Contains(view, "✓") ||
+	if !strings.Contains(view, symbols.success) ||
 		!strings.Contains(view, "Prompt 1: Topology copied. Paste it into any LLM chat interface, then paste extraction commands.") {
 		t.Fatalf("success status missing marker or text:\n%s", view)
 	}
@@ -837,6 +883,7 @@ func TestExtractionPasteWithoutCommandsShowsError(t *testing.T) {
 	m.eng = engine.FromTopology("/tmp/project", nil)
 	m.state = stateWaitingForExtractions
 	m.paste.SetValue("please inspect the TUI")
+	symbols := testDisplaySymbols()
 
 	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	got, ok := next.(Model)
@@ -852,11 +899,11 @@ func TestExtractionPasteWithoutCommandsShowsError(t *testing.T) {
 	if got.err == nil {
 		t.Fatal("err = nil, want extraction guidance error")
 	}
-	if strings.Contains(got.err.Error(), "⛔") {
+	if strings.Contains(got.err.Error(), symbols.error) {
 		t.Fatalf("stored error includes rendered marker: %q", got.err.Error())
 	}
 	view := got.View()
-	if !strings.Contains(view, "⛔") ||
+	if !strings.Contains(view, symbols.error) ||
 		!strings.Contains(view, "No extraction commands found. Paste FILE/PREFIX/NEAR commands and press Enter.") {
 		t.Fatalf("view missing error marker or message:\n%s", got.View())
 	}
@@ -1052,6 +1099,7 @@ func TestLargePasteRenderingIsCompact(t *testing.T) {
 
 func TestCopyTopologyDialogShowsPayloadSize(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
+	symbols := testDisplaySymbols()
 	m.state = stateScanComplete
 	m.schemaA = "project map payload"
 	m.eng = engine.FromTopology("/tmp/project", &model.ProjectTopology{
@@ -1075,7 +1123,7 @@ func TestCopyTopologyDialogShowsPayloadSize(t *testing.T) {
 			t.Fatalf("topology copy view missing %q:\n%s", want, view)
 		}
 	}
-	if strings.Contains(view, "⚠️") {
+	if strings.Contains(view, symbols.warning) {
 		t.Fatalf("topology privacy note should not use warning severity:\n%s", view)
 	}
 	if !strings.Contains(view, "Copy Prompt 1: Topology to clipboard (payload: 19B)? (y/N)") {
@@ -1093,6 +1141,7 @@ func TestLargeTopologyPromptShowsDeliveryMenu(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.LargePromptByteThreshold = 8
 	m := NewModel("/tmp/project", cfg)
+	symbols := testDisplaySymbols()
 	m.state = stateScanComplete
 	m.schemaA = strings.Repeat("x", 2*1024)
 	m.eng = engine.FromTopology("/tmp/project", &model.ProjectTopology{
@@ -1102,7 +1151,7 @@ func TestLargeTopologyPromptShowsDeliveryMenu(t *testing.T) {
 	view := m.viewScanComplete()
 
 	for _, want := range []string{
-		"⚠️",
+		symbols.warning,
 		"Prompt 1: Topology is large (2KB).",
 		"Recommended: save it to a temp file and attach/upload it to your AI chat.",
 		"  [c] Copy anyway",
@@ -1140,6 +1189,7 @@ func TestNormalTopologyPromptDoesNotShowLargeWarning(t *testing.T) {
 
 func TestCopyCodeContextDialogShowsPayloadSize(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
+	symbols := testDisplaySymbols()
 	m.state = stateContextReady
 	m.schemaB = "context payload"
 	m.metadata = []protocol.ExtractionMetadata{
@@ -1151,7 +1201,7 @@ func TestCopyCodeContextDialogShowsPayloadSize(t *testing.T) {
 	view := m.viewContextReady()
 
 	for _, want := range []string{
-		"⚠️",
+		symbols.warning,
 		"This WILL include the actual source code from:",
 		"  - internal/scanner/go.go",
 		"  - internal/models/order.go [TRUNCATED]",
@@ -1249,6 +1299,7 @@ func TestLargeCodeContextPromptShowsDeliveryMenu(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.LargePromptByteThreshold = 8
 	m := NewModel("/tmp/project", cfg)
+	symbols := testDisplaySymbols()
 	m.state = stateContextReady
 	m.schemaB = strings.Repeat("x", 2*1024)
 	m.metadata = []protocol.ExtractionMetadata{{Path: "internal/scanner/go.go"}}
@@ -1258,7 +1309,7 @@ func TestLargeCodeContextPromptShowsDeliveryMenu(t *testing.T) {
 	for _, want := range []string{
 		"This WILL include the actual source code from:",
 		"  - internal/scanner/go.go",
-		"⚠️",
+		symbols.warning,
 		"Prompt 2: Code Context is large (2KB).",
 		"  [c] Copy anyway",
 		"  [f] Save to temp file",
@@ -1636,6 +1687,7 @@ func TestPrompt2RevealDecisionPersistsOnboardingCompletion(t *testing.T) {
 
 func TestLargeProjectPromptUsesWarningSymbol(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
+	symbols := testDisplaySymbols()
 	m.state = stateScanComplete
 	m.largeProjectPending = true
 	m.eng = engine.FromTopology("/tmp/project", &model.ProjectTopology{
@@ -1645,7 +1697,7 @@ func TestLargeProjectPromptUsesWarningSymbol(t *testing.T) {
 	view := m.viewScanComplete()
 
 	for _, want := range []string{
-		"⚠️",
+		symbols.warning,
 		"Large project detected: 2450 files.",
 		"Options:",
 		"  [c] Continue",
@@ -1664,6 +1716,7 @@ func TestLargeProjectPromptUsesWarningSymbol(t *testing.T) {
 
 func TestWritePreviewUsesWarningSymbol(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
+	symbols := testDisplaySymbols()
 	m.updates = []writer.FileUpdate{
 		{Path: "internal/service/order.go", Kind: writer.UpdateKindWrite},
 		{Path: "internal/service/old_order.go", Kind: writer.UpdateKindDelete},
@@ -1672,7 +1725,7 @@ func TestWritePreviewUsesWarningSymbol(t *testing.T) {
 	view := m.viewWritePreview()
 
 	for _, want := range []string{
-		"⚠️",
+		symbols.warning,
 		"About to apply changes to disk:",
 		"  [write] internal/service/order.go",
 		"  [delete] internal/service/old_order.go",
@@ -1685,6 +1738,7 @@ func TestWritePreviewUsesWarningSymbol(t *testing.T) {
 
 func TestClipboardFailureStartsTempFileFallback(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
+	symbols := testDisplaySymbols()
 	payload := "[PROJECT TOPOLOGY]\nGo project"
 
 	next, cmd := m.Update(copyDoneMsg{
@@ -1703,7 +1757,7 @@ func TestClipboardFailureStartsTempFileFallback(t *testing.T) {
 		t.Fatalf("state = %v, want unchanged stateHome before save completes", got.state)
 	}
 	view := got.View()
-	if !strings.Contains(view, "⚠️") ||
+	if !strings.Contains(view, symbols.warning) ||
 		!strings.Contains(view, "pbcopy unavailable") ||
 		!strings.Contains(view, "clipboard copy failed") ||
 		strings.Contains(view, "[PROJECT TOPOLOGY]") ||
@@ -1714,6 +1768,7 @@ func TestClipboardFailureStartsTempFileFallback(t *testing.T) {
 
 func TestClipboardFailureTempFileFallbackShowsPathAndDocs(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
+	symbols := testDisplaySymbols()
 	path := filepath.Join(t.TempDir(), "prompt-1-topology.txt")
 
 	next, cmd := m.Update(savePromptDoneMsg{
@@ -1735,7 +1790,7 @@ func TestClipboardFailureTempFileFallbackShowsPathAndDocs(t *testing.T) {
 	}
 	view := got.View()
 	for _, want := range []string{
-		"⚠️",
+		symbols.warning,
 		"Prompt 1: Topology clipboard copy failed: pbcopy unavailable",
 		clipboard.DocsURL,
 		"Saved Prompt 1: Topology to temp file:",
@@ -1832,6 +1887,7 @@ func TestClipboardFailureTempFileFailureFallsBackToManualCopy(t *testing.T) {
 
 func TestWriteDoneWithErrorsRendersErrorStatus(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
+	symbols := testDisplaySymbols()
 	m.state = stateWriting
 
 	next, cmd := m.Update(writeDoneMsg{
@@ -1849,7 +1905,7 @@ func TestWriteDoneWithErrorsRendersErrorStatus(t *testing.T) {
 		t.Fatalf("status severity = %v, want error", got.status.severity)
 	}
 	view := got.View()
-	if !strings.Contains(view, "⛔") ||
+	if !strings.Contains(view, symbols.error) ||
 		!strings.Contains(view, "Finished with 1 apply error(s).") {
 		t.Fatalf("write error status missing marker or text:\n%s", view)
 	}

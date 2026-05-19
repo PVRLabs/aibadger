@@ -178,6 +178,7 @@ func headerLine(mascot string, text string) string {
 }
 
 func (m Model) pipelineView() string {
+	symbols := defaultDisplaySymbols()
 	stages := []string{"Map", "Extract", "Apply"}
 	active := 0
 	switch m.state {
@@ -203,12 +204,12 @@ func (m Model) pipelineView() string {
 
 	for i := range stages {
 		if i < active {
-			stages[i] = "✓ " + stages[i]
+			stages[i] = symbols.success + " " + stages[i]
 		} else if i == active {
 			stages[i] = renderBold("[" + stages[i] + "]")
 		}
 	}
-	return "Pipeline: " + strings.Join(stages, " → ")
+	return "Pipeline: " + strings.Join(stages, symbols.pipelineSep)
 }
 
 func (m Model) viewScanning() string {

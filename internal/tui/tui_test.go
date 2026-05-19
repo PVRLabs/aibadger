@@ -8,6 +8,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/PVRLabs/aibadger/internal/clipboard"
 	"github.com/PVRLabs/aibadger/internal/engine"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/protocol"
@@ -1703,8 +1704,9 @@ func TestClipboardFailureShowsManualCopyPayload(t *testing.T) {
 	}
 	view := got.View()
 	if !strings.Contains(view, "⚠️") ||
-		!strings.Contains(view, "clipboard copy failed: pbcopy unavailable") ||
+		!strings.Contains(view, "pbcopy unavailable") ||
 		!strings.Contains(view, "Clipboard is unavailable") ||
+		!strings.Contains(view, clipboard.DocsURL) ||
 		!strings.Contains(view, "[PROJECT TOPOLOGY]") ||
 		!strings.Contains(view, "Go project") {
 		t.Fatalf("manual copy view missing payload:\n%s", view)

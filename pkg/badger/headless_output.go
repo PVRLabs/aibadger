@@ -66,7 +66,7 @@ func handleProjectMap(w io.Writer, reader *bufio.Reader, schemaA string, opts He
 	}
 
 	if err := copyIfConfirmed(w, reader, schemaA, workflow.TopologyPromptKind+" copied!"); err != nil {
-		fmt.Fprintf(w, "Clipboard error: %v. %s is printed above.\n", err, workflow.TopologyPromptKind)
+		fmt.Fprintf(w, "Clipboard error: %v.\nFor instructions on installing a clipboard tool visit %s.\n%s is printed above.\n", err, clipboard.DocsURL, workflow.TopologyPromptKind)
 	}
 	return false
 }
@@ -104,7 +104,7 @@ func handleContextCopy(w io.Writer, reader *bufio.Reader, schemaB string, opts H
 	fmt.Fprint(w, "Copy? (y/N): ")
 	if confirm(reader) {
 		if err := clipboard.Copy(schemaB); err != nil {
-			fmt.Fprintf(w, "Clipboard error: %v. Printing %s instead:\n\n%s\n", err, workflow.CodeContextPromptKind, schemaB)
+			fmt.Fprintf(w, "Clipboard error: %v.\nFor instructions on installing a clipboard tool visit %s.\nPrinting %s instead:\n\n%s\n", err, clipboard.DocsURL, workflow.CodeContextPromptKind, schemaB)
 		} else {
 			fmt.Fprintf(w, "[✓] %s copied!\n", workflow.CodeContextPromptKind)
 		}

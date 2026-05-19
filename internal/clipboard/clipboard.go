@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const DocsURL = "https://github.com/PVRLabs/aibadger/blob/main/docs/clipboard.md"
+
 var lookPath = exec.LookPath
 
 type command struct {

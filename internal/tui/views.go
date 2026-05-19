@@ -258,7 +258,7 @@ func (m Model) viewManualCopy() string {
 	}
 	body := fmt.Sprintf(
 		"%s\n\n--- BEGIN %s ---\n%s\n--- END %s ---",
-		renderWarningLine(fmt.Sprintf("Clipboard is unavailable. Manually copy %s from the block below, then press Enter to continue.", m.manualCopyKind)),
+		renderWarningLine(fmt.Sprintf("Clipboard is unavailable. For instructions on installing a clipboard tool visit %s. Manually copy %s from the block below, then press Enter to continue.", clipboard.DocsURL, m.manualCopyKind)),
 		m.manualCopyKind,
 		text,
 		m.manualCopyKind,

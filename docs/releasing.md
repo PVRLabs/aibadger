@@ -14,9 +14,11 @@ Current release artifacts are built for:
 - macOS `arm64`
 - Linux `amd64`
 - Linux `arm64`
+- Windows `amd64`
 
-Each artifact is published as a `.tar.gz` containing the `badger` binary and a
-matching `.sha256` file.
+Each artifact is published as a `.tar.gz` (macOS/Linux) or `.zip` (Windows)
+containing the `badger` binary (or `badger.exe` on Windows) and a matching
+`.sha256` file.
 
 ## Before Releasing
 
@@ -88,7 +90,7 @@ curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | 
 ## Verification Checklist
 
 - The GitHub Release page exists for the new tag.
-- All expected `.tar.gz` and `.sha256` assets are attached.
+- All expected `.tar.gz`/`.zip` and `.sha256` assets are attached.
 - Downloading an asset yields the expected binary archive.
 - `./badger --version` reports the release version.
 - Source builds from `main` after the release report the next `-dev` version.

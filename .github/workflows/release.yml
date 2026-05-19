@@ -27,6 +27,8 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
+          - goos: windows
+            goarch: amd64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,14 +49,26 @@ jobs:
           set -eu
 
           mkdir -p dist
-          binary_name="badger"
-          out_dir="dist/${binary_name}_${GOOS}_${GOARCH}"
-          archive_name="${binary_name}_${RELEASE_TAG#v}_${GOOS}_${GOARCH}.tar.gz"
+
+          if [ "$GOOS" = "windows" ]; then
+            binary_name="badger.exe"
+            archive_ext=".zip"
+          else
+            binary_name="badger"
+            archive_ext=".tar.gz"
+          fi
+
+          out_dir="dist/badger_${GOOS}_${GOARCH}"
+          archive_name="badger_${RELEASE_TAG#v}_${GOOS}_${GOARCH}${archive_ext}"
 
           mkdir -p "${out_dir}"
           go build -trimpath -tags aibadger_release -ldflags="-s -w" -o "${out_dir}/${binary_name}" ./cmd/badger
 
-          tar -czf "dist/${archive_name}" -C "${out_dir}" "${binary_name}"
+          if [ "$GOOS" = "windows" ]; then
+            zip -j "dist/${archive_name}" "${out_dir}/${binary_name}"
+          else
+            tar -czf "dist/${archive_name}" -C "${out_dir}" "${binary_name}"
+          fi
           sha256sum "dist/${archive_name}" > "dist/${archive_name}.sha256"
 
       - name: Upload build artifacts
@@ -84,5 +98,7 @@ jobs:
           files: |
             release-assets/*.tar.gz
             release-assets/*.tar.gz.sha256
+            release-assets/*.zip
+            release-assets/*.zip.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

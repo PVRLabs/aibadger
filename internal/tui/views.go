@@ -14,13 +14,15 @@ import (
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
 
-const maxTextResponsePreviewLines = 12
+const minTextResponsePreviewLines = 12
+const maxTextResponsePreviewLines = 50
 const compactPasteRenderBytes = 4 * 1024
 const homeGoalVisibleBytes = 16 * 1024
 const homeGoalVisibleLines = 30
 const homeGoalPreviewBytes = 96
 const homeGoalPreviewLines = 3
 const headerRule = "────────────────────────────────────────────────────────"
+const defaultDialogWidth = 78
 
 type pasteSpec struct {
 	title       string
@@ -33,11 +35,11 @@ func (m Model) View() string {
 	b.WriteString("\n\n")
 
 	if !m.status.empty() {
-		b.WriteString(renderMessage(m.status))
+		b.WriteString(m.renderMessage(m.status))
 		b.WriteString("\n\n")
 	}
 	if m.err != nil {
-		b.WriteString(renderMessage(errorMessage(m.err.Error())))
+		b.WriteString(m.renderMessage(errorMessage(m.err.Error())))
 		b.WriteString("\n\n")
 	}
 
@@ -154,7 +156,7 @@ func (m Model) viewOnboarding() string {
 		"",
 		"Press Enter to continue.",
 	}, "\n")
-	return boxStyle.Render(body)
+	return m.renderBox(body)
 }
 
 func (m Model) headerView() string {
@@ -228,7 +230,7 @@ func (m Model) viewWritePreview() string {
 
 	body := renderWarningLine("About to apply changes to disk:") + "\n\n" + strings.Join(lines, "\n")
 	if notes := strings.TrimSpace(m.response); notes != "" {
-		preview, hiddenLines := textPreview(notes, maxTextResponsePreviewLines)
+		preview, hiddenLines := textPreview(notes, m.textResponsePreviewLineLimit())
 		body += "\n\n" + renderWarningLine("AI notes included with this response:") + "\n\n" + preview
 		if hiddenLines > 0 {
 			body += "\n\n" + helpStyle.Render(fmt.Sprintf("... [%d more lines hidden] ...", hiddenLines))
@@ -243,13 +245,13 @@ func (m Model) viewTextResponse() string {
 		response = "(empty response)"
 	}
 
-	preview, hiddenLines := textPreview(response, maxTextResponsePreviewLines)
+	preview, hiddenLines := textPreview(response, m.textResponsePreviewLineLimit())
 	body := preview
 	if hiddenLines > 0 {
 		body += "\n\n" + helpStyle.Render(fmt.Sprintf("... [%d more lines hidden] ...", hiddenLines))
 	}
 	body += "\n\nPress Enter to continue."
-	return helpStyle.Render("Info: No file updates found. AI provided a textual response.") + "\n\n" + renderBold("AI Analysis / Explanation:") + "\n\n" + boxStyle.Render(body)
+	return helpStyle.Render("Info: No file updates found. AI provided a textual response.") + "\n\n" + renderBold("AI Analysis / Explanation:") + "\n\n" + m.renderBox(body)
 }
 
 func (m Model) viewManualCopy() string {
@@ -264,7 +266,7 @@ func (m Model) viewManualCopy() string {
 		text,
 		m.manualCopyKind,
 	)
-	return boxStyle.Render(body)
+	return m.renderBox(body)
 }
 
 func (m Model) viewHelp() string {
@@ -295,7 +297,7 @@ func (m Model) viewHelp() string {
 	if m.cfg.BuildInfo != "" {
 		body = fmt.Sprintf("%s\n\n%s", m.cfg.BuildInfo, body)
 	}
-	return boxStyle.Render(body)
+	return m.renderBox(body)
 }
 
 func (m Model) viewReviewHelp() string {
@@ -316,7 +318,49 @@ func (m Model) viewReviewHelp() string {
 		"",
 		"Press Enter to return home.",
 	}, "\n")
-	return boxStyle.Render(body)
+	return m.renderBox(body)
+}
+
+func (m Model) renderBox(body string) string {
+	width := m.dialogWidth()
+	if width <= 0 {
+		return boxStyle.Render(body)
+	}
+	return boxStyle.Width(width - 2).Render(body)
+}
+
+func (m Model) renderMessage(msg tuiMessage) string {
+	return renderMessageWithWidth(msg, m.contentWidth())
+}
+
+func (m Model) contentWidth() int {
+	if m.width <= 0 {
+		return 0
+	}
+	return m.width
+}
+
+func (m Model) dialogWidth() int {
+	if m.width <= 0 {
+		return defaultDialogWidth
+	}
+	if m.width <= 4 {
+		return 0
+	}
+	if m.width < 22 {
+		return m.width
+	}
+	return m.width - 2
+}
+
+func (m Model) textResponsePreviewLineLimit() int {
+	if m.height <= 0 {
+		return minTextResponsePreviewLines
+	}
+
+	const reservedRows = 15
+	available := m.height - reservedRows
+	return clamp(available, minTextResponsePreviewLines, maxTextResponsePreviewLines)
 }
 
 func reviewGitShowTip() string {

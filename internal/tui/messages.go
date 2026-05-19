@@ -106,6 +106,40 @@ func renderMessage(msg tuiMessage) string {
 	}
 }
 
+func renderMessageWithWidth(msg tuiMessage, width int) string {
+	if width <= 0 {
+		return renderMessage(msg)
+	}
+
+	symbols := defaultDisplaySymbols()
+	switch msg.severity {
+	case messageSuccess:
+		return renderMarkedMessage(successMarkerStyle.Render(symbols.success), msg.text, width)
+	case messageWarning:
+		return renderMarkedMessage(warningMarkerStyle.Render(symbols.warning), msg.text, width)
+	case messageError:
+		return renderMarkedMessage(errorMarkerStyle.Render(symbols.error), msg.text, width)
+	default:
+		return lipgloss.NewStyle().Width(width).Render(msg.text)
+	}
+}
+
+func renderMarkedMessage(marker, text string, width int) string {
+	prefix := marker + "  "
+	prefixWidth := lipgloss.Width(prefix)
+	bodyWidth := width - prefixWidth
+	if bodyWidth <= 0 {
+		return prefix + text
+	}
+
+	wrapped := lipgloss.NewStyle().Width(bodyWidth).Render(text)
+	lines := strings.Split(wrapped, "\n")
+	for i := 1; i < len(lines); i++ {
+		lines[i] = strings.Repeat(" ", prefixWidth) + lines[i]
+	}
+	return prefix + strings.Join(lines, "\n")
+}
+
 func renderWarningLine(text string) string {
 	return renderMessage(warningMessage(text))
 }

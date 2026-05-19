@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func testDisplaySymbols() displaySymbols {
@@ -550,12 +552,13 @@ func TestSubmitGoalReviewCommandShowsReviewHelp(t *testing.T) {
 		"Code review with Badger",
 		"Use this when you want an AI chat to review a change before committing.",
 		"Example goal:",
-		"Review my current change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing.",
+		"Review my current change for concrete bugs",
+		"before committing.",
 		"Tip:",
-		reviewGitShowTip(),
-		"For larger diffs, prefer asking Badger to map the project first and let the AI request the specific files it needs.",
+		"To review the latest commit, run `git show | pbcopy`",
+		"For larger diffs, prefer asking Badger to map the project",
 		"Preview feature:",
-		"Badger does not review local changes directly yet. Coming later: reviewing current unstaged or staged git diffs from your project.",
+		"Badger does not review local changes directly yet.",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("review help missing %q:\n%s", want, view)
@@ -826,6 +829,60 @@ func TestTextResponseKeepsInfoLineOutsideBox(t *testing.T) {
 	}
 }
 
+func TestTextResponseWrapsLongLinesToTerminalWidth(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.state = stateTextResponse
+	m.width = 64
+	m.response = strings.Repeat("long analysis ", 20)
+
+	view := m.viewTextResponse()
+
+	assertMaxRenderedLineWidth(t, view, 64)
+}
+
+func TestTextResponsePreviewLineLimitUsesTerminalHeight(t *testing.T) {
+	tests := []struct {
+		name   string
+		height int
+		want   int
+	}{
+		{name: "unknown height", height: 0, want: 12},
+		{name: "small height", height: 20, want: 12},
+		{name: "larger height", height: 40, want: 25},
+		{name: "very tall height", height: 100, want: 50},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel("/tmp/project", DefaultConfig())
+			m.height = tt.height
+
+			if got := m.textResponsePreviewLineLimit(); got != tt.want {
+				t.Fatalf("textResponsePreviewLineLimit() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTextResponsePreviewUsesDynamicLimit(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.state = stateTextResponse
+	m.height = 40
+	m.response = numberedLines(30)
+
+	view := m.viewTextResponse()
+
+	if !strings.Contains(view, "line 25") {
+		t.Fatalf("text response did not include dynamic preview limit line:\n%s", view)
+	}
+	if strings.Contains(view, "line 26") {
+		t.Fatalf("text response included a line beyond the dynamic preview limit:\n%s", view)
+	}
+	if !strings.Contains(view, "... [5 more lines hidden] ...") {
+		t.Fatalf("text response missing hidden-line count:\n%s", view)
+	}
+}
+
 func TestSubmitFinalResponseShowsNotesAlongsideWritePreview(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.eng = engine.FromTopology("/tmp/project", nil)
@@ -851,6 +908,25 @@ func TestSubmitFinalResponseShowsNotesAlongsideWritePreview(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Fatal("mixed response returned unexpected command")
+	}
+}
+
+func TestWritePreviewNotesUseDynamicPreviewLimit(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.state = stateWritePreview
+	m.height = 40
+	m.response = numberedLines(30)
+
+	view := m.viewWritePreview()
+
+	if !strings.Contains(view, "line 25") {
+		t.Fatalf("write preview notes did not include dynamic preview limit line:\n%s", view)
+	}
+	if strings.Contains(view, "line 26") {
+		t.Fatalf("write preview notes included a line beyond the dynamic preview limit:\n%s", view)
+	}
+	if !strings.Contains(view, "... [5 more lines hidden] ...") {
+		t.Fatalf("write preview notes missing hidden-line count:\n%s", view)
 	}
 }
 
@@ -1885,6 +1961,31 @@ func TestClipboardFailureTempFileFailureFallsBackToManualCopy(t *testing.T) {
 	}
 }
 
+func TestClipboardFallbackManualCopyWrapsLongLinesToTerminalWidth(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.width = 64
+	payload := strings.Repeat("manual copy payload ", 20)
+
+	next, cmd := m.Update(savePromptDoneMsg{
+		kind:         topologyPromptKind,
+		text:         payload,
+		clipboardErr: errors.New("xclip unavailable"),
+		err:          errors.New("permission denied"),
+	})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if cmd != nil {
+		t.Fatal("failed temp-file fallback returned unexpected command")
+	}
+	if got.state != stateManualCopy {
+		t.Fatalf("state = %v, want %v", got.state, stateManualCopy)
+	}
+
+	assertMaxRenderedLineWidth(t, got.View(), 64)
+}
+
 func TestWriteDoneWithErrorsRendersErrorStatus(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	symbols := testDisplaySymbols()
@@ -2042,5 +2143,22 @@ func TestTextPreviewHidesExtraLines(t *testing.T) {
 	}
 	if preview != "one\ntwo" {
 		t.Fatalf("preview = %q, want %q", preview, "one\ntwo")
+	}
+}
+
+func numberedLines(count int) string {
+	lines := make([]string, 0, count)
+	for i := 1; i <= count; i++ {
+		lines = append(lines, fmt.Sprintf("line %d", i))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func assertMaxRenderedLineWidth(t *testing.T, rendered string, maxWidth int) {
+	t.Helper()
+	for _, line := range strings.Split(rendered, "\n") {
+		if width := lipgloss.Width(line); width > maxWidth {
+			t.Fatalf("rendered line width = %d, want <= %d:\n%s\n\nfull view:\n%s", width, maxWidth, line, rendered)
+		}
 	}
 }

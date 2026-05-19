@@ -40,7 +40,7 @@ fi
 
 case "$version" in
   v[0-9]*.[0-9]*.[0-9]*) ;;
-  *) fail "invalid version: ${version}. Expected a tag like v0.1.2" ;;
+  *) fail "invalid version: ${version}. Expected a tag like v0.1.3" ;;
 esac
 
 version_number="${version#v}"

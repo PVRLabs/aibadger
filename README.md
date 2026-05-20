@@ -9,6 +9,8 @@ It stays local by default: no telemetry, no file uploads, and no cloud service r
 
 No API keys. No cloud dependency. No vendor lock-in.
 
+![AI Badger demo](assets/demo.gif)
+
 ## Why AI Badger?
 
 - **Works with any AI chat** — AI Badger prepares local code context for manual paste into ChatGPT, Claude, Gemini, or any other chat interface when you choose to use one.

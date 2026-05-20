@@ -10,6 +10,7 @@ It stays local by default: no telemetry, no file uploads, and no cloud service r
 No API keys. No cloud dependency. No vendor lock-in.
 
 ![AI Badger demo](assets/demo.gif)
+_Map → Extract → Apply: prepare focused code context for any AI chat._
 
 ## Why AI Badger?
 
@@ -37,7 +38,7 @@ instructions, see [docs/install.md](docs/install.md).
 
 ## Quick start
 
-[**Watch the demo**](https://pvrlabs.xyz/aibadger/demo.html) - See how AI Badger works in a simple animated walkthrough.
+[**Watch the interactive demo**](https://pvrlabs.xyz/aibadger/demo.html) - See how AI Badger works in a simple animated walkthrough.
 
 1. **Goal** — Run `badger` in your project, type a goal like `Review this change for bugs`, paste a git diff, and press Enter.
 2. **Map** — AIBadger scans your project and shows **Prompt 1: Topology** (project structure and files, not source code). Copy it and paste into any AI chat (Claude, ChatGPT, Gemini, etc.).

@@ -149,7 +149,7 @@ func NewModel(root string, cfg Config) Model {
 	goalInput.Prompt = "> "
 	goalInput.CharLimit = 0
 	goalInput.SetWidth(76)
-	goalInput.SetHeight(3)
+	goalInput.SetHeight(goalEditorHeight(0))
 	goalInput.Focus()
 
 	paste := textarea.New()
@@ -204,6 +204,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.goalInput.SetWidth(clamp(msg.Width-8, 40, 100))
+		m.goalInput.SetHeight(goalEditorHeight(msg.Height))
 		m.paste.SetWidth(clamp(msg.Width-8, 40, 100))
 		m.paste.SetHeight(clamp(msg.Height-14, 8, 18))
 		return m, tea.ClearScreen

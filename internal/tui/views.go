@@ -21,6 +21,8 @@ const homeGoalVisibleBytes = 16 * 1024
 const homeGoalVisibleLines = 30
 const homeGoalPreviewBytes = 96
 const homeGoalPreviewLines = 3
+const goalEditorMinHeight = 6
+const goalEditorMaxHeight = 10
 const headerRule = "────────────────────────────────────────────────────────"
 const defaultDialogWidth = 78
 
@@ -493,4 +495,11 @@ func clamp(value, min, max int) int {
 		return max
 	}
 	return value
+}
+
+func goalEditorHeight(terminalHeight int) int {
+	if terminalHeight <= 0 {
+		return goalEditorMinHeight
+	}
+	return clamp(terminalHeight/4, goalEditorMinHeight, goalEditorMaxHeight)
 }

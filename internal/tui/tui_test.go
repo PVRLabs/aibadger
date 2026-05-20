@@ -74,6 +74,9 @@ func TestNewModelStartsAtHomeWithoutScanning(t *testing.T) {
 	if !m.goalInput.Focused() {
 		t.Fatal("goal input is not focused on launch")
 	}
+	if got := m.goalInput.Height(); got != goalEditorMinHeight {
+		t.Fatalf("goal input height = %d, want %d", got, goalEditorMinHeight)
+	}
 }
 
 func TestNewModelShowsOnboardingForMissingSettings(t *testing.T) {
@@ -415,11 +418,36 @@ func TestWindowResizeClearsScreenBeforeRedraw(t *testing.T) {
 	if got.width != 100 || got.height != 32 {
 		t.Fatalf("terminal size = %dx%d, want 100x32", got.width, got.height)
 	}
+	if got.goalInput.Height() != 8 {
+		t.Fatalf("goal input height = %d, want 8", got.goalInput.Height())
+	}
 	if cmd == nil {
 		t.Fatal("resize did not request a screen clear")
 	}
 	if msg := cmd(); msg != tea.ClearScreen() {
 		t.Fatalf("resize command = %T, want tea.ClearScreen", msg)
+	}
+}
+
+func TestGoalEditorHeightScalesWithTerminalHeight(t *testing.T) {
+	tests := []struct {
+		name   string
+		height int
+		want   int
+	}{
+		{name: "unknown height", height: 0, want: goalEditorMinHeight},
+		{name: "small terminal", height: 20, want: goalEditorMinHeight},
+		{name: "medium terminal", height: 32, want: 8},
+		{name: "tall terminal", height: 40, want: goalEditorMaxHeight},
+		{name: "very tall terminal", height: 100, want: goalEditorMaxHeight},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := goalEditorHeight(tt.height); got != tt.want {
+				t.Fatalf("goalEditorHeight(%d) = %d, want %d", tt.height, got, tt.want)
+			}
+		})
 	}
 }
 

@@ -186,7 +186,7 @@ func (m Model) taggedCompletionCandidate(input string, cursor int) (completionCa
 	}
 	prefix := input[ref.ContentStart:prefixEnd]
 
-	suggestions, err := taggedfile.Complete(m.root, prefix, taggedFileCompletionLimit, nil)
+	suggestions, err := taggedfile.Complete(m.root, prefix, taggedFileCompletionLimit, taggedfile.DefaultCompletionSkip)
 	if err != nil || len(suggestions) == 0 {
 		return completionCandidate{}, false
 	}

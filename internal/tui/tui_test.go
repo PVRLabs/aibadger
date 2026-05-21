@@ -877,6 +877,29 @@ func TestTaggedCompletionActivatesAtExpectedBoundaries(t *testing.T) {
 	}
 }
 
+func TestTaggedCompletionSkipsNoisyDirectories(t *testing.T) {
+	root := t.TempDir()
+	writeTaggedCompletionFixture(t, root, "notes.md")
+	writeTaggedCompletionFixture(t, root, "node_modules/pkg/index.js")
+	writeTaggedCompletionFixture(t, root, ".git/config")
+
+	m := NewModel(root, DefaultConfig())
+	m.goalInput.SetValue("@n")
+	m.goalInput.SetCursor(len("@n"))
+	m.refreshCompletionCandidate()
+
+	candidate, ok := m.completionVisible()
+	if !ok {
+		t.Fatal("completionVisible() = false, want tagged completion")
+	}
+
+	for _, suggestion := range candidate.suggestions {
+		if suggestion.replacement == "@node_modules/" || suggestion.replacement == "@\"node_modules/\"" {
+			t.Fatalf("completion suggestions included noisy directory: %+v", candidate.suggestions)
+		}
+	}
+}
+
 func TestSlashCompletionEnterSelectsSuggestionWithoutSubmitting(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/r")

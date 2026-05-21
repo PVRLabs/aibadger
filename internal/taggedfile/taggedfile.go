@@ -41,6 +41,22 @@ type Suggestion struct {
 // the helper itself.
 type SkipFunc func(relPath string, isDir bool) bool
 
+var defaultCompletionIgnoredDirs = map[string]bool{
+	".git":         true,
+	"node_modules": true,
+	"target":       true,
+	"build":        true,
+}
+
+// DefaultCompletionSkip filters known noisy directories from shallow
+// completion suggestions.
+func DefaultCompletionSkip(relPath string, isDir bool) bool {
+	if !isDir {
+		return false
+	}
+	return defaultCompletionIgnoredDirs[filepath.Base(strings.TrimSuffix(relPath, "/"))]
+}
+
 // Parse extracts tagged-file references from arbitrary text.
 func Parse(input string) ([]Reference, []error) {
 	var refs []Reference

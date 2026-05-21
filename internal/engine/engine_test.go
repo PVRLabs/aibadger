@@ -220,7 +220,7 @@ func TestGenerateMapDetailedIncludesTaggedFilesAndWarnings(t *testing.T) {
 	if !strings.Contains(schema, "[USER TAGGED FILES]") {
 		t.Fatalf("Prompt 1 missing tagged-files section:\n%s", schema)
 	}
-	if strings.Count(schema, "- docs/usage.md") != 1 {
+	if strings.Count(schema, "FILE:docs/usage.md") != 1 {
 		t.Fatalf("Prompt 1 should dedupe repeated tagged files:\n%s", schema)
 	}
 	if !strings.Contains(schema, "[TASK]\n"+goal+"\n\n[CONSTRAINT]") {

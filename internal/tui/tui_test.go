@@ -1653,7 +1653,7 @@ func TestScanCompleteSurfacesTaggedFileWarnings(t *testing.T) {
 	if !strings.Contains(got.schemaA, "[USER TAGGED FILES]") {
 		t.Fatalf("Prompt 1 missing tagged-files section:\n%s", got.schemaA)
 	}
-	if strings.Count(got.schemaA, "- docs/usage.md") != 1 {
+	if strings.Count(got.schemaA, "FILE:docs/usage.md") != 1 {
 		t.Fatalf("Prompt 1 should dedupe repeated tagged files:\n%s", got.schemaA)
 	}
 	if !strings.Contains(got.schemaA, "[TASK]\n"+goal+"\n\n[CONSTRAINT]") {

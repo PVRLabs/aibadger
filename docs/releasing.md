@@ -62,7 +62,11 @@ git push origin "${RELEASE_VERSION}"
 4. Publish the GitHub Release for that tag.
 5. Confirm the release workflow builds and uploads the release archives.
 6. After the release is public, bump `internal/version/version.go` on `main` to
-   the next development version.
+   the next development version,
+   commit, and push.
+7. Update the Homebrew tap formula at `Formula/badger.rb` in the
+   [`homebrew-aibadger`](https://github.com/PVRLabs/homebrew-aibadger) repo with
+   the new version and release archive checksums, then push.
 
 The release workflow lives in `.github/workflows/release.yml` and is triggered by
 tag pushes and published releases.

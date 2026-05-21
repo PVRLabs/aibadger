@@ -30,6 +30,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return next, cmd
 		}
 
+	case "tab":
+		if next, cmd, handled := m.handleKeyTab(); handled {
+			return next, cmd
+		}
+
 	case "y", "Y":
 		if next, cmd, handled := m.handleKeyConfirm(); handled {
 			return next, cmd
@@ -135,6 +140,25 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		return next, cmd, true
 	}
 	return m, nil, false // key not applicable in current state
+}
+
+// handleKeyTab completes the home slash-command input to the first visible
+// suggestion. Other states keep their existing input handling.
+func (m Model) handleKeyTab() (tea.Model, tea.Cmd, bool) {
+	if m.state != stateHome {
+		return m, nil, false
+	}
+	input := m.goalInput.Value()
+	if !strings.HasPrefix(input, "/") {
+		return m, nil, false
+	}
+	for _, suggestion := range m.slashCommandSuggestions() {
+		if strings.HasPrefix(suggestion.command, input) {
+			m.goalInput.SetValue(suggestion.command)
+			return m, nil, true
+		}
+	}
+	return m, nil, true
 }
 
 // handleKeyConfirm handles the "y/Y" key, which confirms actions on screens

@@ -26,6 +26,11 @@ const goalEditorMaxHeight = 10
 const headerRule = "────────────────────────────────────────────────────────"
 const defaultDialogWidth = 78
 
+type slashCommandSuggestion struct {
+	command     string
+	description string
+}
+
 type pasteSpec struct {
 	title       string
 	placeholder string
@@ -89,6 +94,9 @@ func (m Model) viewHome() string {
 	lines = append(lines, "Commands: /help, /review, /exit")
 	lines = append(lines, "")
 	lines = append(lines, m.viewGoalInput())
+	if suggestions := m.viewSlashCommandSuggestions(); suggestions != "" {
+		lines = append(lines, "", suggestions)
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -105,6 +113,38 @@ func (m Model) viewGoalInput() string {
 		)
 	}
 	return m.goalInput.View()
+}
+
+func (m Model) viewSlashCommandSuggestions() string {
+	input := m.goalInput.Value()
+	if !strings.HasPrefix(input, "/") {
+		return ""
+	}
+
+	var lines []string
+	for _, suggestion := range m.slashCommandSuggestions() {
+		if strings.HasPrefix(suggestion.command, input) {
+			lines = append(lines, fmt.Sprintf("  %-12s %s", suggestion.command, suggestion.description))
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) slashCommandSuggestions() []slashCommandSuggestion {
+	suggestions := []slashCommandSuggestion{
+		{command: helpCommand, description: "Show commands and keyboard shortcuts."},
+		{command: reviewCommand, description: "Show diff review guidance."},
+	}
+	if m.cfg.ExitCommand != "" {
+		suggestions = append(suggestions, slashCommandSuggestion{
+			command:     m.cfg.ExitCommand,
+			description: "Quit Badger.",
+		})
+	}
+	return suggestions
 }
 
 func countTextLines(text string) int {
@@ -306,17 +346,19 @@ func (m Model) viewReviewHelp() string {
 	body := strings.Join([]string{
 		"Code review with Badger",
 		"",
-		"Use this when you want an AI chat to review a change before committing.",
+		"Use this when you want an AI chat to review a local change before you share or ship it.",
 		"",
-		"Example goal:",
-		"Review my current change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing.",
+		renderBold("Example goal:"),
+		"> Review my current change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing.",
+		"> <git diff output>",
 		"",
-		"Tip:",
+		renderBold("Tip:"),
 		reviewGitShowTip(),
 		"For larger diffs, prefer asking Badger to map the project first and let the AI request the specific files it needs.",
 		"",
-		"Preview feature:",
+		renderBold("Preview feature:"),
 		"Badger does not review local changes directly yet. Coming later: reviewing current unstaged or staged git diffs from your project.",
+		"Implementation discussion: https://github.com/PVRLabs/aibadger/issues/7",
 		"",
 		"Press Enter to return home.",
 	}, "\n")

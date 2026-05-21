@@ -578,15 +578,18 @@ func TestSubmitGoalReviewCommandShowsReviewHelp(t *testing.T) {
 	view := got.View()
 	for _, want := range []string{
 		"Code review with Badger",
-		"Use this when you want an AI chat to review a change before committing.",
+		"Use this when you want an AI chat to review a local change",
+		"share or ship it.",
 		"Example goal:",
-		"Review my current change for concrete bugs",
+		"> Review my current change for concrete bugs",
 		"before committing.",
+		"> <git diff output>",
 		"Tip:",
 		"To review the latest commit, run `git show | pbcopy`",
 		"For larger diffs, prefer asking Badger to map the project",
 		"Preview feature:",
 		"Badger does not review local changes directly yet.",
+		"https://github.com/PVRLabs/aibadger/issues/7",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("review help missing %q:\n%s", want, view)
@@ -653,6 +656,126 @@ func TestHomeViewSurfacesReviewUseCase(t *testing.T) {
 	}
 	if !strings.Contains(view, "Commands: /help, /review, /exit") {
 		t.Fatalf("home view missing review command:\n%s", view)
+	}
+}
+
+func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/")
+
+	view := m.View()
+
+	for _, want := range []string{
+		"/help",
+		"Show commands and keyboard shortcuts.",
+		"/review",
+		"Show diff review guidance.",
+		"/exit",
+		"Quit Badger.",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("home view missing slash suggestion %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestSlashCommandSuggestionsFilterByPrefix(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/r")
+
+	suggestions := m.viewSlashCommandSuggestions()
+
+	if !strings.Contains(suggestions, "/review") {
+		t.Fatalf("filtered suggestions missing /review:\n%s", suggestions)
+	}
+	for _, unwanted := range []string{"/help", "/exit"} {
+		if strings.Contains(suggestions, unwanted) {
+			t.Fatalf("filtered suggestions unexpectedly included %q:\n%s", unwanted, suggestions)
+		}
+	}
+}
+
+func TestSlashCommandSuggestionsDoNotIncludeReservedModelCommand(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/m")
+
+	suggestions := m.viewSlashCommandSuggestions()
+
+	if suggestions != "" {
+		t.Fatalf("reserved /model command should not be suggested:\n%s", suggestions)
+	}
+}
+
+func TestSlashCommandSuggestionsHiddenForNormalInput(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("review my change")
+
+	view := m.View()
+
+	if strings.Contains(view, "Show commands and keyboard shortcuts.") {
+		t.Fatalf("home view should not show slash suggestions for normal input:\n%s", view)
+	}
+	if suggestions := m.viewSlashCommandSuggestions(); suggestions != "" {
+		t.Fatalf("normal input suggestions = %q, want empty", suggestions)
+	}
+}
+
+func TestHomeTabCompletesFirstSlashCommandSuggestion(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/")
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "/help" {
+		t.Fatalf("goal input = %q, want /help", got.goalInput.Value())
+	}
+	if cmd != nil {
+		t.Fatal("tab completion returned unexpected command")
+	}
+}
+
+func TestHomeTabCompletesFilteredSlashCommandSuggestion(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/r")
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "/review" {
+		t.Fatalf("goal input = %q, want /review", got.goalInput.Value())
+	}
+}
+
+func TestHomeTabDoesNotCompleteReservedModelCommand(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/m")
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "/m" {
+		t.Fatalf("goal input = %q, want /m", got.goalInput.Value())
+	}
+}
+
+func TestHomeTabLeavesNormalInputToTextarea(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("review")
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "review" {
+		t.Fatalf("goal input = %q, want review", got.goalInput.Value())
 	}
 }
 

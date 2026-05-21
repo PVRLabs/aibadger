@@ -36,20 +36,38 @@ type completionCandidate struct {
 
 type completionState struct {
 	suppressedKey string
+	candidate     completionCandidate
 }
 
 func (m Model) currentCompletionCandidate() (completionCandidate, bool) {
-	if m.state != stateHome {
+	if m.state != stateHome || m.completion.candidate.kind == completionKindNone {
 		return completionCandidate{}, false
 	}
+	return m.completion.candidate, true
+}
 
+func (m *Model) refreshCompletionCandidate() {
+	if m.state != stateHome {
+		m.completion.candidate = completionCandidate{}
+		return
+	}
 	input := m.goalInput.Value()
 	cursor := m.goalInputCursorByteIndex()
 
 	if candidate, ok := m.taggedCompletionCandidate(input, cursor); ok {
-		return candidate, true
+		m.completion.candidate = candidate
+		return
 	}
-	return m.slashCompletionCandidate(input, cursor)
+	if candidate, ok := m.slashCompletionCandidate(input, cursor); ok {
+		m.completion.candidate = candidate
+		return
+	}
+	m.completion.candidate = completionCandidate{}
+}
+
+func (m *Model) setGoalInputValue(value string) {
+	m.goalInput.SetValue(value)
+	m.refreshCompletionCandidate()
 }
 
 func (m Model) completionVisible() (completionCandidate, bool) {
@@ -92,6 +110,7 @@ func (m Model) applyCompletionCandidate(candidate completionCandidate) (tea.Mode
 	updated := input[:candidate.start] + replacement + input[candidate.end:]
 	m.goalInput.SetValue(updated)
 	m.resizeGoalEditor()
+	m.refreshCompletionCandidate()
 	m.completion.suppressedKey = candidate.kind.String() + ":" + replacement
 	return m, nil
 }

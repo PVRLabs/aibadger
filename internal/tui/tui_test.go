@@ -699,6 +699,7 @@ func TestHomeViewSurfacesReviewUseCase(t *testing.T) {
 func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/")
+	m.refreshCompletionCandidate()
 
 	view := m.View()
 
@@ -719,6 +720,7 @@ func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 func TestSlashCommandSuggestionsFilterByPrefix(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/r")
+	m.refreshCompletionCandidate()
 
 	suggestions := m.viewSlashCommandSuggestions()
 
@@ -735,6 +737,7 @@ func TestSlashCommandSuggestionsFilterByPrefix(t *testing.T) {
 func TestSlashCommandSuggestionsDoNotIncludeReservedModelCommand(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/m")
+	m.refreshCompletionCandidate()
 
 	suggestions := m.viewSlashCommandSuggestions()
 
@@ -746,6 +749,7 @@ func TestSlashCommandSuggestionsDoNotIncludeReservedModelCommand(t *testing.T) {
 func TestSlashCommandSuggestionsHiddenForNormalInput(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("review my change")
+	m.refreshCompletionCandidate()
 
 	view := m.View()
 
@@ -760,6 +764,7 @@ func TestSlashCommandSuggestionsHiddenForNormalInput(t *testing.T) {
 func TestHomeTabCompletesFirstSlashCommandSuggestion(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/")
+	m.refreshCompletionCandidate()
 
 	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
 	got, ok := next.(Model)
@@ -777,6 +782,7 @@ func TestHomeTabCompletesFirstSlashCommandSuggestion(t *testing.T) {
 func TestHomeTabCompletesFilteredSlashCommandSuggestion(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/r")
+	m.refreshCompletionCandidate()
 
 	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
 	got, ok := next.(Model)
@@ -791,6 +797,7 @@ func TestHomeTabCompletesFilteredSlashCommandSuggestion(t *testing.T) {
 func TestHomeTabDoesNotCompleteReservedModelCommand(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/m")
+	m.refreshCompletionCandidate()
 
 	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
 	got, ok := next.(Model)
@@ -805,6 +812,7 @@ func TestHomeTabDoesNotCompleteReservedModelCommand(t *testing.T) {
 func TestHomeTabLeavesNormalInputToTextarea(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("review")
+	m.refreshCompletionCandidate()
 
 	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
 	got, ok := next.(Model)
@@ -853,6 +861,7 @@ func TestTaggedCompletionActivatesAtExpectedBoundaries(t *testing.T) {
 			m := NewModel(root, DefaultConfig())
 			m.goalInput.SetValue(tt.input)
 			m.goalInput.SetCursor(len(tt.input))
+			m.refreshCompletionCandidate()
 
 			candidate, ok := m.completionVisible()
 			if ok != tt.wantActive {
@@ -871,6 +880,7 @@ func TestTaggedCompletionActivatesAtExpectedBoundaries(t *testing.T) {
 func TestSlashCompletionEnterSelectsSuggestionWithoutSubmitting(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/r")
+	m.refreshCompletionCandidate()
 
 	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	got, ok := next.(Model)
@@ -906,6 +916,7 @@ func TestTaggedCompletionEnterAndTabInsertIntoActiveToken(t *testing.T) {
 			m := NewModel(root, DefaultConfig())
 			m.goalInput.SetValue("Keep @docs/al and go")
 			m.goalInput.SetCursor(len("Keep @docs/al"))
+			m.refreshCompletionCandidate()
 
 			next, cmd := m.handleKey(tea.KeyMsg{Type: tt.key})
 			got, ok := next.(Model)
@@ -931,6 +942,7 @@ func TestTaggedCompletionEscapeDismissesMenu(t *testing.T) {
 	m := NewModel(root, DefaultConfig())
 	m.goalInput.SetValue("Review @docs/al")
 	m.goalInput.SetCursor(len("Review @docs/al"))
+	m.refreshCompletionCandidate()
 
 	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
 	got, ok := next.(Model)

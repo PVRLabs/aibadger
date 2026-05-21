@@ -18,7 +18,7 @@ func (m *Model) enforceGoalByteLimit(warn bool) {
 	if actualSize <= retainedSize {
 		return
 	}
-	m.goalInput.SetValue(retained)
+	m.setGoalInputValue(retained)
 	if warn {
 		m.status = warningMessage(fmt.Sprintf("Pasted goal was truncated from %s to %s.", protocol.FormatFileSize(int64(actualSize)), protocol.FormatFileSize(int64(retainedSize))))
 	}

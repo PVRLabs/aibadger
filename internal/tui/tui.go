@@ -320,7 +320,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commands = nil
 		m.updates = nil
 		m.response = ""
-		m.goalInput.SetValue("")
+		m.setGoalInputValue("")
 		m.resizeGoalEditor()
 		m.completion.suppressedKey = ""
 		m.goalInput.Focus()
@@ -348,6 +348,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateHome:
 		m.goalInput, cmd = m.goalInput.Update(msg)
 		m.resizeGoalEditor()
+		m.refreshCompletionCandidate()
 	case stateWaitingForExtractions, stateWaitingForCode:
 		m.paste, cmd = m.paste.Update(msg)
 	}
@@ -581,7 +582,7 @@ func (m Model) returnHome(status tuiMessage) (tea.Model, tea.Cmd) {
 	m.pendingSafetyExclusions = nil
 	m.updates = nil
 	m.response = ""
-	m.goalInput.SetValue("")
+	m.setGoalInputValue("")
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
 	m.goalInput.Focus()

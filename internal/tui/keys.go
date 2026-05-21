@@ -210,7 +210,7 @@ func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
 	if m.state == stateWritePreview {
 		m.state = stateHome
 		m.status = neutralMessage("Write cancelled. Ready for a new goal.")
-		m.goalInput.SetValue("")
+		m.setGoalInputValue("")
 		m.completion.suppressedKey = ""
 		m.resizeGoalEditor()
 		m.goalInput.Focus()
@@ -304,7 +304,7 @@ func (m Model) handleKeyExitToHome() (tea.Model, tea.Cmd, bool) {
 	if m.state == stateScanComplete && m.largeProjectPending {
 		m.state = stateHome
 		m.status = neutralMessage("Scan discarded. Try running Badger from a smaller subproject.")
-		m.goalInput.SetValue("")
+		m.setGoalInputValue("")
 		m.completion.suppressedKey = ""
 		m.resizeGoalEditor()
 		m.goalInput.Focus()

@@ -92,9 +92,10 @@ func (m Model) viewHome() string {
 	var lines []string
 	lines = append(lines, "Type a goal or paste a diff for review, then press Enter.")
 	lines = append(lines, "Commands: /help, /review, /exit")
+	lines = append(lines, "Use @path/to/file and Tab to tag files into Prompt 1.")
 	lines = append(lines, "")
 	lines = append(lines, m.viewGoalInput())
-	if suggestions := m.viewSlashCommandSuggestions(); suggestions != "" {
+	if suggestions := m.viewCompletionSuggestions(); suggestions != "" {
 		lines = append(lines, "", suggestions)
 	}
 	return strings.Join(lines, "\n")
@@ -116,19 +117,30 @@ func (m Model) viewGoalInput() string {
 }
 
 func (m Model) viewSlashCommandSuggestions() string {
-	input := m.goalInput.Value()
-	if !strings.HasPrefix(input, "/") {
+	candidate, ok := m.completionVisible()
+	if !ok || candidate.kind != completionKindSlash {
 		return ""
 	}
 
 	var lines []string
-	for _, suggestion := range m.slashCommandSuggestions() {
-		if strings.HasPrefix(suggestion.command, input) {
-			lines = append(lines, fmt.Sprintf("  %-12s %s", suggestion.command, suggestion.description))
-		}
+	for _, suggestion := range candidate.suggestions {
+		lines = append(lines, fmt.Sprintf("  %-12s %s", suggestion.label, suggestion.description))
 	}
 	if len(lines) == 0 {
 		return ""
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) viewCompletionSuggestions() string {
+	candidate, ok := m.completionVisible()
+	if !ok || len(candidate.suggestions) == 0 {
+		return ""
+	}
+
+	var lines []string
+	for _, suggestion := range candidate.suggestions {
+		lines = append(lines, fmt.Sprintf("  %-12s %s", suggestion.label, suggestion.description))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -322,12 +334,13 @@ func (m Model) viewHelp() string {
 		"Keys",
 		"",
 		"Enter          Submit or continue.",
+		"Tab            Complete / commands and @ files.",
 		"Ctrl+U         Clear line.",
 		"Ctrl+C         Quit Badger.",
 		"",
 		"BYOL loop",
 		"",
-		"1. Enter a goal.",
+		"1. Enter a goal. Use @path/to/file when you want Prompt 1 to include a specific file.",
 		"2. Confirm copying Prompt 1: Topology, or use the manual-copy fallback.",
 		"3. Paste FILE/PREFIX/NEAR commands from your AI chat and press Enter.",
 		"4. Confirm copying Prompt 2: Code Context, or use the manual-copy fallback.",

@@ -10,6 +10,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/scanner"
+	"github.com/PVRLabs/aibadger/internal/taggedfile"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
 
@@ -72,7 +73,18 @@ func (e *Engine) SetPromptInstructions(instr protocol.PromptInstructions) {
 
 // GenerateMap builds Prompt 1: Topology.
 func (e *Engine) GenerateMap(goal string) string {
-	return e.formatter.GenerateSchemaA(e.Topology, goal)
+	schema, _ := e.GenerateMapDetailed(goal)
+	return schema
+}
+
+// GenerateMapDetailed builds Prompt 1: Topology and returns any non-blocking
+// tagged-file warnings collected from the submitted goal.
+func (e *Engine) GenerateMapDetailed(goal string) (string, []string) {
+	if e == nil || e.formatter == nil {
+		return "", nil
+	}
+	taggedFiles, warnings := e.resolveTaggedFiles(goal)
+	return e.formatter.GenerateSchemaAWithTaggedFiles(e.Topology, goal, taggedFiles), warnings
 }
 
 // ParseCommands parses FILE/PREFIX/NEAR extraction commands.
@@ -141,6 +153,35 @@ func (e *Engine) ApplyUpdate(update writer.FileUpdate, mode writer.WhitespaceMod
 // ApplyWrite applies a single planned file update relative to the project root.
 func (e *Engine) ApplyWrite(update writer.FileUpdate, mode writer.WhitespaceMode) error {
 	return e.ApplyUpdate(update, mode)
+}
+
+func (e *Engine) resolveTaggedFiles(goal string) ([]string, []string) {
+	if e == nil {
+		return nil, nil
+	}
+
+	refs, parseErrs := taggedfile.Parse(goal)
+	warnings := make([]string, 0, len(parseErrs))
+	for _, err := range parseErrs {
+		warnings = append(warnings, err.Error())
+	}
+
+	paths := make([]string, 0, len(refs))
+	seen := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		resolved, err := taggedfile.Resolve(e.Root, ref.Path)
+		if err != nil {
+			warnings = append(warnings, err.Error())
+			continue
+		}
+		if _, ok := seen[resolved.Path]; ok {
+			continue
+		}
+		seen[resolved.Path] = struct{}{}
+		paths = append(paths, resolved.Path)
+	}
+
+	return paths, warnings
 }
 
 func (e *Engine) rejectExternalContextUpdates(result writer.ParseResult) writer.ParseResult {

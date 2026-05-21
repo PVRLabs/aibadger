@@ -576,6 +576,14 @@ func TestSubmitGoalHelpCommandShowsHelp(t *testing.T) {
 	if !strings.Contains(view, "/exit") || !strings.Contains(view, "BYOL loop") {
 		t.Fatalf("help view missing command reference:\n%s", view)
 	}
+	for _, want := range []string{
+		"Tab            Complete / commands and @ files.",
+		"@path/to/file",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("help view missing %q:\n%s", want, view)
+		}
+	}
 }
 
 func TestSubmitGoalReviewCommandShowsReviewHelp(t *testing.T) {
@@ -677,6 +685,14 @@ func TestHomeViewSurfacesReviewUseCase(t *testing.T) {
 	}
 	if !strings.Contains(view, "Commands: /help, /review, /exit") {
 		t.Fatalf("home view missing review command:\n%s", view)
+	}
+	for _, want := range []string{
+		"@path/to/file",
+		"tag files into Prompt 1",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("home view missing tagged-file guidance %q:\n%s", want, view)
+		}
 	}
 }
 
@@ -797,6 +813,152 @@ func TestHomeTabLeavesNormalInputToTextarea(t *testing.T) {
 	}
 	if got.goalInput.Value() != "review" {
 		t.Fatalf("goal input = %q, want review", got.goalInput.Value())
+	}
+}
+
+func TestTaggedCompletionActivatesAtExpectedBoundaries(t *testing.T) {
+	root := t.TempDir()
+	writeTaggedCompletionFixture(t, root, "docs/alpha.go")
+	writeTaggedCompletionFixture(t, root, "docs/beta.go")
+
+	tests := []struct {
+		name       string
+		input      string
+		wantActive bool
+	}{
+		{
+			name:       "start of input",
+			input:      "@docs/a",
+			wantActive: true,
+		},
+		{
+			name:       "after whitespace",
+			input:      "fix @docs/a",
+			wantActive: true,
+		},
+		{
+			name:       "after punctuation",
+			input:      "fix, @docs/a",
+			wantActive: true,
+		},
+		{
+			name:       "after completed token",
+			input:      "@docs/alpha.go ",
+			wantActive: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(root, DefaultConfig())
+			m.goalInput.SetValue(tt.input)
+			m.goalInput.SetCursor(len(tt.input))
+
+			candidate, ok := m.completionVisible()
+			if ok != tt.wantActive {
+				t.Fatalf("completionVisible() ok = %v, want %v", ok, tt.wantActive)
+			}
+			if !ok {
+				return
+			}
+			if candidate.kind != completionKindTagged {
+				t.Fatalf("completion kind = %v, want tagged", candidate.kind)
+			}
+		})
+	}
+}
+
+func TestSlashCompletionEnterSelectsSuggestionWithoutSubmitting(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/r")
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "/review" {
+		t.Fatalf("goal input = %q, want /review", got.goalInput.Value())
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want home", got.state)
+	}
+	if cmd != nil {
+		t.Fatal("completion enter returned unexpected command")
+	}
+}
+
+func TestTaggedCompletionEnterAndTabInsertIntoActiveToken(t *testing.T) {
+	root := t.TempDir()
+	writeTaggedCompletionFixture(t, root, "docs/alpha.go")
+	writeTaggedCompletionFixture(t, root, "docs/beta.go")
+
+	tests := []struct {
+		name string
+		key  tea.KeyType
+	}{
+		{name: "enter", key: tea.KeyEnter},
+		{name: "tab", key: tea.KeyTab},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(root, DefaultConfig())
+			m.goalInput.SetValue("Keep @docs/al and go")
+			m.goalInput.SetCursor(len("Keep @docs/al"))
+
+			next, cmd := m.handleKey(tea.KeyMsg{Type: tt.key})
+			got, ok := next.(Model)
+			if !ok {
+				t.Fatalf("handleKey returned %T, want tui.Model", next)
+			}
+			if got.goalInput.Value() != "Keep @docs/alpha.go and go" {
+				t.Fatalf("goal input = %q, want completion to replace only the tagged token", got.goalInput.Value())
+			}
+			if got.state != stateHome {
+				t.Fatalf("state = %v, want home", got.state)
+			}
+			if cmd != nil {
+				t.Fatal("completion insertion returned unexpected command")
+			}
+		})
+	}
+}
+
+func TestTaggedCompletionEscapeDismissesMenu(t *testing.T) {
+	root := t.TempDir()
+	writeTaggedCompletionFixture(t, root, "docs/alpha.go")
+	m := NewModel(root, DefaultConfig())
+	m.goalInput.SetValue("Review @docs/al")
+	m.goalInput.SetCursor(len("Review @docs/al"))
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "Review @docs/al" {
+		t.Fatalf("goal input = %q, want unchanged input", got.goalInput.Value())
+	}
+	if suggestions := got.viewCompletionSuggestions(); suggestions != "" {
+		t.Fatalf("completion suggestions still visible after escape:\n%s", suggestions)
+	}
+	if got.completion.suppressedKey == "" {
+		t.Fatal("escape should suppress the current completion token")
+	}
+	if cmd != nil {
+		t.Fatal("escape dismissal returned unexpected command")
+	}
+}
+
+func writeTaggedCompletionFixture(t *testing.T, root, path string) {
+	t.Helper()
+	full := filepath.Join(root, filepath.FromSlash(path))
+	if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1432,6 +1594,58 @@ func TestNormalTopologyPromptDoesNotShowLargeWarning(t *testing.T) {
 	}
 	if strings.Contains(view, "Save to temp file") || strings.Contains(view, "Copy anyway") {
 		t.Fatalf("normal topology prompt showed large-prompt options:\n%s", view)
+	}
+}
+
+func TestScanCompleteSurfacesTaggedFileWarnings(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{
+		"docs/usage.md",
+		"docs/user-guide.md",
+	} {
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	goal := "review @docs/usage.md and @docs/missing.md and @docs/usage.md"
+	eng := engine.FromTopology(root, &model.ProjectTopology{
+		Languages: []string{"Go"},
+		Modules:   []model.Module{{Name: "docs", FileCount: 2}},
+	})
+	m := NewModel(root, DefaultConfig())
+	m.state = stateScanning
+	m.goal = goal
+
+	next, cmd := m.Update(scanDoneMsg{eng: eng})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if cmd != nil {
+		t.Fatal("scan completion returned unexpected command")
+	}
+	if got.state != stateScanComplete {
+		t.Fatalf("state = %v, want %v", got.state, stateScanComplete)
+	}
+	if got.status.severity != messageWarning {
+		t.Fatalf("status severity = %v, want warning", got.status.severity)
+	}
+	if !strings.Contains(got.status.text, "docs/missing.md") {
+		t.Fatalf("warning status missing unresolved tagged path:\n%s", got.status.text)
+	}
+	if !strings.Contains(got.schemaA, "[USER TAGGED FILES]") {
+		t.Fatalf("Prompt 1 missing tagged-files section:\n%s", got.schemaA)
+	}
+	if strings.Count(got.schemaA, "- docs/usage.md") != 1 {
+		t.Fatalf("Prompt 1 should dedupe repeated tagged files:\n%s", got.schemaA)
+	}
+	if !strings.Contains(got.schemaA, "[TASK]\n"+goal+"\n\n[CONSTRAINT]") {
+		t.Fatalf("Prompt 1 did not preserve the original goal text:\n%s", got.schemaA)
 	}
 }
 

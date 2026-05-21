@@ -189,6 +189,45 @@ func TestNewLoadsExternalContext(t *testing.T) {
 	}
 }
 
+func TestGenerateMapDetailedIncludesTaggedFilesAndWarnings(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{
+		"docs/usage.md",
+		"docs/user-guide.md",
+	} {
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	eng := FromTopology(root, &model.ProjectTopology{
+		Languages: []string{"Go"},
+		Modules:   []model.Module{{Name: "docs", FileCount: 2}},
+	})
+	goal := "review @docs/usage.md and @docs/missing.md and @docs/usage.md"
+
+	schema, warnings := eng.GenerateMapDetailed(goal)
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %v, want 1 unresolved tagged-file warning", warnings)
+	}
+	if !strings.Contains(warnings[0], "docs/missing.md") {
+		t.Fatalf("warnings = %v, want missing path warning", warnings)
+	}
+	if !strings.Contains(schema, "[USER TAGGED FILES]") {
+		t.Fatalf("Prompt 1 missing tagged-files section:\n%s", schema)
+	}
+	if strings.Count(schema, "- docs/usage.md") != 1 {
+		t.Fatalf("Prompt 1 should dedupe repeated tagged files:\n%s", schema)
+	}
+	if !strings.Contains(schema, "[TASK]\n"+goal+"\n\n[CONSTRAINT]") {
+		t.Fatalf("Prompt 1 did not preserve goal text:\n%s", schema)
+	}
+}
+
 func TestNewRejectsInvalidExternalContext(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, ".badger-context"), []byte("../missing/docs\n"), 0644); err != nil {

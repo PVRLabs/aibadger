@@ -18,6 +18,10 @@ const (
 )
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if next, cmd, handled := m.handleCompletionKey(msg.String()); handled {
+		return next, cmd
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
@@ -148,18 +152,12 @@ func (m Model) handleKeyTab() (tea.Model, tea.Cmd, bool) {
 	if m.state != stateHome {
 		return m, nil, false
 	}
-	input := m.goalInput.Value()
-	if !strings.HasPrefix(input, "/") {
+	candidate, ok := m.completionVisible()
+	if !ok || candidate.kind != completionKindSlash {
 		return m, nil, false
 	}
-	for _, suggestion := range m.slashCommandSuggestions() {
-		if strings.HasPrefix(suggestion.command, input) {
-			m.goalInput.SetValue(suggestion.command)
-			m.resizeGoalEditor()
-			return m, nil, true
-		}
-	}
-	return m, nil, true
+	next, cmd := m.applyCompletionCandidate(candidate)
+	return next, cmd, true
 }
 
 // handleKeyConfirm handles the "y/Y" key, which confirms actions on screens
@@ -213,6 +211,7 @@ func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
 		m.state = stateHome
 		m.status = neutralMessage("Write cancelled. Ready for a new goal.")
 		m.goalInput.SetValue("")
+		m.completion.suppressedKey = ""
 		m.resizeGoalEditor()
 		m.goalInput.Focus()
 		return m, textarea.Blink, true
@@ -232,7 +231,10 @@ func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
 func (m Model) handleKeyCopy() (tea.Model, tea.Cmd, bool) {
 	if m.state == stateScanComplete && m.largeProjectPending {
 		m.largeProjectPending = false
-		m.schemaA = m.workflowSession().GenerateMap(m.goal)
+		m, warnings := m.refreshTopologyPrompt()
+		if warning := taggedFileWarningMessage(warnings); !warning.empty() {
+			m.status = warning
+		}
 		return m, nil, true
 	}
 
@@ -286,7 +288,10 @@ func (m Model) handleKeyTruncate() (tea.Model, tea.Cmd, bool) {
 		m.largeProjectPending = false
 		// Truncation mode is enforced via the formatter package limit.
 		workflow.ConfigureEngine(m.eng, m.engineOptions(m.cfg.TruncatedMaxPackages))
-		m.schemaA = m.workflowSession().GenerateMap(m.goal)
+		m, warnings := m.refreshTopologyPrompt()
+		if warning := taggedFileWarningMessage(warnings); !warning.empty() {
+			m.status = warning
+		}
 		return m, nil, true
 	}
 	return m, nil, false
@@ -300,6 +305,7 @@ func (m Model) handleKeyExitToHome() (tea.Model, tea.Cmd, bool) {
 		m.state = stateHome
 		m.status = neutralMessage("Scan discarded. Try running Badger from a smaller subproject.")
 		m.goalInput.SetValue("")
+		m.completion.suppressedKey = ""
 		m.resizeGoalEditor()
 		m.goalInput.Focus()
 		return m, textarea.Blink, true
@@ -317,6 +323,7 @@ func (m Model) forwardKeyToInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.goalInput, cmd = m.goalInput.Update(msg)
 		m.enforceGoalByteLimit(pastedKeyMsg(msg))
 		m.resizeGoalEditor()
+		m.pruneCompletionSuppression()
 	case stateWaitingForExtractions, stateWaitingForCode:
 		m.paste, cmd = m.paste.Update(msg)
 		if pastedKeyMsg(msg) {

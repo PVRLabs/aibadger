@@ -9,6 +9,8 @@ AIBadger bridges your local project and an AI chat in a three-step exchange.
 - **PROJECT TOPOLOGY** — languages, build stack, and module structure.
 - **SOURCE TREE** — packages with file names and sizes, grouped by priority
   (docs, config, source code, assets).
+- **USER TAGGED FILES** — optional user-selected files you pin into the goal
+  with `@path/to/file`; the section appears only when those references resolve.
 - **TASK** — your goal or question.
 - **CONSTRAINT** — instructs the AI to reply with selectors only.
 

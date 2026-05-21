@@ -211,3 +211,138 @@ func TestCompleteTaggedReferencesIsBoundedAndTraversesDirectories(t *testing.T) 
 		t.Fatal("Complete(traversal) error = nil, want rejection")
 	}
 }
+
+func TestCompleteTaggedReferencesRanksBasenameMatches(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWrite := func(path string) {
+		t.Helper()
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite("usage.md")
+	mustWrite("docs/usage.md")
+	mustWrite("docs/user-guide.md")
+	mustWrite("examples/usage.md")
+	mustWrite("docs/nested/child.go")
+
+	completions, err := Complete(root, "us", 8, nil)
+	if err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+	if len(completions) < 4 {
+		t.Fatalf("len(Complete()) = %d, want at least 4", len(completions))
+	}
+	if completions[0].Path != "usage.md" {
+		t.Fatalf("first completion = %q, want root basename match usage.md", completions[0].Path)
+	}
+	for _, want := range []string{"docs/usage.md", "docs/user-guide.md", "examples/usage.md"} {
+		if !containsSuggestion(completions, want) {
+			t.Fatalf("Complete() missing %q in ranked results: %v", want, suggestionsToPaths(completions))
+		}
+	}
+	for _, suggestion := range completions {
+		if suggestion.Path == "docs/nested/child.go" {
+			t.Fatalf("Complete() included deeper file %q: %v", suggestion.Path, suggestionsToPaths(completions))
+		}
+	}
+}
+
+func TestCompleteTaggedReferencesMatchesRepoRelativePathPrefix(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWrite := func(path string) {
+		t.Helper()
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite("docs/usage.md")
+	mustWrite("docs/user-guide.md")
+	mustWrite("docs/nested/child.go")
+
+	completions, err := Complete(root, "docs/us", 8, nil)
+	if err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+	if len(completions) == 0 {
+		t.Fatal("Complete() returned no matches for repo-relative path prefix")
+	}
+	if completions[0].Path != "docs/usage.md" {
+		t.Fatalf("first completion = %q, want docs/usage.md", completions[0].Path)
+	}
+	for _, suggestion := range completions {
+		if suggestion.Path == "docs/nested/child.go" {
+			t.Fatalf("Complete() included deeper file %q: %v", suggestion.Path, suggestionsToPaths(completions))
+		}
+	}
+}
+
+func TestCompleteTaggedReferencesRespectsBoundedLimitAndSkip(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWrite := func(path string) {
+		t.Helper()
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite("usage.md")
+	mustWrite("docs/usage.md")
+	mustWrite("docs/user-guide.md")
+	mustWrite("examples/usage.md")
+
+	skip := func(relPath string, isDir bool) bool {
+		return relPath == "docs/user-guide.md"
+	}
+
+	completions, err := Complete(root, "us", 2, skip)
+	if err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+	if len(completions) != 2 {
+		t.Fatalf("len(Complete()) = %d, want 2", len(completions))
+	}
+	if completions[0].Path != "usage.md" {
+		t.Fatalf("first completion = %q, want usage.md", completions[0].Path)
+	}
+	if completions[1].Path != "docs/usage.md" {
+		t.Fatalf("second completion = %q, want docs/usage.md", completions[1].Path)
+	}
+}
+
+func containsSuggestion(suggestions []Suggestion, want string) bool {
+	for _, suggestion := range suggestions {
+		if suggestion.Path == want {
+			return true
+		}
+	}
+	return false
+}
+
+func suggestionsToPaths(suggestions []Suggestion) []string {
+	paths := make([]string, 0, len(suggestions))
+	for _, suggestion := range suggestions {
+		paths = append(paths, suggestion.Path)
+	}
+	return paths
+}

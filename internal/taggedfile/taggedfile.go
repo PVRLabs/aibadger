@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -122,43 +123,206 @@ func Complete(projectRoot, prefix string, limit int, skip SkipFunc) ([]Suggestio
 		limit = defaultCompletionLimit
 	}
 
-	parent, partial := splitCompletionPrefix(prefix)
-	resolvedParent, err := resolveExistingDirectory(projectRoot, parent)
+	if err := validateCompletionPrefix(prefix); err != nil {
+		return nil, err
+	}
+
+	candidates, err := collectShallowCompletionCandidates(projectRoot, skip)
 	if err != nil {
 		return nil, err
 	}
 
-	entries, err := os.ReadDir(resolvedParent.AbsPath)
-	if err != nil {
-		return nil, err
-	}
-
-	suggestions := make([]Suggestion, 0, min(limit, len(entries)))
-	for _, entry := range entries {
-		name := entry.Name()
-		if partial != "" && !strings.HasPrefix(name, partial) {
+	scored := make([]scoredSuggestion, 0, len(candidates))
+	for _, candidate := range candidates {
+		rank, ok := scoreCompletionCandidate(prefix, candidate)
+		if !ok {
 			continue
 		}
+		scored = append(scored, scoredSuggestion{
+			suggestion: Suggestion{
+				Path:  candidate.Path,
+				IsDir: candidate.IsDir,
+			},
+			rank: rank,
+		})
+	}
 
-		relPath := joinTaggedPath(resolvedParent.Path, name)
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].rank != scored[j].rank {
+			return scored[i].rank < scored[j].rank
+		}
+		if scored[i].suggestion.IsDir != scored[j].suggestion.IsDir {
+			return !scored[i].suggestion.IsDir && scored[j].suggestion.IsDir
+		}
+		return scored[i].suggestion.Path < scored[j].suggestion.Path
+	})
+
+	if len(scored) > limit {
+		scored = scored[:limit]
+	}
+	suggestions := make([]Suggestion, 0, len(scored))
+	for _, item := range scored {
+		suggestions = append(suggestions, item.suggestion)
+	}
+	return suggestions, nil
+}
+
+type shallowCompletionCandidate struct {
+	Path  string
+	IsDir bool
+	Depth int
+}
+
+type scoredSuggestion struct {
+	suggestion Suggestion
+	rank       int
+}
+
+func collectShallowCompletionCandidates(projectRoot string, skip SkipFunc) ([]shallowCompletionCandidate, error) {
+	absRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve project root: %w", err)
+	}
+
+	entries, err := os.ReadDir(absRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	var candidates []shallowCompletionCandidate
+	for _, entry := range entries {
+		name := entry.Name()
 		isDir := entry.IsDir()
+		relPath := name
 		if skip != nil && skip(relPath, isDir) {
 			continue
 		}
-
-		if isDir {
-			relPath += "/"
-		}
-		suggestions = append(suggestions, Suggestion{
-			Path:  relPath,
+		candidates = append(candidates, shallowCompletionCandidate{
+			Path:  dirSuffix(relPath, isDir),
 			IsDir: isDir,
+			Depth: 0,
 		})
-		if len(suggestions) >= limit {
-			break
+		if !isDir {
+			continue
+		}
+
+		childEntries, err := os.ReadDir(filepath.Join(absRoot, name))
+		if err != nil {
+			return nil, err
+		}
+		for _, child := range childEntries {
+			childPath := joinTaggedPath(name, child.Name())
+			childIsDir := child.IsDir()
+			if skip != nil && skip(childPath, childIsDir) {
+				continue
+			}
+			candidates = append(candidates, shallowCompletionCandidate{
+				Path:  dirSuffix(childPath, childIsDir),
+				IsDir: childIsDir,
+				Depth: 1,
+			})
 		}
 	}
 
-	return suggestions, nil
+	return candidates, nil
+}
+
+func scoreCompletionCandidate(prefix string, candidate shallowCompletionCandidate) (int, bool) {
+	query := strings.TrimSpace(prefix)
+	if query == "" {
+		return completionEmptyRank(candidate), true
+	}
+
+	if !candidate.IsDir {
+		if candidate.Depth == 0 && strings.HasPrefix(candidate.base(), query) {
+			return 0, true
+		}
+		if candidate.Depth == 1 && strings.HasPrefix(candidate.base(), query) {
+			return 1, true
+		}
+		if strings.HasPrefix(candidate.Path, query) {
+			return 2, true
+		}
+		if hasSegmentPrefixMatch(candidate.Path, query) {
+			return 3, true
+		}
+		return 0, false
+	}
+
+	if candidate.Depth == 0 && strings.HasPrefix(candidate.base(), query) {
+		return 4, true
+	}
+	if candidate.Depth == 1 && strings.HasPrefix(candidate.base(), query) {
+		return 5, true
+	}
+	if strings.HasPrefix(candidate.Path, query) {
+		return 6, true
+	}
+	if hasSegmentPrefixMatch(candidate.Path, query) {
+		return 7, true
+	}
+	return 0, false
+}
+
+func completionEmptyRank(candidate shallowCompletionCandidate) int {
+	if candidate.IsDir {
+		return 4 + candidate.Depth
+	}
+	return candidate.Depth
+}
+
+func (c shallowCompletionCandidate) base() string {
+	path := strings.TrimSuffix(c.Path, "/")
+	return filepath.Base(filepath.FromSlash(path))
+}
+
+func hasSegmentPrefixMatch(path, query string) bool {
+	trimmed := strings.TrimSuffix(path, "/")
+	for _, segment := range strings.Split(trimmed, "/") {
+		if segmentHasPrefix(segment, query) {
+			return true
+		}
+	}
+	return false
+}
+
+func segmentHasPrefix(segment, query string) bool {
+	if segment == "" || query == "" {
+		return false
+	}
+	if strings.HasPrefix(segment, query) {
+		return true
+	}
+	for _, part := range strings.FieldsFunc(segment, func(r rune) bool {
+		switch r {
+		case '.', '-', '_', '+':
+			return true
+		default:
+			return false
+		}
+	}) {
+		if strings.HasPrefix(part, query) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateCompletionPrefix(prefix string) error {
+	trimmed := strings.TrimSpace(prefix)
+	if trimmed == "" {
+		return nil
+	}
+	if filepath.IsAbs(trimmed) {
+		return fmt.Errorf("tagged file completion prefix must be repo-relative: %s", prefix)
+	}
+	normalized := strings.ReplaceAll(trimmed, "\\", "/")
+	for _, segment := range strings.Split(normalized, "/") {
+		if segment == ".." {
+			return fmt.Errorf("tagged file completion prefix escapes project root: %s", prefix)
+		}
+	}
+	return nil
 }
 
 func scanReference(input string, at int, allowIncomplete bool) (Reference, bool, error) {
@@ -366,29 +530,18 @@ func resolveExistingDirectory(projectRoot, relPath string) (ResolvedPath, error)
 	return resolved, nil
 }
 
-func splitCompletionPrefix(prefix string) (string, string) {
-	prefix = strings.TrimSpace(prefix)
-	if prefix == "" {
-		return "", ""
-	}
-	clean := filepath.Clean(filepath.FromSlash(prefix))
-	if strings.HasSuffix(prefix, "/") || strings.HasSuffix(prefix, string(filepath.Separator)) {
-		return filepath.ToSlash(clean), ""
-	}
-
-	dir, base := filepath.Split(clean)
-	dir = strings.TrimSuffix(dir, string(filepath.Separator))
-	if dir == "." {
-		dir = ""
-	}
-	return filepath.ToSlash(dir), base
-}
-
 func joinTaggedPath(parent, name string) string {
 	if parent == "" {
 		return name
 	}
 	return filepath.ToSlash(filepath.Join(filepath.FromSlash(parent), name))
+}
+
+func dirSuffix(path string, isDir bool) string {
+	if isDir {
+		return path + "/"
+	}
+	return path
 }
 
 func min(a, b int) int {

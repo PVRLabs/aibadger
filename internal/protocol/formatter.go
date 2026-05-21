@@ -34,6 +34,12 @@ func NewFormatter() *Formatter {
 
 // GenerateSchemaA builds Prompt 1: Topology for the LLM.
 func (f *Formatter) GenerateSchemaA(t *model.ProjectTopology, query string) string {
+	return f.GenerateSchemaAWithTaggedFiles(t, query, nil)
+}
+
+// GenerateSchemaAWithTaggedFiles builds Prompt 1: Topology and appends a
+// user-selected tagged-files section when paths are supplied.
+func (f *Formatter) GenerateSchemaAWithTaggedFiles(t *model.ProjectTopology, query string, taggedFiles []string) string {
 	var sb strings.Builder
 
 	f.writeTopologySection(&sb, t, 0)
@@ -60,6 +66,7 @@ func (f *Formatter) GenerateSchemaA(t *model.ProjectTopology, query string) stri
 	}
 
 	f.writeExternalContextSection(&sb, t)
+	f.writeTaggedFilesSection(&sb, taggedFiles)
 	sb.WriteString("\n")
 	sb.WriteString(fmt.Sprintf(f.Instructions.SchemaAConstraint, query))
 
@@ -86,6 +93,16 @@ func (f *Formatter) writeExternalContextSection(sb *strings.Builder, t *model.Pr
 			parts = append(parts, name)
 		}
 		sb.WriteString(fmt.Sprintf("Top: %s\n", strings.Join(parts, ", ")))
+	}
+}
+
+func (f *Formatter) writeTaggedFilesSection(sb *strings.Builder, taggedFiles []string) {
+	if len(taggedFiles) == 0 {
+		return
+	}
+	sb.WriteString("\n[USER TAGGED FILES]\n")
+	for _, path := range taggedFiles {
+		sb.WriteString(fmt.Sprintf("- %s\n", path))
 	}
 }
 

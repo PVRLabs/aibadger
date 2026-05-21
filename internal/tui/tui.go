@@ -81,6 +81,7 @@ type Model struct {
 	promptFileKind string
 	promptFilePath string
 
+	completion          completionState
 	largeProjectPending bool
 	scanFrame           int
 	width               int
@@ -194,6 +195,23 @@ func loadSettingsState(settingsPath string) (Settings, bool, bool) {
 	return settings, !settings.FirstRunOnboardingCompleted, settings.FirstRunOnboardingCompleted
 }
 
+func (m Model) refreshTopologyPrompt() (Model, []string) {
+	schema, warnings := m.workflowSession().GenerateMapDetailed(m.goal)
+	m.schemaA = schema
+	return m, warnings
+}
+
+func taggedFileWarningMessage(warnings []string) tuiMessage {
+	if len(warnings) == 0 {
+		return tuiMessage{}
+	}
+	lines := []string{"Tagged file references produced warnings:"}
+	for _, warning := range warnings {
+		lines = append(lines, "- "+warning)
+	}
+	return warningMessage(strings.Join(lines, "\n"))
+}
+
 func (m Model) Init() tea.Cmd {
 	return textarea.Blink
 }
@@ -229,7 +247,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = stateScanComplete
 		m.largeProjectPending = totalFiles(m.eng.Topology) > m.cfg.LargeProjectFileThreshold
 		if !m.largeProjectPending {
-			m.schemaA = m.session.GenerateMap(m.goal)
+			var warnings []string
+			m, warnings = m.refreshTopologyPrompt()
+			if warning := taggedFileWarningMessage(warnings); !warning.empty() {
+				m.status = warning
+			}
 		}
 		return m, nil
 	case copyDoneMsg:
@@ -300,6 +322,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.response = ""
 		m.goalInput.SetValue("")
 		m.resizeGoalEditor()
+		m.completion.suppressedKey = ""
 		m.goalInput.Focus()
 		m.paste.Blur()
 		if len(msg.errs) > 0 {
@@ -560,6 +583,7 @@ func (m Model) returnHome(status tuiMessage) (tea.Model, tea.Cmd) {
 	m.response = ""
 	m.goalInput.SetValue("")
 	m.resizeGoalEditor()
+	m.completion.suppressedKey = ""
 	m.goalInput.Focus()
 	m.paste.Blur()
 	return m, textarea.Blink

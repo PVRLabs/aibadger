@@ -81,6 +81,10 @@ func (s *Session) GenerateMap(goal string) string {
 	return s.Engine.GenerateMap(goal)
 }
 
+func (s *Session) GenerateMapDetailed(goal string) (string, []string) {
+	return s.Engine.GenerateMapDetailed(goal)
+}
+
 func (s *Session) ParseExtractionCommands(input string) []extractor.Command {
 	return s.Engine.ParseCommands(input)
 }

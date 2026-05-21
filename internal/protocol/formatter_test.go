@@ -168,6 +168,33 @@ func TestGenerateSchemaAIncludesExternalContextSection(t *testing.T) {
 	}
 }
 
+func TestGenerateSchemaAIncludesTaggedFilesSection(t *testing.T) {
+	formatter := NewFormatter()
+	output := formatter.GenerateSchemaAWithTaggedFiles(&model.ProjectTopology{}, "use tagged files", []string{
+		"docs/usage.md",
+		"examples/usage.md",
+	})
+
+	for _, want := range []string{
+		"[USER TAGGED FILES]",
+		"- docs/usage.md",
+		"- examples/usage.md",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("Prompt 1 missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestGenerateSchemaAOmitsTaggedFilesSectionWhenEmpty(t *testing.T) {
+	formatter := NewFormatter()
+	output := formatter.GenerateSchemaAWithTaggedFiles(&model.ProjectTopology{}, "use tagged files", nil)
+
+	if strings.Contains(output, "[USER TAGGED FILES]") {
+		t.Fatalf("Prompt 1 unexpectedly included tagged-files section:\n%s", output)
+	}
+}
+
 func TestGenerateSchemaAReportsTopFilesRelativeToPackage(t *testing.T) {
 	formatter := NewFormatter()
 	topology := &model.ProjectTopology{

@@ -177,8 +177,8 @@ func TestGenerateSchemaAIncludesTaggedFilesSection(t *testing.T) {
 
 	for _, want := range []string{
 		"[USER TAGGED FILES]",
-		"- docs/usage.md",
-		"- examples/usage.md",
+		"FILE:docs/usage.md",
+		"FILE:examples/usage.md",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("Prompt 1 missing %q:\n%s", want, output)

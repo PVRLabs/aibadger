@@ -102,7 +102,7 @@ func (f *Formatter) writeTaggedFilesSection(sb *strings.Builder, taggedFiles []s
 	}
 	sb.WriteString("\n[USER TAGGED FILES]\n")
 	for _, path := range taggedFiles {
-		sb.WriteString(fmt.Sprintf("- %s\n", path))
+		sb.WriteString(fmt.Sprintf("FILE:%s\n", path))
 	}
 }
 

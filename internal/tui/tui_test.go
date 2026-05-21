@@ -251,6 +251,9 @@ func TestGoalPastePreservesMultilineText(t *testing.T) {
 	if !got.status.empty() {
 		t.Fatalf("status = %#v, want empty", got.status)
 	}
+	if got.goalInput.Height() != 4 {
+		t.Fatalf("goal input height = %d, want 4", got.goalInput.Height())
+	}
 }
 
 func TestGoalPastePreservesDiffText(t *testing.T) {
@@ -418,8 +421,8 @@ func TestWindowResizeClearsScreenBeforeRedraw(t *testing.T) {
 	if got.width != 100 || got.height != 32 {
 		t.Fatalf("terminal size = %dx%d, want 100x32", got.width, got.height)
 	}
-	if got.goalInput.Height() != 8 {
-		t.Fatalf("goal input height = %d, want 8", got.goalInput.Height())
+	if got.goalInput.Height() != goalEditorMinHeight {
+		t.Fatalf("goal input height = %d, want %d", got.goalInput.Height(), goalEditorMinHeight)
 	}
 	if cmd == nil {
 		t.Fatal("resize did not request a screen clear")
@@ -429,25 +432,43 @@ func TestWindowResizeClearsScreenBeforeRedraw(t *testing.T) {
 	}
 }
 
-func TestGoalEditorHeightScalesWithTerminalHeight(t *testing.T) {
+func TestGoalEditorHeightAdaptsToContent(t *testing.T) {
 	tests := []struct {
-		name   string
-		height int
-		want   int
+		name           string
+		text           string
+		terminalHeight int
+		want           int
 	}{
-		{name: "unknown height", height: 0, want: goalEditorMinHeight},
-		{name: "small terminal", height: 20, want: goalEditorMinHeight},
-		{name: "medium terminal", height: 32, want: 8},
-		{name: "tall terminal", height: 40, want: goalEditorMaxHeight},
-		{name: "very tall terminal", height: 100, want: goalEditorMaxHeight},
+		{name: "empty", text: "", terminalHeight: 0, want: goalEditorMinHeight},
+		{name: "one line", text: "review this", terminalHeight: 0, want: goalEditorMinHeight},
+		{name: "multiple lines", text: "one\ntwo\nthree", terminalHeight: 0, want: 3},
+		{name: "long input caps at max", text: strings.Repeat("line\n", 20), terminalHeight: 0, want: goalEditorMaxHeight},
+		{name: "terminal height does not change cap", text: strings.Repeat("line\n", 20), terminalHeight: 32, want: goalEditorMaxHeight},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := goalEditorHeight(tt.height); got != tt.want {
-				t.Fatalf("goalEditorHeight(%d) = %d, want %d", tt.height, got, tt.want)
+			if got := goalEditorHeight(tt.text, tt.terminalHeight); got != tt.want {
+				t.Fatalf("goalEditorHeight(%q, %d) = %d, want %d", tt.text, tt.terminalHeight, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGoalEditorHeightGrowsForTypedMultilineGoal(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+
+	next, _ := m.Update(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune("Review this:\n- bug\n- regression"),
+	})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+
+	if got.goalInput.Height() != 3 {
+		t.Fatalf("goal input height = %d, want 3", got.goalInput.Height())
 	}
 }
 

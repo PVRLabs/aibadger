@@ -155,6 +155,7 @@ func (m Model) handleKeyTab() (tea.Model, tea.Cmd, bool) {
 	for _, suggestion := range m.slashCommandSuggestions() {
 		if strings.HasPrefix(suggestion.command, input) {
 			m.goalInput.SetValue(suggestion.command)
+			m.resizeGoalEditor()
 			return m, nil, true
 		}
 	}
@@ -212,6 +213,7 @@ func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
 		m.state = stateHome
 		m.status = neutralMessage("Write cancelled. Ready for a new goal.")
 		m.goalInput.SetValue("")
+		m.resizeGoalEditor()
 		m.goalInput.Focus()
 		return m, textarea.Blink, true
 	}
@@ -298,6 +300,7 @@ func (m Model) handleKeyExitToHome() (tea.Model, tea.Cmd, bool) {
 		m.state = stateHome
 		m.status = neutralMessage("Scan discarded. Try running Badger from a smaller subproject.")
 		m.goalInput.SetValue("")
+		m.resizeGoalEditor()
 		m.goalInput.Focus()
 		return m, textarea.Blink, true
 	}
@@ -313,6 +316,7 @@ func (m Model) forwardKeyToInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case stateHome:
 		m.goalInput, cmd = m.goalInput.Update(msg)
 		m.enforceGoalByteLimit(pastedKeyMsg(msg))
+		m.resizeGoalEditor()
 	case stateWaitingForExtractions, stateWaitingForCode:
 		m.paste, cmd = m.paste.Update(msg)
 		if pastedKeyMsg(msg) {

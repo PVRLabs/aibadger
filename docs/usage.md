@@ -78,13 +78,13 @@ Type or paste one of these as the initial goal in AIBadger.
 For small or focused changes, paste a review goal and diff as the initial task:
 
 ```text
-Review my current change for bugs.
+Review the following change for bugs.
 
 [Paste git diff here]
 ```
 
 ```text
-Review my current change for bugs, performance issues, and missing tests.
+Review the following change for bugs, performance issues, and missing tests.
 
 [Paste git diff here]
 ```

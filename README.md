@@ -56,7 +56,7 @@ instructions, see [docs/install.md](docs/install.md).
 Example review goal:
 
 ```text
-Review my current change for bugs.
+Review the following change for bugs.
 
 [Paste git diff here]
 ```

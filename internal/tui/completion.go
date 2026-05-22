@@ -113,6 +113,9 @@ func (m Model) applyCompletionCandidate(candidate completionCandidate) (tea.Mode
 	m.refreshCompletionCandidate()
 	m.completion.suppressedKey = candidate.kind.String() + ":" + replacement
 
+	if reviewExtraFocus, ok := parseReviewCommand(updated); ok {
+		return m.handleReviewCommand(reviewExtraFocus)
+	}
 	if strings.TrimSpace(updated) == designCommand {
 		return m.handleDesignCommand()
 	}

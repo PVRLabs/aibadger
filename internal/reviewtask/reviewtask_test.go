@@ -23,7 +23,7 @@ func TestBuildDefaultDiffPrompt(t *testing.T) {
 		t.Fatal("Diff is empty")
 	}
 	for _, want := range []string{
-		"Review my current change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing.",
+		"Review the following change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing.",
 		"Additional focus:",
 		"Pay attention to logging.",
 		"Diff:",

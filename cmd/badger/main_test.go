@@ -105,11 +105,10 @@ func TestApplyReviewStartupUsesReviewPrompt(t *testing.T) {
 		reviewExtraFocus: "Check edge cases.",
 	}
 
-	if err := applyReviewStartup(&cfg, app); err != nil {
+	if goal, err := applyReviewStartup(&cfg, app); err != nil {
 		t.Fatalf("applyReviewStartup() error = %v", err)
-	}
-	if !cfg.SkipOnboarding {
-		t.Fatal("SkipOnboarding = false, want true")
+	} else if goal != "" {
+		t.Fatalf("headless review goal = %q, want empty for interactive startup", goal)
 	}
 	if cfg.StartupGoal == "" {
 		t.Fatal("StartupGoal is empty")
@@ -122,14 +121,87 @@ func TestApplyReviewStartupUsesReviewPrompt(t *testing.T) {
 	}
 }
 
+func TestApplyReviewStartupHeadlessUsesPreparedPrompt(t *testing.T) {
+	repo := newGitRepo(t)
+	writeFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"updated\")\n}\n")
+	cfg := badger.DefaultConfig()
+	cfg.Root = repo
+	app := appConfig{
+		focus:      protocol.FocusReview,
+		headless:   true,
+		reviewMode: reviewtask.ModeDefault,
+	}
+
+	goal, err := applyReviewStartup(&cfg, app)
+	if err != nil {
+		t.Fatalf("applyReviewStartup() error = %v", err)
+	}
+	if goal == "" {
+		t.Fatal("headless review goal is empty")
+	}
+	if !strings.Contains(goal, "Diff:") {
+		t.Fatalf("headless review goal missing diff prompt:\n%s", goal)
+	}
+	if cfg.StartupGoal != "" {
+		t.Fatalf("StartupGoal = %q, want empty for headless startup", cfg.StartupGoal)
+	}
+}
+
+func TestApplyReviewStartupHeadlessRejectsNoDiff(t *testing.T) {
+	repo := newGitRepo(t)
+	cfg := badger.DefaultConfig()
+	cfg.Root = repo
+	app := appConfig{
+		focus:      protocol.FocusReview,
+		headless:   true,
+		reviewMode: reviewtask.ModeDefault,
+	}
+
+	goal, err := applyReviewStartup(&cfg, app)
+	if err == nil {
+		t.Fatal("applyReviewStartup() error = nil, want no-diff failure")
+	}
+	if goal != "" {
+		t.Fatalf("headless review goal = %q, want empty on failure", goal)
+	}
+	if !strings.Contains(err.Error(), "no git diff was detected") {
+		t.Fatalf("error = %v, want no-diff failure", err)
+	}
+}
+
+func TestApplyReviewStartupHeadlessRejectsNonGit(t *testing.T) {
+	dir := t.TempDir()
+	cfg := badger.DefaultConfig()
+	cfg.Root = dir
+	app := appConfig{
+		focus:      protocol.FocusReview,
+		headless:   true,
+		reviewMode: reviewtask.ModeDefault,
+	}
+
+	goal, err := applyReviewStartup(&cfg, app)
+	if err == nil {
+		t.Fatal("applyReviewStartup() error = nil, want non-git failure")
+	}
+	if goal != "" {
+		t.Fatalf("headless review goal = %q, want empty on failure", goal)
+	}
+	if !strings.Contains(err.Error(), "not a git repository") {
+		t.Fatalf("error = %v, want non-git failure", err)
+	}
+}
+
 func TestApplyReviewStartupUsesFallbackPromptWhenNoDiff(t *testing.T) {
 	repo := newGitRepo(t)
 	cfg := badger.DefaultConfig()
 	cfg.Root = repo
 	app := appConfig{focus: protocol.FocusReview}
 
-	if err := applyReviewStartup(&cfg, app); err != nil {
+	if _, err := applyReviewStartup(&cfg, app); err != nil {
 		t.Fatalf("applyReviewStartup() error = %v", err)
+	}
+	if !cfg.SkipOnboarding {
+		t.Fatal("SkipOnboarding = false, want true")
 	}
 	if cfg.StartupStatusSeverity != "warning" {
 		t.Fatalf("StartupStatusSeverity = %q, want %q", cfg.StartupStatusSeverity, "warning")

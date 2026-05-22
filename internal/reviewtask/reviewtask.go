@@ -1,6 +1,7 @@
 package reviewtask
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -64,6 +65,47 @@ type Task struct {
 	Prompt                string
 	FallbackPrompt        string
 	FailureClassification FailureClassification
+}
+
+// StartupPrompt returns the editable prompt text appropriate for interactive
+// startup. When a diff was resolved, that is the review prompt. Otherwise it is
+// the manual fallback prompt.
+func (t Task) StartupPrompt() string {
+	if t.FailureClassification == FailureNone {
+		return t.Prompt
+	}
+	return t.FallbackPrompt
+}
+
+// StartupStatus returns the user-facing status text and severity for
+// interactive startup.
+func (t Task) StartupStatus() (text, severity string) {
+	switch t.FailureClassification {
+	case FailureNone:
+		return "Loaded review prompt from the current git diff. Edit it before submitting.", "success"
+	case FailureNoDiff:
+		return "No git diff was detected. The prompt is editable.", "warning"
+	case FailureNotGit:
+		return "This directory is not a git repository. The prompt is editable.", "warning"
+	default:
+		return "Loaded review prompt. Edit it before submitting.", "neutral"
+	}
+}
+
+// HeadlessGoal returns the generated prompt that should seed headless review
+// startup. Non-diff fallback cases are treated as failures so headless review
+// exits with a clear error instead of silently continuing with a manual prompt.
+func (t Task) HeadlessGoal() (string, error) {
+	switch t.FailureClassification {
+	case FailureNone:
+		return t.Prompt, nil
+	case FailureNoDiff:
+		return "", errors.New("review prompt could not be prepared: no git diff was detected")
+	case FailureNotGit:
+		return "", errors.New("review prompt could not be prepared: this directory is not a git repository")
+	default:
+		return "", errors.New("review prompt could not be prepared")
+	}
 }
 
 // Build prepares a review prompt from the requested diff mode.
@@ -188,4 +230,4 @@ func buildFallbackPromptWithReason(extraFocus, reason string) string {
 	return strings.Join(lines, "\n")
 }
 
-var defaultReviewGoal = "Review my current change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing."
+var defaultReviewGoal = "Review the following change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing."

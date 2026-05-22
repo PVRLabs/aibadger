@@ -15,6 +15,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/externalcontext"
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/taggedfile"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
@@ -458,12 +459,8 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 		m.status = tuiMessage{}
 		return m, nil
 	}
-	if goal == reviewCommand {
-		// TODO(#92): Collect working-tree diff for guidance presentation.
-		m.state = stateReviewHelp
-		m.goalInput.Blur()
-		m.status = tuiMessage{}
-		return m, nil
+	if reviewExtraFocus, ok := parseReviewCommand(goal); ok {
+		return m.handleReviewCommand(reviewExtraFocus)
 	}
 	if goal == designCommand {
 		return m.handleDesignCommand()
@@ -486,6 +483,45 @@ func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
 	m.goalInput.Focus()
+	return m, textarea.Blink
+}
+
+func parseReviewCommand(goal string) (string, bool) {
+	goal = strings.TrimSpace(goal)
+	if goal == reviewCommand {
+		return "", true
+	}
+	if !strings.HasPrefix(goal, reviewCommand+" ") {
+		return "", false
+	}
+	return strings.TrimSpace(strings.TrimPrefix(goal, reviewCommand)), true
+}
+
+func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
+	task, err := reviewtask.Build(m.root, reviewtask.Options{
+		Mode:       reviewtask.ModeDefault,
+		ExtraFocus: extraFocus,
+	})
+	if err != nil {
+		m.status = errorMessage(fmt.Sprintf("Unable to prepare review prompt: %v", err))
+		m.err = nil
+		m.goalInput.Focus()
+		return m, textarea.Blink
+	}
+
+	m.cfg.Focus = protocol.FocusReview
+	m.state = stateHome
+	m.goal = ""
+	m.err = nil
+	m.completion.suppressedKey = ""
+	m.setGoalInputValue(task.StartupPrompt())
+	m.resizeGoalEditor()
+	m.goalInput.Focus()
+	m.paste.Blur()
+
+	status, severity := task.StartupStatus()
+	m.status = startupMessage(severity, status)
+
 	return m, textarea.Blink
 }
 

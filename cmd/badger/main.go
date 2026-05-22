@@ -83,8 +83,11 @@ func main() {
 	badgerCfg := badger.DefaultConfig()
 	badgerCfg.BuildInfo = buildInfoLine()
 	badgerCfg.Focus = protocol.NormalizeFocus(cfg.focus)
+	var headlessReviewGoal string
 	if cfg.focus == protocol.FocusReview {
-		if err := applyReviewStartup(&badgerCfg, cfg); err != nil {
+		var err error
+		headlessReviewGoal, err = applyReviewStartup(&badgerCfg, cfg)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -99,6 +102,7 @@ func main() {
 	if err := badger.RunHeadless(badgerCfg, badger.HeadlessOptions{
 		Step:             cfg.stepFlag,
 		InputPath:        cfg.inputFlag,
+		Goal:             headlessReviewGoal,
 		TruncateTopology: cfg.truncateTopology,
 	}); err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -282,37 +286,24 @@ func validateReviewOptions(mode reviewtask.Mode, ref string) error {
 	return nil
 }
 
-func applyReviewStartup(cfg *badger.Config, app appConfig) error {
+func applyReviewStartup(cfg *badger.Config, app appConfig) (string, error) {
 	reviewTask, err := reviewtask.Build(cfg.Root, reviewtask.Options{
 		Mode:       app.reviewMode,
 		Ref:        app.reviewRef,
 		ExtraFocus: app.reviewExtraFocus,
 	})
 	if err != nil {
-		return err
+		return "", err
+	}
+
+	if app.headless {
+		return reviewTask.HeadlessGoal()
 	}
 
 	cfg.SkipOnboarding = true
-	switch reviewTask.FailureClassification {
-	case reviewtask.FailureNone:
-		cfg.StartupGoal = reviewTask.Prompt
-		cfg.StartupStatus = "Loaded review prompt from the current git diff. Edit it before submitting."
-		cfg.StartupStatusSeverity = "success"
-	case reviewtask.FailureNoDiff:
-		cfg.StartupGoal = reviewTask.FallbackPrompt
-		cfg.StartupStatus = "No git diff was detected. The prompt is editable."
-		cfg.StartupStatusSeverity = "warning"
-	case reviewtask.FailureNotGit:
-		cfg.StartupGoal = reviewTask.FallbackPrompt
-		cfg.StartupStatus = "This directory is not a git repository. The prompt is editable."
-		cfg.StartupStatusSeverity = "warning"
-	default:
-		cfg.StartupGoal = reviewTask.Prompt
-		cfg.StartupStatus = "Loaded review prompt. Edit it before submitting."
-		cfg.StartupStatusSeverity = "neutral"
-	}
-
-	return nil
+	cfg.StartupGoal = reviewTask.StartupPrompt()
+	cfg.StartupStatus, cfg.StartupStatusSeverity = reviewTask.StartupStatus()
+	return "", nil
 }
 
 func usedDevOnlyFlags(args []string) []string {

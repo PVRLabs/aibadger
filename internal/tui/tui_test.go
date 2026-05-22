@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -172,7 +173,7 @@ func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
 
 func TestNewModelAppliesFallbackReviewGoalAndWarningStatus(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.StartupGoal = "Review my current change before committing."
+	cfg.StartupGoal = "Review the following change before committing."
 	cfg.StartupStatus = "No git diff was detected. The prompt is editable."
 	cfg.StartupStatusSeverity = "warning"
 	cfg.SkipOnboarding = true
@@ -636,8 +637,9 @@ func TestSubmitGoalHelpCommandShowsHelp(t *testing.T) {
 	}
 }
 
-func TestSubmitGoalReviewCommandShowsReviewHelp(t *testing.T) {
-	m := NewModel("/tmp/project", DefaultConfig())
+func TestSubmitGoalReviewCommandUsesPreparedPrompt(t *testing.T) {
+	repo := newReviewRepo(t, "println(\"updated\")")
+	m := NewModel(repo, DefaultConfig())
 	m.goalInput.SetValue("/review")
 
 	next, cmd := m.submitGoal()
@@ -645,34 +647,74 @@ func TestSubmitGoalReviewCommandShowsReviewHelp(t *testing.T) {
 	if !ok {
 		t.Fatalf("submitGoal returned %T, want tui.Model", next)
 	}
-	if got.state != stateReviewHelp {
-		t.Fatalf("state = %v, want %v", got.state, stateReviewHelp)
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
 	}
-	if got.goal != "" {
-		t.Fatalf("goal = %q, want empty", got.goal)
+	if got.cfg.Focus != protocol.FocusReview {
+		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusReview)
 	}
-	if cmd != nil {
-		t.Fatal("review command returned unexpected scan command")
+	if got.goalInput.Value() == "" {
+		t.Fatal("goal input is empty")
 	}
-	view := got.View()
-	for _, want := range []string{
-		"Code review with Badger",
-		"Use this when you want an AI chat to review a local change",
-		"share or ship it.",
-		"Example goal:",
-		"> Review my current change for concrete bugs",
-		"before committing.",
-		"> <git diff output>",
-		"Tip:",
-		"To review the latest commit, run `git show | pbcopy`",
-		"For larger diffs, prefer asking Badger to map the project",
-		"Preview feature:",
-		"Badger does not review local changes directly yet.",
-		"https://github.com/PVRLabs/aibadger/issues/7",
-	} {
-		if !strings.Contains(view, want) {
-			t.Fatalf("review help missing %q:\n%s", want, view)
-		}
+	if strings.Contains(got.goalInput.Value(), "/review") {
+		t.Fatalf("goal input still contains command text: %q", got.goalInput.Value())
+	}
+	if !strings.Contains(got.goalInput.Value(), "Diff:") {
+		t.Fatalf("goal input missing diff prompt:\n%s", got.goalInput.Value())
+	}
+	if !strings.Contains(got.status.text, "Loaded review prompt from the current git diff") {
+		t.Fatalf("status = %q, want success review status", got.status.text)
+	}
+	if cmd == nil {
+		t.Fatal("review command returned nil blink command")
+	}
+}
+
+func TestSubmitGoalReviewCommandUsesExtraFocusText(t *testing.T) {
+	repo := newReviewRepo(t, "println(\"branch\")")
+	m := NewModel(repo, DefaultConfig())
+	m.goalInput.SetValue("/review Check error handling and nil guards.")
+
+	next, cmd := m.submitGoal()
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("submitGoal returned %T, want tui.Model", next)
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if !strings.Contains(got.goalInput.Value(), "Additional focus:") {
+		t.Fatalf("goal input missing additional focus heading:\n%s", got.goalInput.Value())
+	}
+	if !strings.Contains(got.goalInput.Value(), "Check error handling and nil guards.") {
+		t.Fatalf("goal input missing extra focus text:\n%s", got.goalInput.Value())
+	}
+	if cmd == nil {
+		t.Fatal("review command returned nil blink command")
+	}
+}
+
+func TestSubmitGoalReviewCommandUsesFallbackPromptWhenNoDiff(t *testing.T) {
+	repo := newReviewRepo(t, "")
+	m := NewModel(repo, DefaultConfig())
+	m.goalInput.SetValue("/review")
+
+	next, cmd := m.submitGoal()
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("submitGoal returned %T, want tui.Model", next)
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if !strings.Contains(got.goalInput.Value(), "Paste the diff below or replace this text with the change you want reviewed.") {
+		t.Fatalf("goal input missing manual fallback text:\n%s", got.goalInput.Value())
+	}
+	if !strings.Contains(got.status.text, "No git diff was detected") {
+		t.Fatalf("status = %q, want no-diff warning", got.status.text)
+	}
+	if cmd == nil {
+		t.Fatal("review command returned nil blink command")
 	}
 }
 
@@ -759,7 +801,7 @@ func TestHomeViewSurfacesReviewUseCase(t *testing.T) {
 
 	view := m.View()
 
-	if !strings.Contains(view, "Type a goal, paste a diff, or use /design, then press Enter.") {
+	if !strings.Contains(view, "Type a goal, paste a diff, or use /review or /design, then press Enter.") {
 		t.Fatalf("home view missing review goal guidance:\n%s", view)
 	}
 	if !strings.Contains(view, "Commands: /help, /review, /design, /exit") {
@@ -786,7 +828,7 @@ func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 		"/help",
 		"Show commands and keyboard shortcuts.",
 		"/review",
-		"Show diff review guidance.",
+		"Build a review prompt from the current git diff.",
 		"/design",
 		"Switch the active focus to Design.",
 		"/exit",
@@ -912,18 +954,28 @@ func TestDesignCompletionEnterThenEnterSwitchesFocus(t *testing.T) {
 	}
 }
 
-func TestHomeTabCompletesFilteredSlashCommandSuggestion(t *testing.T) {
-	m := NewModel("/tmp/project", DefaultConfig())
+func TestHomeTabCompletesReviewSuggestionAndStartsReview(t *testing.T) {
+	repo := newReviewRepo(t, "println(\"updated\")")
+	m := NewModel(repo, DefaultConfig())
 	m.goalInput.SetValue("/r")
 	m.refreshCompletionCandidate()
 
-	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
 	got, ok := next.(Model)
 	if !ok {
 		t.Fatalf("handleKey returned %T, want tui.Model", next)
 	}
-	if got.goalInput.Value() != "/review" {
-		t.Fatalf("goal input = %q, want /review", got.goalInput.Value())
+	if got.cfg.Focus != protocol.FocusReview {
+		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusReview)
+	}
+	if !strings.Contains(got.goalInput.Value(), "Diff:") {
+		t.Fatalf("goal input missing diff prompt:\n%s", got.goalInput.Value())
+	}
+	if !strings.Contains(got.status.text, "Loaded review prompt from the current git diff") {
+		t.Fatalf("status = %q, want review success", got.status.text)
+	}
+	if cmd == nil {
+		t.Fatal("review completion returned nil command")
 	}
 }
 
@@ -1210,8 +1262,9 @@ func TestTaggedCompletionSkipsNoisyDirectories(t *testing.T) {
 	}
 }
 
-func TestSlashCompletionEnterSelectsSuggestionWithoutSubmitting(t *testing.T) {
-	m := NewModel("/tmp/project", DefaultConfig())
+func TestSlashCompletionEnterStartsReview(t *testing.T) {
+	repo := newReviewRepo(t, "println(\"updated\")")
+	m := NewModel(repo, DefaultConfig())
 	m.goalInput.SetValue("/r")
 	m.refreshCompletionCandidate()
 
@@ -1220,14 +1273,20 @@ func TestSlashCompletionEnterSelectsSuggestionWithoutSubmitting(t *testing.T) {
 	if !ok {
 		t.Fatalf("handleKey returned %T, want tui.Model", next)
 	}
-	if got.goalInput.Value() != "/review" {
-		t.Fatalf("goal input = %q, want /review", got.goalInput.Value())
+	if got.cfg.Focus != protocol.FocusReview {
+		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusReview)
+	}
+	if !strings.Contains(got.goalInput.Value(), "Diff:") {
+		t.Fatalf("goal input missing diff prompt:\n%s", got.goalInput.Value())
 	}
 	if got.state != stateHome {
 		t.Fatalf("state = %v, want home", got.state)
 	}
-	if cmd != nil {
-		t.Fatal("completion enter returned unexpected command")
+	if !strings.Contains(got.status.text, "Loaded review prompt from the current git diff") {
+		t.Fatalf("status = %q, want review success", got.status.text)
+	}
+	if cmd == nil {
+		t.Fatal("completion enter returned nil command")
 	}
 }
 
@@ -2892,4 +2951,47 @@ func assertMaxRenderedLineWidth(t *testing.T, rendered string, maxWidth int) {
 			t.Fatalf("rendered line width = %d, want <= %d:\n%s\n\nfull view:\n%s", width, maxWidth, line, rendered)
 		}
 	}
+}
+
+func newReviewRepo(t *testing.T, updatedLine string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	runReviewGitCmd(t, dir, "init")
+	runReviewGitCmd(t, dir, "checkout", "-b", "main")
+	runReviewGitCmd(t, dir, "config", "user.name", "Badger Test")
+	runReviewGitCmd(t, dir, "config", "user.email", "badger@example.com")
+	writeReviewFile(t, dir, "app.go", "package main\n\nfunc main() {\n\tprintln(\"base\")\n}\n")
+	runReviewGitCmd(t, dir, "add", "app.go")
+	runReviewGitCmd(t, dir, "commit", "-m", "initial commit")
+	if updatedLine != "" {
+		writeReviewFile(t, dir, "app.go", "package main\n\nfunc main() {\n\t"+updatedLine+"\n}\n")
+	}
+	return dir
+}
+
+func writeReviewFile(t *testing.T, dir, path, contents string) {
+	t.Helper()
+
+	fullPath := filepath.Join(dir, path)
+	if err := os.WriteFile(fullPath, []byte(contents), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", fullPath, err)
+	}
+}
+
+func runReviewGitCmd(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Badger Test",
+		"GIT_AUTHOR_EMAIL=badger@example.com",
+		"GIT_COMMITTER_NAME=Badger Test",
+		"GIT_COMMITTER_EMAIL=badger@example.com",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(output))
+	}
+	return string(output)
 }

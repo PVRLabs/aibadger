@@ -91,7 +91,7 @@ func (m Model) View() string {
 
 func (m Model) viewHome() string {
 	var lines []string
-	lines = append(lines, "Type a goal, paste a diff, or use /design, then press Enter.")
+	lines = append(lines, "Type a goal, paste a diff, or use /review or /design, then press Enter.")
 	lines = append(lines, "Commands: /help, /review, /design, /exit")
 	lines = append(lines, "Tag files with @path/to/file, then press Tab.")
 	lines = append(lines, "")
@@ -149,7 +149,7 @@ func (m Model) viewCompletionSuggestions() string {
 func (m Model) slashCommandSuggestions() []slashCommandSuggestion {
 	suggestions := []slashCommandSuggestion{
 		{command: helpCommand, description: "Show commands and keyboard shortcuts."},
-		{command: reviewCommand, description: "Show diff review guidance."},
+		{command: reviewCommand, description: "Build a review prompt from the current git diff."},
 		{command: designCommand, description: "Switch the active focus to Design."},
 	}
 	if m.cfg.ExitCommand != "" {
@@ -330,7 +330,7 @@ func (m Model) viewHelp() string {
 		"Commands",
 		"",
 		"/help          Show this reference.",
-		"/review        Show diff review guidance.",
+		"/review        Build a review prompt from the current git diff.",
 		"/design        Switch the active focus to Design.",
 		"/exit          Quit Badger.",
 		"",
@@ -362,19 +362,14 @@ func (m Model) viewReviewHelp() string {
 	body := strings.Join([]string{
 		"Code review with Badger",
 		"",
-		"Use this when you want an AI chat to review a local change before you share or ship it.",
+		"Use /review to seed the editable prompt from the current git diff.",
 		"",
 		renderBold("Example goal:"),
-		"> Review my current change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing.",
+		"> Review the following change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing.",
 		"> <git diff output>",
 		"",
 		renderBold("Tip:"),
-		reviewGitShowTip(),
-		"For larger diffs, prefer asking Badger to map the project first and let the AI request the specific files it needs.",
-		"",
-		renderBold("Preview feature:"),
-		"Badger does not review local changes directly yet. Coming later: reviewing current unstaged or staged git diffs from your project.",
-		"Implementation discussion: https://github.com/PVRLabs/aibadger/issues/7",
+		"Add extra focus text after /review when you want to narrow the review to specific risks or files.",
 		"",
 		"Press Enter to return home.",
 	}, "\n")

@@ -20,7 +20,9 @@ type Formatter struct {
 	MaxPackages          int // 0 means no limit
 	MaxContextFileBytes  int // 0 means no limit
 	MaxTotalContextBytes int // 0 means no limit
+	Focus                Focus
 	Instructions         PromptInstructions
+	customInstructions   bool
 }
 
 // NewFormatter creates a new Formatter instance.
@@ -28,8 +30,32 @@ func NewFormatter() *Formatter {
 	return &Formatter{
 		MaxContextFileBytes:  defaults.MaxContextFileBytes,
 		MaxTotalContextBytes: defaults.MaxTotalContextBytes,
+		Focus:                FocusCode,
 		Instructions:         DefaultInstructions,
 	}
+}
+
+// SetFocus updates the prompt framing preset while preserving custom
+// instructions when the caller has already overridden the prompt text.
+func (f *Formatter) SetFocus(focus Focus) {
+	if f == nil {
+		return
+	}
+	f.Focus = NormalizeFocus(focus)
+	if f.customInstructions {
+		return
+	}
+	f.Instructions = InstructionsForFocus(f.Focus)
+}
+
+// SetPromptInstructions overrides the prompt text and marks it as custom so
+// future focus changes do not clobber the caller-provided contract.
+func (f *Formatter) SetPromptInstructions(instr PromptInstructions) {
+	if f == nil {
+		return
+	}
+	f.Instructions = instr
+	f.customInstructions = true
 }
 
 // TaggedFile represents a user-selected file with its resolution metadata.
@@ -74,7 +100,8 @@ func (f *Formatter) GenerateSchemaAWithTaggedFiles(t *model.ProjectTopology, que
 	f.writeExternalContextSection(&sb, t)
 	f.writeTaggedFilesSection(&sb, taggedFiles)
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf(f.Instructions.SchemaAConstraint, query))
+	instr := f.currentInstructions()
+	sb.WriteString(fmt.Sprintf(instr.SchemaAConstraint, query))
 
 	return sb.String()
 }
@@ -377,7 +404,8 @@ func (f *Formatter) buildSchemaB(t *model.ProjectTopology, extractions []Extract
 		sb.WriteString("\n--- End File ---\n")
 	}
 
-	sb.WriteString(fmt.Sprintf(f.Instructions.SchemaBConstraint, query))
+	instr := f.currentInstructions()
+	sb.WriteString(fmt.Sprintf(instr.SchemaBConstraint, query))
 
 	return sb.String()
 }
@@ -414,6 +442,22 @@ func (f *Formatter) trimContent(content string, limit int) string {
 
 	truncatedBytes := len(content) - len(start) - len(end)
 	return fmt.Sprintf("%s\n... [Truncated %d bytes] ...\n%s", start, truncatedBytes, end)
+}
+
+func (f *Formatter) currentInstructions() PromptInstructions {
+	if f == nil {
+		return DefaultInstructions
+	}
+	expected := InstructionsForFocus(f.Focus)
+	if f.customInstructions || f.Instructions != expected {
+		if f.Instructions != (PromptInstructions{}) {
+			return f.Instructions
+		}
+	}
+	if expected == (PromptInstructions{}) {
+		return f.Instructions
+	}
+	return expected
 }
 
 // ExtractionResult stores the result of a single extraction command.

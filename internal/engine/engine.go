@@ -68,7 +68,12 @@ func (e *Engine) SetMaxTotalContextBytes(limit int) {
 
 // SetPromptInstructions configures the LLM constraints used by the formatter.
 func (e *Engine) SetPromptInstructions(instr protocol.PromptInstructions) {
-	e.formatter.Instructions = instr
+	e.formatter.SetPromptInstructions(instr)
+}
+
+// SetFocus configures the prompt framing preset used by the formatter.
+func (e *Engine) SetFocus(focus protocol.Focus) {
+	e.formatter.SetFocus(focus)
 }
 
 // GenerateMap builds Prompt 1: Topology.

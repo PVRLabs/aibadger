@@ -102,6 +102,95 @@ func TestGenerateSchemaAIncludesContextSelectionGuidance(t *testing.T) {
 	}
 }
 
+func TestGenerateSchemaAUsesFocusSpecificConstraints(t *testing.T) {
+	cases := []struct {
+		name      string
+		focus     Focus
+		wantA     []string
+		wantB     []string
+		unwantedB []string
+	}{
+		{
+			name:  "code",
+			focus: FocusCode,
+			wantA: []string{
+				"Do not solve this yet. You do not know exact method names.",
+				"Target the smallest context set required for the first logical step.",
+			},
+			wantB: []string{
+				"This is the final-answer step. Source context has already been extracted.",
+				"Output format rules:",
+			},
+		},
+		{
+			name:  "review",
+			focus: FocusReview,
+			wantA: []string{
+				"Do not propose a fix yet.",
+				"Target the smallest context set needed to confirm or refute correctness, regressions, test coverage gaps, and behavior changes.",
+				"changed files, entrypoints, and directly related tests",
+			},
+			wantB: []string{
+				"This is the final-answer step for a code review.",
+				"report findings, risks, or a clear no-issues result",
+				"Do not invent patches unless the user explicitly asks for a fix.",
+			},
+			unwantedB: []string{
+				"full updated file contents",
+				"explicit file deletion",
+			},
+		},
+		{
+			name:  "design",
+			focus: FocusDesign,
+			wantA: []string{
+				"Do not implement the design yet.",
+				"Target the smallest context set needed to shape the design.",
+				"core models, config/defaults, and specs/docs when present",
+			},
+			wantB: []string{
+				"This is the final-answer step for a design task.",
+				"explain the recommended approach, tradeoffs, or open decisions",
+				"State the recommended design first.",
+			},
+			unwantedB: []string{
+				"full updated file contents",
+				"clear no-issues result",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			formatter := NewFormatter()
+			formatter.SetFocus(tc.focus)
+
+			outA := formatter.GenerateSchemaA(&model.ProjectTopology{}, "focus test")
+			for _, want := range append([]string{
+				"FILE:<path>",
+				"PREFIX:<path>#<literal prefix from the start of the target line>",
+				"NEAR:<path>#<literal string from a nearby unique line or comment>",
+			}, tc.wantA...) {
+				if !strings.Contains(outA, want) {
+					t.Fatalf("Prompt 1 missing %q for focus %s:\n%s", want, tc.focus, outA)
+				}
+			}
+
+			outB, _ := formatter.GenerateSchemaB(&model.ProjectTopology{}, []ExtractionResult{{Path: "f1", Content: "c1"}}, "focus test")
+			for _, want := range tc.wantB {
+				if !strings.Contains(outB, want) {
+					t.Fatalf("Prompt 2 missing %q for focus %s:\n%s", want, tc.focus, outB)
+				}
+			}
+			for _, unwanted := range tc.unwantedB {
+				if strings.Contains(outB, unwanted) {
+					t.Fatalf("Prompt 2 unexpectedly contained %q for focus %s:\n%s", unwanted, tc.focus, outB)
+				}
+			}
+		})
+	}
+}
+
 func TestGenerateSchemaAPreservesMultilineTask(t *testing.T) {
 	formatter := NewFormatter()
 	task := strings.Join([]string{
@@ -776,7 +865,7 @@ func TestFormatterCustomInstructions(t *testing.T) {
 		SchemaAConstraint: "CUSTOM A: %s",
 		SchemaBConstraint: "CUSTOM B: %s",
 	}
-	formatter.Instructions = custom
+	formatter.SetPromptInstructions(custom)
 
 	topology := &model.ProjectTopology{}
 	query := "hello"

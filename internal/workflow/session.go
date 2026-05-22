@@ -17,6 +17,7 @@ type EngineOptions struct {
 	MaxContextFileBytes  int
 	MaxTotalContextBytes int
 	MaxPackages          int
+	Focus                protocol.Focus
 	SchemaAConstraint    string
 	SchemaBConstraint    string
 }
@@ -27,6 +28,7 @@ func ConfigureEngine(eng *engine.Engine, opts EngineOptions) {
 	if opts.MaxPackages > 0 {
 		eng.SetMaxPackages(opts.MaxPackages)
 	}
+	eng.SetFocus(opts.Focus)
 	if opts.SchemaAConstraint == "" && opts.SchemaBConstraint == "" {
 		return
 	}

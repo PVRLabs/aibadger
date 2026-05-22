@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,32 @@ import (
 	"github.com/PVRLabs/aibadger/internal/version"
 	"github.com/PVRLabs/aibadger/pkg/badger"
 )
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	defer r.Close()
+	os.Stdout = w
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close stdout pipe error = %v", err)
+	}
+	var out bytes.Buffer
+	if _, err := io.Copy(&out, r); err != nil {
+		t.Fatalf("read stdout pipe error = %v", err)
+	}
+	return out.String()
+}
 
 func TestLoadConfigHelp(t *testing.T) {
 	cfg := loadConfig([]string{"--help"})
@@ -258,6 +285,22 @@ func TestPrintVersion(t *testing.T) {
 
 	if got, want := out.String(), "badger "+version.Version+"\n"; got != want {
 		t.Fatalf("printVersion() = %q, want %q", got, want)
+	}
+}
+
+func TestPrintUsageIncludesReviewEntrypoint(t *testing.T) {
+	out := captureStdout(t, func() {
+		printUsage(appConfig{})
+	})
+
+	for _, want := range []string{
+		"badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]",
+		"`badger review` preloads an editable review prompt from the current git diff.",
+		"manual fallback prompt in the editor",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("printUsage output missing %q:\n%s", want, out)
+		}
 	}
 }
 

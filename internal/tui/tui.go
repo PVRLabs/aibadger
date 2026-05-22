@@ -39,7 +39,6 @@ const (
 	stateWriting
 	stateManualCopy
 	stateHelp
-	stateReviewHelp
 	statePromptFileReveal
 )
 

@@ -130,10 +130,6 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		next, cmd := m.returnHome(neutralMessage("Ready for a goal."))
 		return next, cmd, true
 
-	case stateReviewHelp:
-		next, cmd := m.returnHome(neutralMessage("Ready for a goal."))
-		return next, cmd, true
-
 	case stateWaitingForExtractions, stateWaitingForCode:
 		// Enter is a fallback submit for the paste widget (paste events submit
 		// automatically; see forwardKeyToInput below).

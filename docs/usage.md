@@ -24,6 +24,8 @@ from the shallow file list. Tagged references also resolve against
 [external context](usage.md#external-context) directories when no local
 file exists.
 
+For a zero-config code review, run `badger review`. Badger opens Review focus with an editable prompt seeded from the current git diff. Use `--staged`, `--branch <ref>`, or `--commit <sha>` to choose the diff source. If no diff is available or the repository is not git-backed, Badger leaves a manual fallback prompt in the editor.
+
 > [!TIP]
 > AIBadger never reads your source code ahead of time — you explicitly provide context (like a diff or error output) so only what's needed leaves your machine.
 
@@ -122,7 +124,7 @@ Add validation so empty project names are rejected before saving. Keep the chang
 ## Commands
 
 - `/help`: show the interactive command reference.
-- `/review`: show diff-review guidance. This does not run git, read local diffs, copy to the clipboard, or enter a separate review mode.
+- `/review`: seed an editable review prompt from the current git diff. It reuses the same review flow as `badger review`.
 - `/design`: switch the active focus to Design. The active focus appears in the status bar as `Focus: Design` and the prompt guides toward design recommendations instead of code patches.
 - `/exit`: quit AIBadger.
 
@@ -132,7 +134,7 @@ first argument:
 ```bash
 badger          # Code focus (default)
 badger design   # Design focus — prompt asks for design recommendations
-badger review   # Review focus — prompt asks for review findings
+badger review   # Review focus — prompt is prefilled from the current git diff
 ```
 
 ## External Context

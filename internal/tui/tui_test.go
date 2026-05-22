@@ -630,6 +630,7 @@ func TestSubmitGoalHelpCommandShowsHelp(t *testing.T) {
 	for _, want := range []string{
 		"Tab            Complete / commands and @ files.",
 		"@path/to/file",
+		"/review        Seed an editable review prompt from the current git diff.",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("help view missing %q:\n%s", want, view)
@@ -828,7 +829,7 @@ func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 		"/help",
 		"Show commands and keyboard shortcuts.",
 		"/review",
-		"Build a review prompt from the current git diff.",
+		"Seed an editable review prompt from the current git diff.",
 		"/design",
 		"Switch the active focus to Design.",
 		"/exit",

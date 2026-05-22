@@ -78,8 +78,6 @@ func (m Model) View() string {
 		b.WriteString(m.viewManualCopy())
 	case stateHelp:
 		b.WriteString(m.viewHelp())
-	case stateReviewHelp:
-		b.WriteString(m.viewReviewHelp())
 	case statePromptFileReveal:
 		b.WriteString(m.viewPromptFileReveal())
 	}
@@ -149,7 +147,7 @@ func (m Model) viewCompletionSuggestions() string {
 func (m Model) slashCommandSuggestions() []slashCommandSuggestion {
 	suggestions := []slashCommandSuggestion{
 		{command: helpCommand, description: "Show commands and keyboard shortcuts."},
-		{command: reviewCommand, description: "Build a review prompt from the current git diff."},
+		{command: reviewCommand, description: "Seed an editable review prompt from the current git diff."},
 		{command: designCommand, description: "Switch the active focus to Design."},
 	}
 	if m.cfg.ExitCommand != "" {
@@ -330,7 +328,7 @@ func (m Model) viewHelp() string {
 		"Commands",
 		"",
 		"/help          Show this reference.",
-		"/review        Build a review prompt from the current git diff.",
+		"/review        Seed an editable review prompt from the current git diff.",
 		"/design        Switch the active focus to Design.",
 		"/exit          Quit Badger.",
 		"",
@@ -355,24 +353,6 @@ func (m Model) viewHelp() string {
 	if m.cfg.BuildInfo != "" {
 		body = fmt.Sprintf("%s\n\n%s", m.cfg.BuildInfo, body)
 	}
-	return m.renderBox(body)
-}
-
-func (m Model) viewReviewHelp() string {
-	body := strings.Join([]string{
-		"Code review with Badger",
-		"",
-		"Use /review to seed the editable prompt from the current git diff.",
-		"",
-		renderBold("Example goal:"),
-		"> Review the following change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing.",
-		"> <git diff output>",
-		"",
-		renderBold("Tip:"),
-		"Add extra focus text after /review when you want to narrow the review to specific risks or files.",
-		"",
-		"Press Enter to return home.",
-	}, "\n")
 	return m.renderBox(body)
 }
 

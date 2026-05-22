@@ -341,21 +341,7 @@ func hasHeadlessOnlyFlagsWithoutHeadless(cfg appConfig) bool {
 }
 
 func printUsage(cfg appConfig) {
-	fmt.Printf(`%s - local context bridge
-%s
-
-Usage:
-  badger [code|review|design] [--help]
-  badger [code|review|design] [--version]
-  badger version
-
-Options:
-  --help, -h        Print this help and exit.
-  --version         Print version and exit.
-
-Standard runs start the interactive BYOL workflow for the current directory.
-The default focus is Code; use badger review or badger design to start in a different focus.
-`, badger.Name, buildInfoLine())
+	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design] [--help]\n  badger [code|review|design] [--version]\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nStandard runs start the interactive BYOL workflow for the current directory.\nThe default focus is Code; use badger review or badger design to start in a different focus.\n`badger review` preloads an editable review prompt from the current git diff. Use `--staged`, `--branch <ref>`, or `--commit <sha>` to change the diff source. If no diff is available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
 
 	// Show note about dev flags in release builds
 	if releaseBuild {

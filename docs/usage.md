@@ -20,7 +20,9 @@ badger
 Type a goal. You can also paste a git diff if you want to provide details of the change.
 If you want Prompt 1 to include a specific file, type a tagged reference like
 `@docs/usage.md` in the goal input. Press `Tab` to complete `@` references
-from the shallow file list.
+from the shallow file list. Tagged references also resolve against
+[external context](usage.md#external-context) directories when no local
+file exists.
 
 > [!TIP]
 > AIBadger never reads your source code ahead of time — you explicitly provide context (like a diff or error output) so only what's needed leaves your machine.

@@ -123,7 +123,17 @@ Add validation so empty project names are rejected before saving. Keep the chang
 
 - `/help`: show the interactive command reference.
 - `/review`: show diff-review guidance. This does not run git, read local diffs, copy to the clipboard, or enter a separate review mode.
+- `/design`: switch the active focus to Design. The pipeline label changes to "Respond" and the final-stage prompt asks for design recommendations instead of code patches.
 - `/exit`: quit AIBadger.
+
+To start in a specific focus from the command line, pass the focus name as the
+first argument:
+
+```bash
+badger          # Code focus (default)
+badger design   # Design focus — prompt asks for design recommendations
+badger review   # Review focus — prompt asks for review findings
+```
 
 ## External Context
 

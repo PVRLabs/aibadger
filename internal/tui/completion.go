@@ -112,6 +112,11 @@ func (m Model) applyCompletionCandidate(candidate completionCandidate) (tea.Mode
 	m.resizeGoalEditor()
 	m.refreshCompletionCandidate()
 	m.completion.suppressedKey = candidate.kind.String() + ":" + replacement
+
+	if strings.TrimSpace(updated) == designCommand {
+		return m.handleDesignCommand()
+	}
+
 	return m, nil
 }
 

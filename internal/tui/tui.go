@@ -48,6 +48,7 @@ const (
 	helpCommand           = "/help"
 	reviewCommand         = "/review"
 	designCommand         = "/design"
+	defaultDesignPrompt   = "Design: approach with tradeoffs, risks, implementation sequence, and deferrals.\n\nDescription: "
 )
 
 type Model struct {
@@ -431,20 +432,14 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if goal == reviewCommand {
+		// TODO(#92): Collect working-tree diff for guidance presentation.
 		m.state = stateReviewHelp
 		m.goalInput.Blur()
 		m.status = tuiMessage{}
 		return m, nil
 	}
 	if goal == designCommand {
-		m.cfg.Focus = protocol.FocusDesign
-		m.status = successMessage("Focus set to Design.")
-		m.err = nil
-		m.setGoalInputValue("")
-		m.resizeGoalEditor()
-		m.completion.suppressedKey = ""
-		m.goalInput.Focus()
-		return m, textarea.Blink
+		return m.handleDesignCommand()
 	}
 
 	m.goal = goal
@@ -454,6 +449,17 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 	m.scanFrame = 0
 	m.goalInput.Blur()
 	return m, tea.Batch(scanProjectCmd(m.root), scanTick())
+}
+
+func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
+	m.cfg.Focus = protocol.FocusDesign
+	m.status = successMessage("Focus set to Design.")
+	m.err = nil
+	m.setGoalInputValue(defaultDesignPrompt)
+	m.resizeGoalEditor()
+	m.completion.suppressedKey = ""
+	m.goalInput.Focus()
+	return m, textarea.Blink
 }
 
 func (m Model) advanceAfterCopy(kind string, manual bool) (tea.Model, tea.Cmd) {

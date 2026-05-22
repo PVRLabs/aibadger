@@ -183,11 +183,38 @@ func NewModel(root string, cfg Config) Model {
 		m.session.WhitespaceMode = cfg.WhitespaceMode
 	}
 	m.onboardingCompletionSaved = onboardingCompleted
-	if showOnboarding {
+	if m.cfg.StartupGoal != "" {
+		m.applyStartupGoal()
+	}
+	if showOnboarding && !m.cfg.SkipOnboarding && m.cfg.StartupGoal == "" {
 		m.state = stateOnboarding
 		m.goalInput.Blur()
 	}
 	return m
+}
+
+func (m *Model) applyStartupGoal() {
+	m.state = stateHome
+	m.status = startupMessage(m.cfg.StartupStatusSeverity, m.cfg.StartupStatus)
+	m.err = nil
+	m.setGoalInputValue(m.cfg.StartupGoal)
+	m.resizeGoalEditor()
+	m.completion.suppressedKey = ""
+	m.goalInput.Focus()
+	m.paste.Blur()
+}
+
+func startupMessage(severity, text string) tuiMessage {
+	switch strings.ToLower(strings.TrimSpace(severity)) {
+	case "success":
+		return successMessage(text)
+	case "warning":
+		return warningMessage(text)
+	case "error":
+		return errorMessage(text)
+	default:
+		return neutralMessage(text)
+	}
 }
 
 func loadExternalRoots(root string) []taggedfile.ExternalRoot {

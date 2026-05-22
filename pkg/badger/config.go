@@ -16,6 +16,10 @@ type Config struct {
 	TUIVersion                string
 	BuildInfo                 string
 	Focus                     protocol.Focus
+	StartupGoal               string
+	StartupStatus             string
+	StartupStatusSeverity     string
+	SkipOnboarding            bool
 	ScanFrames                []string
 	ExitCommand               string
 	SettingsPath              string
@@ -100,6 +104,10 @@ func (c Config) tuiConfig() tui.Config {
 		Version:                   c.TUIVersion,
 		BuildInfo:                 c.BuildInfo,
 		Focus:                     c.Focus,
+		StartupGoal:               c.StartupGoal,
+		StartupStatus:             c.StartupStatus,
+		StartupStatusSeverity:     c.StartupStatusSeverity,
+		SkipOnboarding:            c.SkipOnboarding,
 		ScanFrames:                append([]string(nil), c.ScanFrames...),
 		ExitCommand:               c.ExitCommand,
 		SettingsPath:              c.SettingsPath,

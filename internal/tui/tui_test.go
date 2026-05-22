@@ -140,6 +140,56 @@ func TestNewModelSkipsOnboardingWhenCompleted(t *testing.T) {
 	}
 }
 
+func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SettingsPath = filepath.Join(t.TempDir(), ".badger", "settings.json")
+	cfg.StartupGoal = "Review this diff for nil dereferences."
+	cfg.StartupStatus = "Loaded review prompt from the current git diff. Edit it before submitting."
+	cfg.StartupStatusSeverity = "success"
+	cfg.SkipOnboarding = true
+
+	m := NewModel("/tmp/project", cfg)
+
+	if m.state != stateHome {
+		t.Fatalf("state = %v, want %v", m.state, stateHome)
+	}
+	if !m.goalInput.Focused() {
+		t.Fatal("goal input is not focused for startup review mode")
+	}
+	if got := m.goalInput.Value(); got != cfg.StartupGoal {
+		t.Fatalf("goal input = %q, want %q", got, cfg.StartupGoal)
+	}
+	if m.status.severity != messageSuccess {
+		t.Fatalf("status severity = %v, want %v", m.status.severity, messageSuccess)
+	}
+	if !strings.Contains(m.View(), cfg.StartupStatus) {
+		t.Fatalf("view missing startup status:\n%s", m.View())
+	}
+	if strings.Contains(m.View(), "First run") {
+		t.Fatalf("startup review mode should skip onboarding:\n%s", m.View())
+	}
+}
+
+func TestNewModelAppliesFallbackReviewGoalAndWarningStatus(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.StartupGoal = "Review my current change before committing."
+	cfg.StartupStatus = "No git diff was detected. The prompt is editable."
+	cfg.StartupStatusSeverity = "warning"
+	cfg.SkipOnboarding = true
+
+	m := NewModel("/tmp/project", cfg)
+
+	if m.status.severity != messageWarning {
+		t.Fatalf("status severity = %v, want %v", m.status.severity, messageWarning)
+	}
+	if got := m.goalInput.Value(); got != cfg.StartupGoal {
+		t.Fatalf("goal input = %q, want %q", got, cfg.StartupGoal)
+	}
+	if !strings.Contains(m.View(), cfg.StartupStatus) {
+		t.Fatalf("view missing warning status:\n%s", m.View())
+	}
+}
+
 func TestNewModelShowsOnboardingWhenSettingsFalse(t *testing.T) {
 	settingsPath := filepath.Join(t.TempDir(), ".badger", "settings.json")
 	if err := SaveSettings(settingsPath, Settings{FirstRunOnboardingCompleted: false}); err != nil {

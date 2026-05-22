@@ -15,6 +15,10 @@ type Config struct {
 	Version                   string
 	BuildInfo                 string
 	Focus                     protocol.Focus
+	StartupGoal               string
+	StartupStatus             string
+	StartupStatusSeverity     string
+	SkipOnboarding            bool
 	ScanFrames                []string
 	ExitCommand               string
 	SettingsPath              string

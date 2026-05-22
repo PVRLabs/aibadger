@@ -30,6 +30,9 @@ type displaySymbols struct {
 	warning     string
 	error       string
 	pipelineSep string
+	dash        string
+	bentArrow   string
+	arrow       string
 }
 
 func neutralMessage(text string) tuiMessage {
@@ -63,6 +66,9 @@ func displaySymbolsForRuntime(goos string, getenv func(string) string) displaySy
 			warning:     "[!]",
 			error:       "[X]",
 			pipelineSep: " -> ",
+			dash:        "-",
+			bentArrow:   "->",
+			arrow:       "->",
 		}
 	}
 	return displaySymbols{
@@ -70,6 +76,9 @@ func displaySymbolsForRuntime(goos string, getenv func(string) string) displaySy
 		warning:     "⚠️",
 		error:       "⛔",
 		pipelineSep: " → ",
+		dash:        "—",
+		bentArrow:   "↳",
+		arrow:       "→",
 	}
 }
 

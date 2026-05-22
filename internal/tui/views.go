@@ -210,19 +210,31 @@ func mascotFrame(text string, face string) string {
 }
 
 func (m Model) viewOnboarding() string {
+	symbols := defaultDisplaySymbols()
 	body := strings.Join([]string{
-		"First run",
+		renderBold("First run"),
 		"",
-		mascotFrame("Local-first by default.", "o.o"),
+		"Badger is a lightweight local bridge between your codebase",
+		"and any AI chat (Claude, Cursor, GPT, etc.)",
 		"",
-		"Badger is a local bridge between this codebase and your AI chat.",
-		"It scans locally and never sends data over the network.",
-		"You choose when prompts are copied, pasted, and written back.",
-		"Prompt 1 (Map) contains project structure and your goal.",
-		"Prompt 2 (Extract) contains only source selected by FILE/PREFIX/NEAR commands.",
-		"Generated file writes are previewed before anything is applied.",
+		renderBold("How it works:"),
 		"",
-		"Press Enter to continue.",
+		fmt.Sprintf("1. %s", renderBold("Map")),
+		"   Enter your goal. Badger builds a prompt.",
+		fmt.Sprintf("   %s You copy it %s paste into your AI chat", symbols.bentArrow, symbols.arrow),
+		"",
+		fmt.Sprintf("2. %s", renderBold("Extract")),
+		"   AI replies asking for specific files.",
+		fmt.Sprintf("   %s You copy that %s paste back into Badger", symbols.bentArrow, symbols.arrow),
+		"",
+		fmt.Sprintf("3. %s", renderBold("Apply")),
+		"   Badger fetches those files, builds a second prompt.",
+		fmt.Sprintf("   %s You copy it %s paste into AI %s review before writing", symbols.bentArrow, symbols.arrow, symbols.arrow),
+		"",
+		fmt.Sprintf("%s Fully local %s nothing leaves your machine until you copy it", symbols.success, symbols.dash),
+		fmt.Sprintf("%s You control every paste and every write", symbols.success),
+		"",
+		renderBold("Press Enter to continue"),
 	}, "\n")
 	return m.renderBox(body)
 }

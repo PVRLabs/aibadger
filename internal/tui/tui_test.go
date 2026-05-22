@@ -95,9 +95,43 @@ func TestNewModelShowsOnboardingForMissingSettings(t *testing.T) {
 	if !strings.Contains(m.View(), "First run") {
 		t.Fatalf("onboarding view missing first-run copy:\n%s", m.View())
 	}
-	if !strings.Contains(m.View(), " /\\_/\\  Local-first by default.") ||
-		!strings.Contains(m.View(), "( o.o )") {
-		t.Fatalf("onboarding view missing compact mascot frame:\n%s", m.View())
+	for _, want := range []string{
+		"lightweight local bridge",
+		"How it works:",
+		"1. Map",
+		"Badger builds a prompt",
+		"copy it",
+		"paste into your AI chat",
+		"2. Extract",
+		"AI replies asking",
+		"paste back into Badger",
+		"3. Apply",
+		"builds a second prompt",
+		"review before writing",
+		"Fully local",
+		"nothing leaves your machine",
+		"You control every paste",
+		"Press Enter to continue",
+	} {
+		if !strings.Contains(m.View(), want) {
+			t.Fatalf("onboarding view missing %q:\n%s", want, m.View())
+		}
+	}
+}
+
+func TestOnboardingRespectsASCIIEnv(t *testing.T) {
+	t.Setenv("BADGER_ASCII", "1")
+	cfg := DefaultConfig()
+	cfg.SettingsPath = filepath.Join(t.TempDir(), ".badger", "settings.json")
+
+	m := NewModel("/tmp/project", cfg)
+
+	view := m.View()
+	if !strings.Contains(view, "[OK] Fully local -") {
+		t.Fatalf("onboarding view missing ASCII success '[OK]' or dash '-':\n%s", view)
+	}
+	if !strings.Contains(view, "-> You copy it ->") {
+		t.Fatalf("onboarding view missing ASCII arrows '->':\n%s", view)
 	}
 }
 

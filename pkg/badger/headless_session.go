@@ -49,7 +49,8 @@ func readGoal(w io.Writer, reader *bufio.Reader, cfg Config, opts HeadlessOption
 }
 
 func runGoalFlow(w io.Writer, reader *bufio.Reader, session *workflow.Session, goal string, cfg Config, opts HeadlessOptions) bool {
-	schemaA := session.GenerateMap(goal)
+	schemaA, warnings := session.GenerateMapDetailed(goal)
+	printTaggedFileWarnings(w, warnings)
 	if handleProjectMap(w, reader, schemaA, opts) {
 		return true
 	}

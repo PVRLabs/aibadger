@@ -174,10 +174,10 @@ func (e *Engine) resolveTaggedFiles(goal string) ([]string, []string) {
 			warnings = append(warnings, err.Error())
 			continue
 		}
-		if _, ok := seen[resolved.Path]; ok {
+		if _, ok := seen[resolved.AbsPath]; ok {
 			continue
 		}
-		seen[resolved.Path] = struct{}{}
+		seen[resolved.AbsPath] = struct{}{}
 		paths = append(paths, resolved.Path)
 	}
 

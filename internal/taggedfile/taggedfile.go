@@ -224,7 +224,7 @@ func collectShallowCompletionCandidates(projectRoot string, skip SkipFunc) ([]sh
 
 		childEntries, err := os.ReadDir(filepath.Join(absRoot, name))
 		if err != nil {
-			return nil, err
+			continue
 		}
 		for _, child := range childEntries {
 			childPath := joinTaggedPath(name, child.Name())

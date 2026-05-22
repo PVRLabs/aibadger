@@ -17,7 +17,9 @@ func runHeadlessStep(w io.Writer, session *workflow.Session, opts HeadlessOption
 	case opts.Step == "goal":
 		fmt.Fprintf(w, "Dev goal: %s\n", readInput(w, opts))
 	case isTopologyStep(opts.Step):
-		fmt.Fprintln(w, session.GenerateMap(readInput(w, opts)))
+		schemaA, warnings := session.GenerateMapDetailed(readInput(w, opts))
+		printTaggedFileWarnings(w, warnings)
+		fmt.Fprintln(w, schemaA)
 	case opts.Step == "extraction":
 		handleExtractionCommands(w, opts.Goal, session, opts)
 	case isCodeContextStep(opts.Step):

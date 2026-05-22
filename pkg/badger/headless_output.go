@@ -49,6 +49,16 @@ func printExtractionWarnings(w io.Writer, extractedCount int, failedCommands, sa
 	}
 }
 
+func printTaggedFileWarnings(w io.Writer, warnings []string) {
+	if len(warnings) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "\n[!] Tagged file warnings:")
+	for _, warning := range warnings {
+		fmt.Fprintf(w, "  - %s\n", warning)
+	}
+}
+
 func handleProjectMap(w io.Writer, reader *bufio.Reader, schemaA string, opts HeadlessOptions) bool {
 	if isTopologyStep(opts.Step) {
 		fmt.Fprintln(w, schemaA)

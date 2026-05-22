@@ -146,18 +146,10 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 	return m, nil, false // key not applicable in current state
 }
 
-// handleKeyTab completes the home slash-command input to the first visible
-// suggestion. Other states keep their existing input handling.
+// handleKeyTab is a no-op as Tab completion is now handled by handleCompletionKey
+// at the beginning of handleKey.
 func (m Model) handleKeyTab() (tea.Model, tea.Cmd, bool) {
-	if m.state != stateHome {
-		return m, nil, false
-	}
-	candidate, ok := m.completionVisible()
-	if !ok || candidate.kind != completionKindSlash {
-		return m, nil, false
-	}
-	next, cmd := m.applyCompletionCandidate(candidate)
-	return next, cmd, true
+	return m, nil, false
 }
 
 // handleKeyConfirm handles the "y/Y" key, which confirms actions on screens

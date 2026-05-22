@@ -373,7 +373,6 @@ func TestHomeViewRendersLargePastedGoalCompactly(t *testing.T) {
 		t.Fatalf("home view missing compact pasted label:\n%s", view)
 	}
 	for _, want := range []string{
-		"Preview:",
 		"  Review this diff:",
 		"  Index: docs/ui-spec.md",
 		"  ===================================================================",
@@ -381,6 +380,16 @@ func TestHomeViewRendersLargePastedGoalCompactly(t *testing.T) {
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("home view missing %q:\n%s", want, view)
+		}
+	}
+	for _, unwanted := range []string{
+		"Type a goal, paste a diff, or use /review or /design, then press Enter.",
+		"Commands: /help, /review, /design, /exit",
+		"Tag files with @path/to/file, then press Tab.",
+		"Preview:",
+	} {
+		if strings.Contains(view, unwanted) {
+			t.Fatalf("home view unexpectedly contained %q:\n%s", unwanted, view)
 		}
 	}
 	if strings.Contains(view, "@@ -1 +1 @@\nReview this diff:") {

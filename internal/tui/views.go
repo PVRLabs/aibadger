@@ -88,6 +88,10 @@ func (m Model) View() string {
 }
 
 func (m Model) viewHome() string {
+	if m.homeGoalPreviewActive() {
+		return m.viewGoalPreview()
+	}
+
 	var lines []string
 	lines = append(lines, "Type a goal, paste a diff, or use /review or /design, then press Enter.")
 	lines = append(lines, "Commands: /help, /review, /design, /exit")
@@ -101,18 +105,28 @@ func (m Model) viewHome() string {
 }
 
 func (m Model) viewGoalInput() string {
+	if m.homeGoalPreviewActive() {
+		return m.viewGoalPreview()
+	}
+
+	return m.goalInput.View()
+}
+
+func (m Model) homeGoalPreviewActive() bool {
+	goal := m.goalInput.Value()
+	return len(goal) > homeGoalVisibleBytes || countTextLines(goal) > homeGoalVisibleLines
+}
+
+func (m Model) viewGoalPreview() string {
 	goal := m.goalInput.Value()
 	size := len(goal)
 	lines := countTextLines(goal)
-	if size > homeGoalVisibleBytes || lines > homeGoalVisibleLines {
-		return fmt.Sprintf(
-			"%s\nPreview:\n%s\n%s",
-			helpStyle.Render(fmt.Sprintf("[Pasted %s, %d lines]", protocol.FormatFileSize(int64(size)), lines)),
-			helpStyle.Render(compactGoalPreview(goal)),
-			helpStyle.Render("Press Enter to submit."),
-		)
-	}
-	return m.goalInput.View()
+	return fmt.Sprintf(
+		"%s\n%s\n%s",
+		helpStyle.Render(fmt.Sprintf("[Pasted %s, %d lines]", protocol.FormatFileSize(int64(size)), lines)),
+		helpStyle.Render(compactGoalPreview(goal)),
+		helpStyle.Render("Press Enter to submit."),
+	)
 }
 
 func (m Model) viewSlashCommandSuggestions() string {

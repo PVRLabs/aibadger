@@ -29,7 +29,7 @@ default. If that directory is not on your `PATH`, add it before running
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | BADGER_VERSION=v0.1.3 sh
+curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | BADGER_VERSION=v0.2.0 sh
 ```
 
 Install into a custom directory:
@@ -50,7 +50,7 @@ Custom directory or version:
 
 ```powershell
 $env:BADGER_INSTALL_DIR = "$HOME\bin"; irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
-$env:BADGER_VERSION = "v0.1.3"; irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
+$env:BADGER_VERSION = "v0.2.0"; irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
 ```
 
 Manual: download `badger_<version>_windows_amd64.zip` from the [latest release](https://github.com/PVRLabs/aibadger/releases/latest) and extract `badger.exe` to your `PATH`.
@@ -86,11 +86,11 @@ Check the binary version:
 Expected output:
 
 ```text
-badger v0.1.3
+badger v0.2.0
 ```
 
 Published installs should report the current release version. Source builds from
-`main` may report the next development version, for example `badger v0.1.4-dev`,
+`main` may report the next development version, for example `badger v0.2.1-dev`,
 until the next release is prepared.
 
 ## Release Notes

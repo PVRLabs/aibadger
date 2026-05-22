@@ -105,18 +105,19 @@ func handleExtractionCommands(w io.Writer, goal string, session *workflow.Sessio
 }
 
 func handleContextCopy(w io.Writer, reader *bufio.Reader, schemaB string, opts HeadlessOptions) bool {
+	promptTwoKind := workflow.PromptTwoKind(opts.Focus)
 	if isCodeContextStep(opts.Step) {
 		fmt.Fprintln(w, schemaB)
 		return true
 	}
 
-	fmt.Fprintf(w, "\nReady to copy %s to clipboard.\n", workflow.CodeContextPromptKind)
+	fmt.Fprintf(w, "\nReady to copy %s to clipboard.\n", promptTwoKind)
 	fmt.Fprint(w, "Copy? (y/N): ")
 	if confirm(reader) {
 		if err := clipboard.Copy(schemaB); err != nil {
-			fmt.Fprintf(w, "Clipboard error: %v.\nFor instructions on installing a clipboard tool visit %s.\nPrinting %s instead:\n\n%s\n", err, clipboard.DocsURL, workflow.CodeContextPromptKind, schemaB)
+			fmt.Fprintf(w, "Clipboard error: %v.\nFor instructions on installing a clipboard tool visit %s.\nPrinting %s instead:\n\n%s\n", err, clipboard.DocsURL, promptTwoKind, schemaB)
 		} else {
-			fmt.Fprintf(w, "[✓] %s copied!\n", workflow.CodeContextPromptKind)
+			fmt.Fprintf(w, "[✓] %s copied!\n", promptTwoKind)
 		}
 	}
 	return false

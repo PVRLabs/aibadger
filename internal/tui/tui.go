@@ -47,6 +47,7 @@ const (
 	codeContextPromptKind = workflow.CodeContextPromptKind
 	helpCommand           = "/help"
 	reviewCommand         = "/review"
+	designCommand         = "/design"
 )
 
 type Model struct {
@@ -435,6 +436,16 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 		m.status = tuiMessage{}
 		return m, nil
 	}
+	if goal == designCommand {
+		m.cfg.Focus = protocol.FocusDesign
+		m.status = successMessage("Focus set to Design.")
+		m.err = nil
+		m.setGoalInputValue("")
+		m.resizeGoalEditor()
+		m.completion.suppressedKey = ""
+		m.goalInput.Focus()
+		return m, textarea.Blink
+	}
 
 	m.goal = goal
 	m.status = tuiMessage{}
@@ -448,8 +459,9 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 func (m Model) advanceAfterCopy(kind string, manual bool) (tea.Model, tea.Cmd) {
 	m.manualCopyKind = ""
 	m.manualCopyText = ""
-	switch kind {
-	case topologyPromptKind:
+	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
+	switch {
+	case kind == topologyPromptKind:
 		if manual {
 			m.status = neutralMessage("Prompt 1: Topology shown for manual copy. Paste it into any LLM chat interface, then paste extraction commands.")
 		} else {
@@ -457,13 +469,13 @@ func (m Model) advanceAfterCopy(kind string, manual bool) (tea.Model, tea.Cmd) {
 		}
 		m.state = stateWaitingForExtractions
 		m.resetPaste(pasteSpecForState(m.state).placeholder)
-	case codeContextPromptKind:
+	case kind == codeContextPromptKind || kind == promptTwoKind:
 		// Both paths mean Prompt 2 has been handed off; only the status copy
 		// differs so the user knows whether it was copied or shown manually.
 		if manual {
-			m.status = neutralMessage("Prompt 2: Code Context shown for manual copy. Next: paste the final AI response.")
+			m.status = neutralMessage(fmt.Sprintf("%s shown for manual copy. Next: paste the final AI response.", promptTwoKind))
 		} else {
-			m.status = successMessage("Prompt 2: Code Context copied. Next: paste the final AI response.")
+			m.status = successMessage(fmt.Sprintf("%s copied. Next: paste the final AI response.", promptTwoKind))
 		}
 		m.markOnboardingCompleted()
 		m.state = stateWaitingForCode
@@ -482,11 +494,12 @@ func (m Model) advanceAfterTempFileWithStatus(kind, path string, status tuiMessa
 	m.promptFileKind = ""
 	m.promptFilePath = ""
 	m.status = status
-	switch kind {
-	case topologyPromptKind:
+	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
+	switch {
+	case kind == topologyPromptKind:
 		m.state = stateWaitingForExtractions
 		m.resetPaste(pasteSpecForState(m.state).placeholder)
-	case codeContextPromptKind:
+	case kind == codeContextPromptKind || kind == promptTwoKind:
 		m.markOnboardingCompleted()
 		m.state = stateWaitingForCode
 		m.resetPaste(pasteSpecForState(m.state).placeholder)
@@ -495,13 +508,14 @@ func (m Model) advanceAfterTempFileWithStatus(kind, path string, status tuiMessa
 }
 
 func (m Model) cancelPromptDelivery(kind string) (tea.Model, tea.Cmd) {
-	switch kind {
-	case topologyPromptKind:
+	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
+	switch {
+	case kind == topologyPromptKind:
 		m.status = neutralMessage("Prompt 1: Topology was not copied.")
 		m.state = stateWaitingForExtractions
 		m.resetPaste(pasteSpecForState(m.state).placeholder)
-	case codeContextPromptKind:
-		m.status = neutralMessage("Prompt 2: Code Context was not copied.")
+	case kind == codeContextPromptKind || kind == promptTwoKind:
+		m.status = neutralMessage(fmt.Sprintf("%s was not copied.", promptTwoKind))
 		m.state = stateWaitingForCode
 		m.resetPaste(pasteSpecForState(m.state).placeholder)
 	}

@@ -3,6 +3,7 @@ package badger
 import (
 	"testing"
 
+	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
@@ -15,6 +16,9 @@ func TestDefaultConfigUsesOSSDefaults(t *testing.T) {
 	}
 	if cfg.TUISubtitle == "" {
 		t.Fatal("TUISubtitle is empty")
+	}
+	if cfg.Focus != protocol.FocusCode {
+		t.Fatalf("Focus = %q, want %q", cfg.Focus, protocol.FocusCode)
 	}
 	if len(cfg.ScanFrames) == 0 {
 		t.Fatal("ScanFrames is empty")
@@ -58,6 +62,9 @@ func TestConfigCanDisableContextLimits(t *testing.T) {
 
 func TestConfigZeroContextLimitsUseDefaults(t *testing.T) {
 	tuiCfg := Config{}.tuiConfig()
+	if tuiCfg.Focus != protocol.FocusCode {
+		t.Fatalf("Focus = %q, want %q", tuiCfg.Focus, protocol.FocusCode)
+	}
 	if tuiCfg.MaxContextFileBytes != workflow.MaxContextFileBytes {
 		t.Fatalf("MaxContextFileBytes = %d, want %d", tuiCfg.MaxContextFileBytes, workflow.MaxContextFileBytes)
 	}
@@ -97,6 +104,7 @@ func TestConfigPassesCustomMetadataToTUI(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.TUIVersion = "v9.9.9-test"
 	cfg.BuildInfo = "badger v9.9.9-test (custom)"
+	cfg.Focus = protocol.FocusDesign
 
 	tuiCfg := cfg.tuiConfig()
 	if tuiCfg.Version != "v9.9.9-test" {
@@ -104,5 +112,8 @@ func TestConfigPassesCustomMetadataToTUI(t *testing.T) {
 	}
 	if tuiCfg.BuildInfo != "badger v9.9.9-test (custom)" {
 		t.Fatalf("BuildInfo = %q, want custom build info", tuiCfg.BuildInfo)
+	}
+	if tuiCfg.Focus != protocol.FocusDesign {
+		t.Fatalf("Focus = %q, want %q", tuiCfg.Focus, protocol.FocusDesign)
 	}
 }

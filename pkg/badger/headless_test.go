@@ -12,6 +12,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/engine"
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/model"
+	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
@@ -80,6 +81,39 @@ func TestHandleExtractionCommandsDevStepReadsInputFile(t *testing.T) {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("handleExtractionCommands() output missing %q:\n%s", want, output.String())
 		}
+	}
+}
+
+func TestHandleContextCopyUsesRespondLabelForDesignFocus(t *testing.T) {
+	var output bytes.Buffer
+	reader := bufio.NewReader(strings.NewReader("n\n"))
+
+	if handleContextCopy(&output, reader, "schema b", HeadlessOptions{Focus: protocol.FocusDesign}) {
+		t.Fatal("handleContextCopy() returned true, want false")
+	}
+	for _, want := range []string{
+		"Ready to copy Prompt 2: Respond to clipboard.",
+		"Copy? (y/N):",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("handleContextCopy() output missing %q:\n%s", want, output.String())
+		}
+	}
+}
+
+func TestHandleFinalResponseUsesRespondLabelForDesignFocus(t *testing.T) {
+	eng := engine.FromTopology("", nil)
+	session := workflow.NewSession(eng, writer.DefaultWhitespaceMode)
+	var output bytes.Buffer
+
+	if handleFinalResponse(&output, bufio.NewReader(strings.NewReader("n\n")), session, HeadlessOptions{
+		Focus: protocol.FocusDesign,
+		Stdin: strings.NewReader("A textual response only.\nDONE\n"),
+	}) {
+		t.Fatal("handleFinalResponse() returned true, want false")
+	}
+	if !strings.Contains(output.String(), "1. Paste Prompt 2: Respond into your AI chat.") {
+		t.Fatalf("handleFinalResponse() output missing focus-aware next step:\n%s", output.String())
 	}
 }
 

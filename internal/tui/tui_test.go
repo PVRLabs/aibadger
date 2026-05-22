@@ -626,6 +626,32 @@ func TestSubmitGoalReviewCommandShowsReviewHelp(t *testing.T) {
 	}
 }
 
+func TestSubmitGoalDesignCommandSwitchesFocus(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/design")
+
+	next, cmd := m.submitGoal()
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("submitGoal returned %T, want tui.Model", next)
+	}
+	if got.cfg.Focus != protocol.FocusDesign {
+		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusDesign)
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty", got.goalInput.Value())
+	}
+	if !strings.Contains(got.status.text, "Focus set to Design.") {
+		t.Fatalf("status = %q, want focus confirmation", got.status.text)
+	}
+	if cmd == nil {
+		t.Fatal("design command returned unexpected nil command")
+	}
+}
+
 func TestFormatReviewGitShowTip(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -667,6 +693,9 @@ func TestViewShowsPersistentHeader(t *testing.T) {
 	if !strings.Contains(view, "Local-first code context for any AI chat") {
 		t.Fatalf("home view missing descriptor header:\n%s", view)
 	}
+	if !strings.Contains(view, "Focus: Code") {
+		t.Fatalf("home view missing active focus indicator:\n%s", view)
+	}
 	if !strings.Contains(view, "Pipeline: [Map]"+symbols.pipelineSep+"Extract"+symbols.pipelineSep+"Apply") {
 		t.Fatalf("home view missing pipeline indicator:\n%s", view)
 	}
@@ -683,7 +712,7 @@ func TestHomeViewSurfacesReviewUseCase(t *testing.T) {
 	if !strings.Contains(view, "Type a goal or paste a diff for review, then press Enter.") {
 		t.Fatalf("home view missing review goal guidance:\n%s", view)
 	}
-	if !strings.Contains(view, "Commands: /help, /review, /exit") {
+	if !strings.Contains(view, "Commands: /help, /review, /design, /exit") {
 		t.Fatalf("home view missing review command:\n%s", view)
 	}
 	for _, want := range []string{
@@ -708,6 +737,8 @@ func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 		"Show commands and keyboard shortcuts.",
 		"/review",
 		"Show diff review guidance.",
+		"/design",
+		"Switch the active focus to Design.",
 		"/exit",
 		"Quit Badger.",
 	} {
@@ -821,6 +852,37 @@ func TestHomeTabLeavesNormalInputToTextarea(t *testing.T) {
 	}
 	if got.goalInput.Value() != "review" {
 		t.Fatalf("goal input = %q, want review", got.goalInput.Value())
+	}
+}
+
+func TestSelectedFocusSurvivesMapToExtractFlow(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel("/tmp/project", cfg)
+	m.goalInput.SetValue("implement safer copy handling")
+
+	next, _ := m.submitGoal()
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("submitGoal returned %T, want tui.Model", next)
+	}
+
+	scanned := engine.FromTopology("/tmp/project", &model.ProjectTopology{Name: "project"})
+	next, _ = got.Update(scanDoneMsg{eng: scanned})
+	afterScan, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if afterScan.cfg.Focus != protocol.FocusReview {
+		t.Fatalf("Focus = %q, want %q", afterScan.cfg.Focus, protocol.FocusReview)
+	}
+	view := afterScan.View()
+	symbols := testDisplaySymbols()
+	if !strings.Contains(view, "Focus: Review") {
+		t.Fatalf("scan flow view missing active focus:\n%s", view)
+	}
+	if !strings.Contains(view, "Pipeline: [Map]"+symbols.pipelineSep+"Extract"+symbols.pipelineSep+"Respond") {
+		t.Fatalf("scan flow view missing Respond pipeline label:\n%s", view)
 	}
 }
 

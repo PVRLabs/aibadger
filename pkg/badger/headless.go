@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/engine"
+	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
@@ -18,6 +19,7 @@ import (
 type HeadlessOptions struct {
 	Step      string
 	InputPath string
+	Focus     protocol.Focus
 	// Goal is optional. Empty preserves the historical headless output used by
 	// certification fixtures; non-empty is threaded into Prompt 2 generation.
 	Goal             string
@@ -38,6 +40,7 @@ const (
 // blackbox validation. It preserves the command-line output contract.
 func RunHeadless(cfg Config, opts HeadlessOptions) error {
 	cfg = cfg.withDefaults()
+	opts.Focus = protocol.NormalizeFocus(cfg.Focus)
 	stdin := opts.Stdin
 	if stdin == nil {
 		stdin = os.Stdin
@@ -87,6 +90,7 @@ func headlessEngineOptions(cfg Config, opts HeadlessOptions) workflow.EngineOpti
 		MaxTotalContextBytes: cfg.MaxTotalContextBytes,
 		SchemaAConstraint:    cfg.SchemaAConstraint,
 		SchemaBConstraint:    cfg.SchemaBConstraint,
+		Focus:                opts.Focus,
 	}
 	if opts.TruncateTopology {
 		engOpts.MaxPackages = cfg.TruncatedMaxPackages

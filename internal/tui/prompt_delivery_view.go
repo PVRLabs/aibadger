@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/workflow"
 )
 
 func (m Model) viewScanComplete() string {
@@ -51,27 +52,28 @@ func (m Model) viewContextReady() string {
 		lines = append(lines, "  - no files listed")
 	}
 
+	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
 	warning := ""
 	if hasTruncation {
 		warning = "\n" + renderWarningLine("Note: Some files were truncated or dropped to fit context limits.") + "\n"
 	}
 
-	if m.promptDeliveryIsLarge(codeContextPromptKind) {
+	if m.promptDeliveryIsLarge(promptTwoKind) {
 		return fmt.Sprintf(
 			"%s\n%s\n%s",
 			renderWarningLine("This WILL include the actual source code from:"),
 			strings.Join(lines, "\n"),
 			warning,
-		) + "\n" + m.viewLargePromptDelivery(codeContextPromptKind, m.schemaB)
+		) + "\n" + m.viewLargePromptDelivery(promptTwoKind, m.schemaB)
 	}
 
 	note := fmt.Sprintf(
 		"Ready to copy %s to your clipboard.\n\n%s\n%s\n%s\n%s",
-		renderBold("Prompt 2: Code Context"),
+		renderBold(promptTwoKind),
 		renderWarningLine("This WILL include the actual source code from:"),
 		strings.Join(lines, "\n"),
 		warning,
-		renderBold(fmt.Sprintf("Copy Prompt 2: Code Context to clipboard (payload: %s)? (y/N)", protocol.FormatFileSize(int64(len(m.schemaB))))),
+		renderBold(fmt.Sprintf("Copy %s to clipboard (payload: %s)? (y/N)", promptTwoKind, protocol.FormatFileSize(int64(len(m.schemaB))))),
 	)
 	return note
 }
@@ -134,6 +136,9 @@ func (m Model) promptDeliveryText(kind string) string {
 	case codeContextPromptKind:
 		return m.schemaB
 	default:
+		if kind == workflow.PromptTwoKind(m.cfg.Focus) {
+			return m.schemaB
+		}
 		return ""
 	}
 }

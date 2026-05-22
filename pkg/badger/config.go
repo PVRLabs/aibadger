@@ -3,6 +3,7 @@ package badger
 import (
 	"os"
 
+	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/tui"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
@@ -14,6 +15,7 @@ type Config struct {
 	TUISubtitle               string
 	TUIVersion                string
 	BuildInfo                 string
+	Focus                     protocol.Focus
 	ScanFrames                []string
 	ExitCommand               string
 	SettingsPath              string
@@ -37,6 +39,7 @@ func DefaultConfig() Config {
 		TUISubtitle:               tuiCfg.Subtitle,
 		TUIVersion:                tuiCfg.Version,
 		ScanFrames:                append([]string(nil), tuiCfg.ScanFrames...),
+		Focus:                     protocol.FocusCode,
 		ExitCommand:               workflow.ExitCommand,
 		SettingsPath:              settingsPath,
 		LargeProjectFileThreshold: workflow.LargeProjectFileThreshold,
@@ -59,6 +62,7 @@ func (c Config) withDefaults() Config {
 	if c.TUIVersion == "" {
 		c.TUIVersion = defaults.TUIVersion
 	}
+	c.Focus = protocol.NormalizeFocus(c.Focus)
 	if len(c.ScanFrames) == 0 {
 		c.ScanFrames = append([]string(nil), defaults.ScanFrames...)
 	}
@@ -95,6 +99,7 @@ func (c Config) tuiConfig() tui.Config {
 		Subtitle:                  c.TUISubtitle,
 		Version:                   c.TUIVersion,
 		BuildInfo:                 c.BuildInfo,
+		Focus:                     c.Focus,
 		ScanFrames:                append([]string(nil), c.ScanFrames...),
 		ExitCommand:               c.ExitCommand,
 		SettingsPath:              c.SettingsPath,

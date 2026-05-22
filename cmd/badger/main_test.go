@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/version"
 )
 
@@ -28,6 +29,26 @@ func TestLoadConfigVersionCommand(t *testing.T) {
 
 	if !cfg.showVersion {
 		t.Fatal("loadConfig() did not enable showVersion for version command")
+	}
+}
+
+func TestLoadConfigFocusCommand(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  []string
+		focus protocol.Focus
+	}{
+		{name: "design", args: []string{"design"}, focus: protocol.FocusDesign},
+		{name: "review", args: []string{"review", "--headless"}, focus: protocol.FocusReview},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := loadConfig(tt.args)
+			if cfg.focus != tt.focus {
+				t.Fatalf("focus = %q, want %q", cfg.focus, tt.focus)
+			}
+		})
 	}
 }
 

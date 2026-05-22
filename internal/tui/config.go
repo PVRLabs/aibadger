@@ -4,6 +4,7 @@ package tui
 // options.
 
 import (
+	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/version"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
@@ -13,6 +14,7 @@ type Config struct {
 	Subtitle                  string
 	Version                   string
 	BuildInfo                 string
+	Focus                     protocol.Focus
 	ScanFrames                []string
 	ExitCommand               string
 	SettingsPath              string
@@ -30,6 +32,7 @@ func DefaultConfig() Config {
 	return Config{
 		Subtitle:                  "Local-first code context for any AI chat",
 		Version:                   version.Version,
+		Focus:                     protocol.FocusCode,
 		ScanFrames:                defaultScanFrames(),
 		ExitCommand:               workflow.ExitCommand,
 		LargeProjectFileThreshold: workflow.LargeProjectFileThreshold,
@@ -49,6 +52,7 @@ func (c Config) withDefaults() Config {
 	if c.Version == "" {
 		c.Version = defaults.Version
 	}
+	c.Focus = protocol.NormalizeFocus(c.Focus)
 	if len(c.ScanFrames) == 0 {
 		c.ScanFrames = defaults.ScanFrames
 	}
@@ -81,6 +85,7 @@ func (m Model) engineOptions(maxPackages int) workflow.EngineOptions {
 		MaxContextFileBytes:  m.cfg.MaxContextFileBytes,
 		MaxTotalContextBytes: m.cfg.MaxTotalContextBytes,
 		MaxPackages:          maxPackages,
+		Focus:                m.cfg.Focus,
 		SchemaAConstraint:    m.cfg.SchemaAConstraint,
 		SchemaBConstraint:    m.cfg.SchemaBConstraint,
 	}

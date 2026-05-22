@@ -8,11 +8,13 @@ import (
 	"runtime/pprof"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/pkg/badger"
 )
 
 type appConfig struct {
 	headless         bool
+	focus            protocol.Focus
 	stepFlag         string
 	inputFlag        string
 	truncateTopology bool
@@ -77,6 +79,7 @@ func main() {
 
 	badgerCfg := badger.DefaultConfig()
 	badgerCfg.BuildInfo = buildInfoLine()
+	badgerCfg.Focus = protocol.NormalizeFocus(cfg.focus)
 	if !cfg.headless {
 		if err := badger.Run(badgerCfg); err != nil {
 			fmt.Printf("TUI error: %v\n", err)
@@ -95,6 +98,8 @@ func main() {
 
 func loadConfig(args []string) appConfig {
 	cfg := appConfig{}
+
+	args = stripFocusCommand(args, &cfg)
 
 	// First pass: check for help/version flags
 	for _, arg := range args {
@@ -130,6 +135,24 @@ func loadConfig(args []string) appConfig {
 	cfg.parseErr = fs.Parse(args)
 
 	return cfg
+}
+
+func stripFocusCommand(args []string, cfg *appConfig) []string {
+	for i, arg := range args {
+		if arg == "--" {
+			return args
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		switch arg {
+		case string(protocol.FocusCode), string(protocol.FocusReview), string(protocol.FocusDesign):
+			cfg.focus = protocol.Focus(arg)
+			return append(append([]string(nil), args[:i]...), args[i+1:]...)
+		}
+		return args
+	}
+	return args
 }
 
 func usedDevOnlyFlags(args []string) []string {
@@ -171,8 +194,8 @@ func printUsage(cfg appConfig) {
 %s
 
 Usage:
-  badger [--help]
-  badger [--version]
+  badger [code|review|design] [--help]
+  badger [code|review|design] [--version]
   badger version
 
 Options:
@@ -180,6 +203,7 @@ Options:
   --version         Print version and exit.
 
 Standard runs start the interactive BYOL workflow for the current directory.
+The default focus is Code; use badger review or badger design to start in a different focus.
 `, badger.Name, buildInfoLine())
 
 	// Show note about dev flags in release builds

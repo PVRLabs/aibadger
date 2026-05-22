@@ -4,6 +4,7 @@ package tui
 // keyboard hint status line.
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/workflow"
@@ -155,6 +156,7 @@ func (m Model) handleKeyTab() (tea.Model, tea.Cmd, bool) {
 // handleKeyConfirm handles the "y/Y" key, which confirms actions on screens
 // that present a yes/no prompt.
 func (m Model) handleKeyConfirm() (tea.Model, tea.Cmd, bool) {
+	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
 	if m.state == stateScanComplete {
 		if m.largeProjectPending || m.promptDeliveryIsLarge(topologyPromptKind) {
 			return m, nil, true
@@ -165,7 +167,7 @@ func (m Model) handleKeyConfirm() (tea.Model, tea.Cmd, bool) {
 		if m.promptDeliveryIsLarge(codeContextPromptKind) {
 			return m, nil, true
 		}
-		return m, copyCmd(codeContextPromptKind, m.schemaB), true
+		return m, copyCmd(promptTwoKind, m.schemaB), true
 	}
 	if m.state == stateContextWarning {
 		next, cmd := m.acceptPartialExtractionWarning()
@@ -184,6 +186,7 @@ func (m Model) handleKeyConfirm() (tea.Model, tea.Cmd, bool) {
 // handleKeyCancel handles the "n/N" key, which declines the current prompt
 // and moves on without copying/writing.
 func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
+	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
 	if m.state == stateScanComplete {
 		if m.largeProjectPending {
 			return m, nil, true
@@ -192,7 +195,7 @@ func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
 		return next, cmd, true
 	}
 	if m.state == stateContextReady {
-		next, cmd := m.cancelPromptDelivery(codeContextPromptKind)
+		next, cmd := m.cancelPromptDelivery(promptTwoKind)
 		return next, cmd, true
 	}
 	if m.state == stateContextWarning {
@@ -234,7 +237,7 @@ func (m Model) handleKeyCopy() (tea.Model, tea.Cmd, bool) {
 		return m, copyCmd(topologyPromptKind, m.schemaA), true
 	}
 	if m.state == stateContextReady {
-		return m, copyCmd(codeContextPromptKind, m.schemaB), true
+		return m, copyCmd(workflow.PromptTwoKind(m.cfg.Focus), m.schemaB), true
 	}
 	return m, nil, false
 }
@@ -245,8 +248,8 @@ func (m Model) handleKeySaveToFile() (tea.Model, tea.Cmd, bool) {
 	if m.state == stateScanComplete && m.promptDeliveryIsLarge(topologyPromptKind) {
 		return m, savePromptCmd(topologyPromptKind, m.schemaA), true
 	}
-	if m.state == stateContextReady && m.promptDeliveryIsLarge(codeContextPromptKind) {
-		return m, savePromptCmd(codeContextPromptKind, m.schemaB), true
+	if m.state == stateContextReady && m.promptDeliveryIsLarge(workflow.PromptTwoKind(m.cfg.Focus)) {
+		return m, savePromptCmd(workflow.PromptTwoKind(m.cfg.Focus), m.schemaB), true
 	}
 	return m, nil, false
 }
@@ -262,11 +265,11 @@ func (m Model) handleKeyPrintToTerminal() (tea.Model, tea.Cmd, bool) {
 		m.status = neutralMessage("Prompt 1: Topology printed to terminal.")
 		return m, nil, true
 	}
-	if m.state == stateContextReady && m.promptDeliveryIsLarge(codeContextPromptKind) {
+	if m.state == stateContextReady && m.promptDeliveryIsLarge(workflow.PromptTwoKind(m.cfg.Focus)) {
 		m.state = stateManualCopy
-		m.manualCopyKind = codeContextPromptKind
+		m.manualCopyKind = workflow.PromptTwoKind(m.cfg.Focus)
 		m.manualCopyText = m.schemaB
-		m.status = neutralMessage("Prompt 2: Code Context printed to terminal.")
+		m.status = neutralMessage(fmt.Sprintf("%s printed to terminal.", workflow.PromptTwoKind(m.cfg.Focus)))
 		return m, nil, true
 	}
 	return m, nil, false
@@ -330,7 +333,7 @@ func (m Model) statusLine() string {
 	mode := statusLineKeyboardHints
 	switch mode {
 	case statusLineKeyboardHints:
-		return strings.Join(keyboardHintsForState(m.state), " · ")
+		return strings.Join(append([]string{"Focus: " + workflow.FocusDisplayName(m.cfg.Focus)}, keyboardHintsForState(m.state)...), " · ")
 	default:
 		return ""
 	}

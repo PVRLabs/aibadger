@@ -11,6 +11,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/clipboard"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
 
@@ -91,7 +92,7 @@ func (m Model) View() string {
 func (m Model) viewHome() string {
 	var lines []string
 	lines = append(lines, "Type a goal or paste a diff for review, then press Enter.")
-	lines = append(lines, "Commands: /help, /review, /exit")
+	lines = append(lines, "Commands: /help, /review, /design, /exit")
 	lines = append(lines, "Use @path/to/file and Tab to tag files into Prompt 1.")
 	lines = append(lines, "")
 	lines = append(lines, m.viewGoalInput())
@@ -149,6 +150,7 @@ func (m Model) slashCommandSuggestions() []slashCommandSuggestion {
 	suggestions := []slashCommandSuggestion{
 		{command: helpCommand, description: "Show commands and keyboard shortcuts."},
 		{command: reviewCommand, description: "Show diff review guidance."},
+		{command: designCommand, description: "Switch the active focus to Design."},
 	}
 	if m.cfg.ExitCommand != "" {
 		suggestions = append(suggestions, slashCommandSuggestion{
@@ -235,7 +237,7 @@ func headerLine(mascot string, text string) string {
 
 func (m Model) pipelineView() string {
 	symbols := defaultDisplaySymbols()
-	stages := []string{"Map", "Extract", "Apply"}
+	stages := []string{"Map", "Extract", workflow.PipelineFinalLabel(m.cfg.Focus)}
 	active := 0
 	switch m.state {
 	case stateWaitingForExtractions, stateContextWarning, stateContextReady:
@@ -245,13 +247,13 @@ func (m Model) pipelineView() string {
 	case stateWritePreview, stateWriting:
 		active = 2
 	case stateManualCopy:
-		if m.manualCopyKind == codeContextPromptKind {
+		if m.manualCopyKind == codeContextPromptKind || m.manualCopyKind == workflow.PromptTwoKind(m.cfg.Focus) {
 			active = 1
 		} else {
 			active = 0
 		}
 	case statePromptFileReveal:
-		if m.promptFileKind == codeContextPromptKind {
+		if m.promptFileKind == codeContextPromptKind || m.promptFileKind == workflow.PromptTwoKind(m.cfg.Focus) {
 			active = 1
 		} else {
 			active = 0
@@ -329,6 +331,7 @@ func (m Model) viewHelp() string {
 		"",
 		"/help          Show this reference.",
 		"/review        Show diff review guidance.",
+		"/design        Switch the active focus to Design.",
 		"/exit          Quit Badger.",
 		"",
 		"Keys",
@@ -343,7 +346,7 @@ func (m Model) viewHelp() string {
 		"1. Enter a goal. Use @path/to/file when you want Prompt 1 to include a specific file.",
 		"2. Confirm copying Prompt 1: Topology, or use the manual-copy fallback.",
 		"3. Paste FILE/PREFIX/NEAR commands from your AI chat and press Enter.",
-		"4. Confirm copying Prompt 2: Code Context, or use the manual-copy fallback.",
+		fmt.Sprintf("4. Confirm copying %s, or use the manual-copy fallback.", workflow.PromptTwoKind(m.cfg.Focus)),
 		"5. Paste the final AI response and press Enter.",
 		"6. Review file writes and confirm with y.",
 		"",

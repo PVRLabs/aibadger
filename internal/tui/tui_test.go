@@ -709,7 +709,7 @@ func TestHomeViewSurfacesReviewUseCase(t *testing.T) {
 
 	view := m.View()
 
-	if !strings.Contains(view, "Type a goal or paste a diff for review, then press Enter.") {
+	if !strings.Contains(view, "Type a goal, paste a diff, or use /design, then press Enter.") {
 		t.Fatalf("home view missing review goal guidance:\n%s", view)
 	}
 	if !strings.Contains(view, "Commands: /help, /review, /design, /exit") {
@@ -717,7 +717,7 @@ func TestHomeViewSurfacesReviewUseCase(t *testing.T) {
 	}
 	for _, want := range []string{
 		"@path/to/file",
-		"tag files into Prompt 1",
+		"Tag files with @path/to/file, then press Tab.",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("home view missing tagged-file guidance %q:\n%s", want, view)
@@ -933,12 +933,12 @@ func TestSelectedFocusSurvivesMapToExtractFlow(t *testing.T) {
 	if !strings.Contains(view, "Focus: Review") {
 		t.Fatalf("scan flow view missing active focus:\n%s", view)
 	}
-	if !strings.Contains(view, "Pipeline: [Map]"+symbols.pipelineSep+"Extract"+symbols.pipelineSep+"Respond") {
-		t.Fatalf("scan flow view missing Respond pipeline label:\n%s", view)
+	if !strings.Contains(view, "Pipeline: [Map]"+symbols.pipelineSep+"Extract"+symbols.pipelineSep+"Apply") {
+		t.Fatalf("scan flow view missing Apply pipeline label:\n%s", view)
 	}
 }
 
-func TestDesignFocusShowsFocusDesignAndRespondPipeline(t *testing.T) {
+func TestDesignFocusShowsFocusDesignAndApplyPipeline(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Focus = protocol.FocusDesign
 	m := NewModel("/tmp/project", cfg)
@@ -964,12 +964,12 @@ func TestDesignFocusShowsFocusDesignAndRespondPipeline(t *testing.T) {
 	if !strings.Contains(view, "Focus: Design") {
 		t.Fatalf("scan flow view missing Focus: Design:\n%s", view)
 	}
-	if !strings.Contains(view, "Pipeline: [Map]"+symbols.pipelineSep+"Extract"+symbols.pipelineSep+"Respond") {
-		t.Fatalf("scan flow view missing Respond pipeline label:\n%s", view)
+	if !strings.Contains(view, "Pipeline: [Map]"+symbols.pipelineSep+"Extract"+symbols.pipelineSep+"Apply") {
+		t.Fatalf("scan flow view missing Apply pipeline label:\n%s", view)
 	}
 }
 
-func TestDesignFocusPrompt2RespondInContextReadyDialog(t *testing.T) {
+func TestDesignFocusPrompt2CodeContextInContextReadyDialog(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Focus = protocol.FocusDesign
 	m := NewModel("/tmp/project", cfg)
@@ -982,19 +982,16 @@ func TestDesignFocusPrompt2RespondInContextReadyDialog(t *testing.T) {
 	view := m.viewContextReady()
 
 	for _, want := range []string{
-		"Prompt 2: Respond",
-		"Copy Prompt 2: Respond to clipboard",
+		"Prompt 2: Code Context",
+		"Copy Prompt 2: Code Context to clipboard",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("context-ready view missing %q:\n%s", want, view)
 		}
 	}
-	if strings.Contains(view, "Prompt 2: Code Context") {
-		t.Fatalf("context-ready view should not contain Code Context label for Design focus:\n%s", view)
-	}
 }
 
-func TestDesignFocusPrompt2RespondInCopySuccess(t *testing.T) {
+func TestDesignFocusPrompt2CodeContextInCopySuccess(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Focus = protocol.FocusDesign
 	m := NewModel("/tmp/project", cfg)
@@ -1013,12 +1010,12 @@ func TestDesignFocusPrompt2RespondInCopySuccess(t *testing.T) {
 	if got.status.severity != messageSuccess {
 		t.Fatalf("status severity = %v, want success", got.status.severity)
 	}
-	if got.status.text != "Prompt 2: Respond copied. Next: paste the final AI response." {
-		t.Fatalf("status text = %q, want Prompt 2: Respond success message", got.status.text)
+	if got.status.text != "Prompt 2: Code Context copied." {
+		t.Fatalf("status text = %q, want Prompt 2: Code Context success message", got.status.text)
 	}
 }
 
-func TestDesignFocusPrompt2RespondInCancel(t *testing.T) {
+func TestDesignFocusPrompt2CodeContextInCancel(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Focus = protocol.FocusDesign
 	m := NewModel("/tmp/project", cfg)
@@ -1033,15 +1030,15 @@ func TestDesignFocusPrompt2RespondInCancel(t *testing.T) {
 	if got.state != stateWaitingForCode {
 		t.Fatalf("state = %v, want %v", got.state, stateWaitingForCode)
 	}
-	if got.status.text != "Prompt 2: Respond was not copied." {
-		t.Fatalf("status = %q, want Prompt 2: Respond cancel message", got.status.text)
+	if got.status.text != "Prompt 2: Code Context was not copied." {
+		t.Fatalf("status = %q, want Prompt 2: Code Context cancel message", got.status.text)
 	}
 	if cmd == nil {
 		t.Fatal("cancel did not return textarea blink command")
 	}
 }
 
-func TestDesignFocusPrompt2RespondInHelpView(t *testing.T) {
+func TestDesignFocusPrompt2CodeContextInHelpView(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Focus = protocol.FocusDesign
 	m := NewModel("/tmp/project", cfg)
@@ -1049,11 +1046,41 @@ func TestDesignFocusPrompt2RespondInHelpView(t *testing.T) {
 
 	view := m.View()
 
-	if !strings.Contains(view, "Confirm copying Prompt 2: Respond") {
-		t.Fatalf("help view missing Prompt 2: Respond for Design focus:\n%s", view)
+	if !strings.Contains(view, "Confirm copying Prompt 2: Code Context") {
+		t.Fatalf("help view missing Prompt 2: Code Context for Design focus:\n%s", view)
 	}
-	if strings.Contains(view, "Confirm copying Prompt 2: Code Context") {
-		t.Fatalf("help view should not contain Code Context for Design focus:\n%s", view)
+}
+
+func TestContextReadyStatusUsesFocusAwareMessage(t *testing.T) {
+	wantStatus := workflow.ContextReadyStatus(protocol.FocusCode)
+	for _, focus := range []protocol.Focus{protocol.FocusCode, protocol.FocusReview, protocol.FocusDesign} {
+		t.Run("focus_"+focus.String(), func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Focus = focus
+			m := NewModel("/tmp/project", cfg)
+			m.state = stateWaitingForExtractions
+
+			next, _ := m.Update(contextDoneMsg{
+				schema: "context payload",
+				metadata: []protocol.ExtractionMetadata{
+					{Path: "internal/example.go"},
+				},
+				extractedCount: 1,
+			})
+			got, ok := next.(Model)
+			if !ok {
+				t.Fatalf("Update returned %T, want tui.Model", next)
+			}
+			if got.state != stateContextReady {
+				t.Fatalf("state = %v, want %v", got.state, stateContextReady)
+			}
+			if got.status.text != wantStatus {
+				t.Fatalf("status = %q, want %q", got.status.text, wantStatus)
+			}
+			if strings.Contains(got.status.text, "Respond context ready") {
+				t.Fatalf("status unexpectedly contained %q: %q", "Respond context ready", got.status.text)
+			}
+		})
 	}
 }
 

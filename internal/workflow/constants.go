@@ -1,9 +1,8 @@
 package workflow
 
-// This file preserves the public workflow constants used by TUI and headless
-// callers while delegating the raw defaults to a lower-level package.
-
 import (
+	"fmt"
+
 	"github.com/PVRLabs/aibadger/internal/defaults"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 )
@@ -20,23 +19,18 @@ const (
 	CodeContextPromptKind     = "Prompt 2: Code Context"
 )
 
-// PromptTwoKind returns the user-facing Prompt 2 label for the active focus.
-func PromptTwoKind(focus protocol.Focus) string {
-	if protocol.NormalizeFocus(focus) == protocol.FocusCode {
-		return CodeContextPromptKind
-	}
-	return "Prompt 2: Respond"
+func PromptTwoKind(_ protocol.Focus) string {
+	return CodeContextPromptKind
 }
 
-// PipelineFinalLabel returns the final pipeline stage label for the focus.
-func PipelineFinalLabel(focus protocol.Focus) string {
-	if protocol.NormalizeFocus(focus) == protocol.FocusCode {
-		return "Apply"
-	}
-	return "Respond"
+func PipelineFinalLabel(_ protocol.Focus) string {
+	return "Apply"
 }
 
-// FocusDisplayName returns the capitalized focus label used in status text.
+func ContextReadyStatus(focus protocol.Focus) string {
+	return fmt.Sprintf("Code context ready. Review the file list before copying %s.", PromptTwoKind(focus))
+}
+
 func FocusDisplayName(focus protocol.Focus) string {
 	switch protocol.NormalizeFocus(focus) {
 	case protocol.FocusReview:

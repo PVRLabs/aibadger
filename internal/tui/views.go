@@ -91,9 +91,9 @@ func (m Model) View() string {
 
 func (m Model) viewHome() string {
 	var lines []string
-	lines = append(lines, "Type a goal or paste a diff for review, then press Enter.")
+	lines = append(lines, "Type a goal, paste a diff, or use /design, then press Enter.")
 	lines = append(lines, "Commands: /help, /review, /design, /exit")
-	lines = append(lines, "Use @path/to/file and Tab to tag files into Prompt 1.")
+	lines = append(lines, "Tag files with @path/to/file, then press Tab.")
 	lines = append(lines, "")
 	lines = append(lines, m.viewGoalInput())
 	if suggestions := m.viewCompletionSuggestions(); suggestions != "" {
@@ -435,7 +435,7 @@ func formatReviewGitShowTip(pipeCommand string, ok bool) string {
 }
 
 func (m Model) viewPaste(st state) string {
-	spec := pasteSpecForState(st)
+	spec := pasteSpecForState(st, m.cfg.Focus)
 	size := len(m.paste.Value())
 	label := fmt.Sprintf("[text %s] paste submits, Enter fallback", protocol.FormatFileSize(int64(size)))
 	body := m.paste.View()
@@ -446,7 +446,7 @@ func (m Model) viewPaste(st state) string {
 	return fmt.Sprintf("%s\n%s\n\n%s", spec.title, helpStyle.Render(label), body)
 }
 
-func pasteSpecForState(st state) pasteSpec {
+func pasteSpecForState(st state, focus protocol.Focus) pasteSpec {
 	switch st {
 	case stateWaitingForExtractions:
 		return pasteSpec{
@@ -454,9 +454,22 @@ func pasteSpecForState(st state) pasteSpec {
 			placeholder: "Paste FILE/PREFIX/NEAR commands here. Paste submits automatically; Enter is a fallback.",
 		}
 	case stateWaitingForCode:
-		return pasteSpec{
-			title:       "Paste the final AI response.",
-			placeholder: "Paste the final AI response here. Paste submits automatically; Enter is a fallback.",
+		switch protocol.NormalizeFocus(focus) {
+		case protocol.FocusReview:
+			return pasteSpec{
+				title:       "Continue the review in your AI chat.\nIf you want Badger to inspect suggested file changes, paste the AI response here.",
+				placeholder: "Optional: paste the AI response here.",
+			}
+		case protocol.FocusDesign:
+			return pasteSpec{
+				title:       "Continue the design discussion in your AI chat.\nPaste the AI response here only if you want Badger to display or inspect it.",
+				placeholder: "Optional: paste the AI response here.",
+			}
+		default:
+			return pasteSpec{
+				title:       "Paste the final AI response.",
+				placeholder: "Paste the final AI response here. Paste submits automatically; Enter is a fallback.",
+			}
 		}
 	default:
 		return pasteSpec{}

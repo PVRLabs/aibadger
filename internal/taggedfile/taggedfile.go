@@ -386,6 +386,10 @@ func collectShallowCompletionCandidates(projectRoot string, skip SkipFunc) ([]sh
 	return candidates, nil
 }
 
+func hasPrefixFold(s, prefix string) bool {
+	return strings.HasPrefix(strings.ToLower(s), strings.ToLower(prefix))
+}
+
 func scoreCompletionCandidate(prefix string, candidate shallowCompletionCandidate) (int, bool) {
 	query := strings.TrimSpace(prefix)
 	if query == "" {
@@ -393,13 +397,13 @@ func scoreCompletionCandidate(prefix string, candidate shallowCompletionCandidat
 	}
 
 	if !candidate.IsDir {
-		if candidate.Depth == 0 && strings.HasPrefix(candidate.base(), query) {
+		if candidate.Depth == 0 && hasPrefixFold(candidate.base(), query) {
 			return 0, true
 		}
-		if candidate.Depth == 1 && strings.HasPrefix(candidate.base(), query) {
+		if candidate.Depth == 1 && hasPrefixFold(candidate.base(), query) {
 			return 1, true
 		}
-		if strings.HasPrefix(candidate.Path, query) {
+		if hasPrefixFold(candidate.Path, query) {
 			return 2, true
 		}
 		if hasSegmentPrefixMatch(candidate.Path, query) {
@@ -408,13 +412,13 @@ func scoreCompletionCandidate(prefix string, candidate shallowCompletionCandidat
 		return 0, false
 	}
 
-	if candidate.Depth == 0 && strings.HasPrefix(candidate.base(), query) {
+	if candidate.Depth == 0 && hasPrefixFold(candidate.base(), query) {
 		return 4, true
 	}
-	if candidate.Depth == 1 && strings.HasPrefix(candidate.base(), query) {
+	if candidate.Depth == 1 && hasPrefixFold(candidate.base(), query) {
 		return 5, true
 	}
-	if strings.HasPrefix(candidate.Path, query) {
+	if hasPrefixFold(candidate.Path, query) {
 		return 6, true
 	}
 	if hasSegmentPrefixMatch(candidate.Path, query) {
@@ -449,7 +453,7 @@ func segmentHasPrefix(segment, query string) bool {
 	if segment == "" || query == "" {
 		return false
 	}
-	if strings.HasPrefix(segment, query) {
+	if hasPrefixFold(segment, query) {
 		return true
 	}
 	for _, part := range strings.FieldsFunc(segment, func(r rune) bool {
@@ -460,7 +464,7 @@ func segmentHasPrefix(segment, query string) bool {
 			return false
 		}
 	}) {
-		if strings.HasPrefix(part, query) {
+		if hasPrefixFold(part, query) {
 			return true
 		}
 	}

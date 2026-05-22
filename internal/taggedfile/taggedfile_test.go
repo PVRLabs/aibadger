@@ -530,6 +530,90 @@ func TestCompleteTaggedReferencesExternalFallback(t *testing.T) {
 	}
 }
 
+func TestCompleteTaggedReferencesIsCaseInsensitive(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWrite := func(path string) {
+		t.Helper()
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite("README.md")
+	mustWrite("docs/UI-Spec.md")
+	mustWrite("docs/UserGuide.md")
+	mustWrite("docs/Readme.md")
+
+	t.Run("lowercase prefix matches uppercase file", func(t *testing.T) {
+		completions, err := Complete(root, "read", nil, 8, nil)
+		if err != nil {
+			t.Fatalf("Complete() error = %v", err)
+		}
+		if !containsSuggestion(completions, "README.md") {
+			t.Fatalf("Complete(%q) missing README.md: %v", "read", suggestionsToPaths(completions))
+		}
+		if completions[0].Path != "README.md" {
+			t.Fatalf("first completion = %q, want README.md", completions[0].Path)
+		}
+	})
+
+	t.Run("uppercase prefix matches lowercase file", func(t *testing.T) {
+		completions, err := Complete(root, "README", nil, 8, nil)
+		if err != nil {
+			t.Fatalf("Complete() error = %v", err)
+		}
+		if !containsSuggestion(completions, "README.md") {
+			t.Fatalf("Complete(%q) missing README.md: %v", "README", suggestionsToPaths(completions))
+		}
+	})
+
+	t.Run("different case for directory traversal", func(t *testing.T) {
+		completions, err := Complete(root, "DOCS/U", nil, 8, nil)
+		if err != nil {
+			t.Fatalf("Complete() error = %v", err)
+		}
+		if !containsSuggestion(completions, "docs/UI-Spec.md") {
+			t.Fatalf("Complete(%q) missing docs/UI-Spec.md: %v", "DOCS/U", suggestionsToPaths(completions))
+		}
+	})
+
+	t.Run("preserves actual path casing in results", func(t *testing.T) {
+		completions, err := Complete(root, "docs/ui", nil, 8, nil)
+		if err != nil {
+			t.Fatalf("Complete() error = %v", err)
+		}
+		if !containsSuggestion(completions, "docs/UI-Spec.md") {
+			t.Fatalf("Complete(%q) missing docs/UI-Spec.md: %v", "docs/ui", suggestionsToPaths(completions))
+		}
+	})
+
+	t.Run("segment match is case insensitive", func(t *testing.T) {
+		completions, err := Complete(root, "USER", nil, 8, nil)
+		if err != nil {
+			t.Fatalf("Complete() error = %v", err)
+		}
+		if !containsSuggestion(completions, "docs/UserGuide.md") {
+			t.Fatalf("Complete(%q) missing docs/UserGuide.md: %v", "USER", suggestionsToPaths(completions))
+		}
+	})
+
+	t.Run("mixed case basename match", func(t *testing.T) {
+		completions, err := Complete(root, "ReAdMe", nil, 8, nil)
+		if err != nil {
+			t.Fatalf("Complete() error = %v", err)
+		}
+		if !containsSuggestion(completions, "docs/Readme.md") {
+			t.Fatalf("Complete(%q) missing docs/Readme.md: %v", "ReAdMe", suggestionsToPaths(completions))
+		}
+	})
+}
+
 func TestCompleteTaggedReferencesExternalBoundedLimit(t *testing.T) {
 	t.Parallel()
 

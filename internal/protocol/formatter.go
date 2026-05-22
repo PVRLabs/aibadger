@@ -32,6 +32,12 @@ func NewFormatter() *Formatter {
 	}
 }
 
+// TaggedFile represents a user-selected file with its resolution metadata.
+type TaggedFile struct {
+	Path    string
+	IsLocal bool
+}
+
 // GenerateSchemaA builds Prompt 1: Topology for the LLM.
 func (f *Formatter) GenerateSchemaA(t *model.ProjectTopology, query string) string {
 	return f.GenerateSchemaAWithTaggedFiles(t, query, nil)
@@ -39,7 +45,7 @@ func (f *Formatter) GenerateSchemaA(t *model.ProjectTopology, query string) stri
 
 // GenerateSchemaAWithTaggedFiles builds Prompt 1: Topology and appends a
 // user-selected tagged-files section when paths are supplied.
-func (f *Formatter) GenerateSchemaAWithTaggedFiles(t *model.ProjectTopology, query string, taggedFiles []string) string {
+func (f *Formatter) GenerateSchemaAWithTaggedFiles(t *model.ProjectTopology, query string, taggedFiles []TaggedFile) string {
 	var sb strings.Builder
 
 	f.writeTopologySection(&sb, t, 0)
@@ -96,13 +102,13 @@ func (f *Formatter) writeExternalContextSection(sb *strings.Builder, t *model.Pr
 	}
 }
 
-func (f *Formatter) writeTaggedFilesSection(sb *strings.Builder, taggedFiles []string) {
+func (f *Formatter) writeTaggedFilesSection(sb *strings.Builder, taggedFiles []TaggedFile) {
 	if len(taggedFiles) == 0 {
 		return
 	}
 	sb.WriteString("\n[USER TAGGED FILES]\n")
-	for _, path := range taggedFiles {
-		sb.WriteString(fmt.Sprintf("FILE:%s\n", path))
+	for _, tf := range taggedFiles {
+		sb.WriteString(fmt.Sprintf("FILE:%s\n", tf.Path))
 	}
 }
 

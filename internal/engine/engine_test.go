@@ -323,3 +323,72 @@ func TestCheckDisabledReturnsErrorForExistentFile(t *testing.T) {
 		t.Fatalf("CheckDisabled() error = %v, want ErrProjectDisabled", err)
 	}
 }
+
+func TestGenerateMapDetailedExternalFallback(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "aibadger")
+	ext1 := filepath.Join(parent, "ext1")
+	ext2 := filepath.Join(parent, "ext2")
+
+	for _, dir := range []string{root, ext1, ext2} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite := func(dir, path string) {
+		t.Helper()
+		full := filepath.Join(dir, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite(root, "local.txt")
+	mustWrite(ext1, "external.txt")
+	mustWrite(ext1, "shared.txt")
+	mustWrite(ext2, "shared.txt")
+	mustWrite(root, "priority.txt")
+	mustWrite(ext1, "priority.txt")
+
+	eng := FromTopology(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{
+			{Path: "ext1", AbsPath: ext1},
+			{Path: "ext2", AbsPath: ext2},
+		},
+	})
+
+	// 1. Local match wins
+	goal1 := "use @priority.txt"
+	_, warnings1 := eng.GenerateMapDetailed(goal1)
+	if len(warnings1) != 0 {
+		t.Fatalf("unexpected warnings for local priority: %v", warnings1)
+	}
+
+	// 2. External fallback
+	goal2 := "use @external.txt"
+	schema2, warnings2 := eng.GenerateMapDetailed(goal2)
+	if len(warnings2) != 0 {
+		t.Fatalf("unexpected warnings for external fallback: %v", warnings2)
+	}
+	if !strings.Contains(schema2, "FILE:external.txt") {
+		t.Fatalf("schema missing external fallback file:\n%s", schema2)
+	}
+
+	// 3. Ambiguity
+	goal3 := "use @shared.txt"
+	_, warnings3 := eng.GenerateMapDetailed(goal3)
+	if len(warnings3) != 1 || !strings.Contains(warnings3[0], "ambiguous") {
+		t.Fatalf("expected ambiguity warning, got %v", warnings3)
+	}
+
+	// 4. Missing
+	goal4 := "use @missing.txt"
+	_, warnings4 := eng.GenerateMapDetailed(goal4)
+	if len(warnings4) != 1 || !strings.Contains(warnings4[0], "does not exist") {
+		t.Fatalf("expected missing warning, got %v", warnings4)
+	}
+}

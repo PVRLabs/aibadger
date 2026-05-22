@@ -186,7 +186,14 @@ func (m Model) taggedCompletionCandidate(input string, cursor int) (completionCa
 	}
 	prefix := input[ref.ContentStart:prefixEnd]
 
-	suggestions, err := taggedfile.Complete(m.root, prefix, taggedFileCompletionLimit, taggedfile.DefaultCompletionSkip)
+	var externalRoots []taggedfile.ExternalRoot
+	if len(m.externalRoots) > 0 {
+		externalRoots = m.externalRoots
+	} else if m.eng != nil {
+		externalRoots = m.eng.ExternalRoots()
+	}
+
+	suggestions, err := taggedfile.Complete(m.root, prefix, externalRoots, taggedFileCompletionLimit, taggedfile.DefaultCompletionSkip)
 	if err != nil || len(suggestions) == 0 {
 		return completionCandidate{}, false
 	}

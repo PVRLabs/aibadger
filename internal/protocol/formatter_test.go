@@ -170,9 +170,9 @@ func TestGenerateSchemaAIncludesExternalContextSection(t *testing.T) {
 
 func TestGenerateSchemaAIncludesTaggedFilesSection(t *testing.T) {
 	formatter := NewFormatter()
-	output := formatter.GenerateSchemaAWithTaggedFiles(&model.ProjectTopology{}, "use tagged files", []string{
-		"docs/usage.md",
-		"examples/usage.md",
+	output := formatter.GenerateSchemaAWithTaggedFiles(&model.ProjectTopology{}, "use tagged files", []TaggedFile{
+		{Path: "docs/usage.md", IsLocal: true},
+		{Path: "examples/usage.md", IsLocal: true},
 	})
 
 	for _, want := range []string{
@@ -192,6 +192,26 @@ func TestGenerateSchemaAOmitsTaggedFilesSectionWhenEmpty(t *testing.T) {
 
 	if strings.Contains(output, "[USER TAGGED FILES]") {
 		t.Fatalf("Prompt 1 unexpectedly included tagged-files section:\n%s", output)
+	}
+}
+
+func TestGenerateSchemaAWithMixedLocalAndExternalTaggedFiles(t *testing.T) {
+	formatter := NewFormatter()
+	output := formatter.GenerateSchemaAWithTaggedFiles(&model.ProjectTopology{}, "use tagged files", []TaggedFile{
+		{Path: "docs/local.md", IsLocal: true},
+		{Path: "external/spec.md", IsLocal: false},
+		{Path: "docs/shared.md", IsLocal: true},
+	})
+
+	for _, want := range []string{
+		"[USER TAGGED FILES]",
+		"FILE:docs/local.md",
+		"FILE:external/spec.md",
+		"FILE:docs/shared.md",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("Prompt 1 missing %q:\n%s", want, output)
+		}
 	}
 }
 

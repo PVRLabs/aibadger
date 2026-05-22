@@ -12,8 +12,10 @@ import (
 
 	"github.com/PVRLabs/aibadger/internal/clipboard"
 	"github.com/PVRLabs/aibadger/internal/engine"
+	"github.com/PVRLabs/aibadger/internal/externalcontext"
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/taggedfile"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -81,6 +83,7 @@ type Model struct {
 	promptFileKind string
 	promptFilePath string
 
+	externalRoots       []taggedfile.ExternalRoot
 	completion          completionState
 	largeProjectPending bool
 	scanFrame           int
@@ -162,12 +165,13 @@ func NewModel(root string, cfg Config) Model {
 	paste.Blur()
 
 	m := Model{
-		root:      root,
-		cfg:       cfg,
-		state:     stateHome,
-		goalInput: goalInput,
-		paste:     paste,
-		session:   workflow.NewSession(nil, cfg.WhitespaceMode),
+		root:          root,
+		cfg:           cfg,
+		state:         stateHome,
+		goalInput:     goalInput,
+		paste:         paste,
+		session:       workflow.NewSession(nil, cfg.WhitespaceMode),
+		externalRoots: loadExternalRoots(root),
 	}
 
 	settings, showOnboarding, onboardingCompleted := loadSettingsState(cfg.SettingsPath)
@@ -182,6 +186,25 @@ func NewModel(root string, cfg Config) Model {
 		m.goalInput.Blur()
 	}
 	return m
+}
+
+func loadExternalRoots(root string) []taggedfile.ExternalRoot {
+	contexts, err := externalcontext.Load(root)
+	if err != nil || len(contexts) == 0 {
+		return nil
+	}
+	roots := make([]taggedfile.ExternalRoot, 0, len(contexts))
+	for _, ctx := range contexts {
+		ctx := ctx
+		roots = append(roots, taggedfile.ExternalRoot{
+			Path:    ctx.Path,
+			AbsPath: ctx.AbsPath,
+			IsOmitted: func(relPath, absPath string) bool {
+				return externalcontext.IsOmittedPath(ctx.AbsPath, absPath, relPath)
+			},
+		})
+	}
+	return roots
 }
 
 func loadSettingsState(settingsPath string) (Settings, bool, bool) {

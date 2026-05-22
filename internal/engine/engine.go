@@ -155,7 +155,7 @@ func (e *Engine) ApplyWrite(update writer.FileUpdate, mode writer.WhitespaceMode
 	return e.ApplyUpdate(update, mode)
 }
 
-func (e *Engine) resolveTaggedFiles(goal string) ([]string, []string) {
+func (e *Engine) resolveTaggedFiles(goal string) ([]protocol.TaggedFile, []string) {
 	if e == nil {
 		return nil, nil
 	}
@@ -166,10 +166,11 @@ func (e *Engine) resolveTaggedFiles(goal string) ([]string, []string) {
 		warnings = append(warnings, err.Error())
 	}
 
-	paths := make([]string, 0, len(refs))
+	externalRoots := e.ExternalRoots()
+	paths := make([]protocol.TaggedFile, 0, len(refs))
 	seen := make(map[string]struct{}, len(refs))
 	for _, ref := range refs {
-		resolved, err := taggedfile.Resolve(e.Root, ref.Path)
+		resolved, err := taggedfile.Resolve(e.Root, ref.Path, externalRoots)
 		if err != nil {
 			warnings = append(warnings, err.Error())
 			continue
@@ -178,10 +179,33 @@ func (e *Engine) resolveTaggedFiles(goal string) ([]string, []string) {
 			continue
 		}
 		seen[resolved.AbsPath] = struct{}{}
-		paths = append(paths, resolved.Path)
+		paths = append(paths, protocol.TaggedFile{
+			Path:    resolved.Path,
+			IsLocal: resolved.Source == taggedfile.SourceLocal,
+		})
 	}
 
 	return paths, warnings
+}
+
+// ExternalRoots returns configured external context roots for tagged-file
+// resolution.
+func (e *Engine) ExternalRoots() []taggedfile.ExternalRoot {
+	if e == nil || e.Topology == nil {
+		return nil
+	}
+	roots := make([]taggedfile.ExternalRoot, 0, len(e.Topology.ExternalContext))
+	for _, ctx := range e.Topology.ExternalContext {
+		ctx := ctx // capture for closure
+		roots = append(roots, taggedfile.ExternalRoot{
+			Path:    ctx.Path,
+			AbsPath: ctx.AbsPath,
+			IsOmitted: func(relPath, absPath string) bool {
+				return externalcontext.IsOmittedPath(ctx.AbsPath, absPath, relPath)
+			},
+		})
+	}
+	return roots
 }
 
 func (e *Engine) rejectExternalContextUpdates(result writer.ParseResult) writer.ParseResult {

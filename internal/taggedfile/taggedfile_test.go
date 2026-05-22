@@ -1,6 +1,7 @@
 package taggedfile
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -135,7 +136,7 @@ func TestResolveTaggedReferenceRejectsTraversalAndSymlinkEscape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resolved, err := Resolve(root, "main.go")
+	resolved, err := Resolve(root, "main.go", nil)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -144,7 +145,7 @@ func TestResolveTaggedReferenceRejectsTraversalAndSymlinkEscape(t *testing.T) {
 	}
 
 	for _, path := range []string{"../escape.go", "src/../../escape.go"} {
-		if _, err := Resolve(root, path); err == nil {
+		if _, err := Resolve(root, path, nil); err == nil {
 			t.Fatalf("Resolve(%q) error = nil, want traversal rejection", path)
 		}
 	}
@@ -158,7 +159,7 @@ func TestResolveTaggedReferenceRejectsTraversalAndSymlinkEscape(t *testing.T) {
 	if err := os.Symlink(outside, link); err != nil {
 		t.Skipf("symlinks unsupported on this platform: %v", err)
 	}
-	if _, err := Resolve(root, "escape.txt"); err == nil {
+	if _, err := Resolve(root, "escape.txt", nil); err == nil {
 		t.Fatal("Resolve(escape.txt) error = nil, want symlink escape rejection")
 	}
 }
@@ -188,7 +189,7 @@ func TestCompleteTaggedReferencesIsBoundedAndTraversesDirectories(t *testing.T) 
 		return relPath == "docs/secret.key"
 	}
 
-	completions, err := Complete(root, "docs/", 2, skip)
+	completions, err := Complete(root, "docs/", nil, 2, skip) // updated call with nil for externalRoots below manually if replace fails
 	if err != nil {
 		t.Fatalf("Complete() error = %v", err)
 	}
@@ -199,7 +200,7 @@ func TestCompleteTaggedReferencesIsBoundedAndTraversesDirectories(t *testing.T) 
 		t.Fatalf("Complete() paths = %v, want docs/alpha.md and docs/beta.md", []string{completions[0].Path, completions[1].Path})
 	}
 
-	nested, err := Complete(root, "docs/n", 8, skip)
+	nested, err := Complete(root, "docs/n", nil, 8, skip)
 	if err != nil {
 		t.Fatalf("Complete(nested) error = %v", err)
 	}
@@ -207,7 +208,7 @@ func TestCompleteTaggedReferencesIsBoundedAndTraversesDirectories(t *testing.T) 
 		t.Fatalf("Complete(nested) = %+v, want docs/nested/ directory suggestion", nested)
 	}
 
-	if _, err := Complete(root, "../", 8, skip); err == nil {
+	if _, err := Complete(root, "../", nil, 8, skip); err == nil {
 		t.Fatal("Complete(traversal) error = nil, want rejection")
 	}
 }
@@ -233,7 +234,7 @@ func TestCompleteTaggedReferencesRanksBasenameMatches(t *testing.T) {
 	mustWrite("examples/usage.md")
 	mustWrite("docs/nested/child.go")
 
-	completions, err := Complete(root, "us", 8, nil)
+	completions, err := Complete(root, "us", nil, 8, nil)
 	if err != nil {
 		t.Fatalf("Complete() error = %v", err)
 	}
@@ -274,7 +275,7 @@ func TestCompleteTaggedReferencesMatchesRepoRelativePathPrefix(t *testing.T) {
 	mustWrite("docs/user-guide.md")
 	mustWrite("docs/nested/child.go")
 
-	completions, err := Complete(root, "docs/us", 8, nil)
+	completions, err := Complete(root, "docs/us", nil, 8, nil)
 	if err != nil {
 		t.Fatalf("Complete() error = %v", err)
 	}
@@ -315,7 +316,7 @@ func TestCompleteTaggedReferencesRespectsBoundedLimitAndSkip(t *testing.T) {
 		return relPath == "docs/user-guide.md"
 	}
 
-	completions, err := Complete(root, "us", 2, skip)
+	completions, err := Complete(root, "us", nil, 2, skip)
 	if err != nil {
 		t.Fatalf("Complete() error = %v", err)
 	}
@@ -345,4 +346,243 @@ func suggestionsToPaths(suggestions []Suggestion) []string {
 		paths = append(paths, suggestion.Path)
 	}
 	return paths
+}
+
+func TestResolveTaggedReferenceExternalFallback(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ext1 := t.TempDir()
+	ext2 := t.TempDir()
+
+	mustWrite := func(dir, path string) {
+		t.Helper()
+		full := filepath.Join(dir, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite(root, "local.txt")
+	mustWrite(ext1, "external.txt")
+	mustWrite(ext1, "shared.txt")
+	mustWrite(ext2, "shared.txt")
+	mustWrite(ext2, "only-ext2.txt")
+	mustWrite(root, "priority.txt")
+	mustWrite(ext1, "priority.txt")
+
+	externalRoots := []ExternalRoot{
+		{Path: "ext1", AbsPath: ext1},
+		{Path: "ext2", AbsPath: ext2},
+	}
+
+	// Local resolution
+	res, err := Resolve(root, "local.txt", externalRoots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Source != SourceLocal {
+		t.Errorf("expected SourceLocal, got %v", res.Source)
+	}
+
+	// External fallback
+	res, err = Resolve(root, "external.txt", externalRoots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Source != SourceExternal {
+		t.Errorf("expected SourceExternal, got %v", res.Source)
+	}
+	if res.SourceRoot != ext1 {
+		t.Errorf("expected SourceRoot %s, got %s", ext1, res.SourceRoot)
+	}
+
+	// Local priority
+	res, err = Resolve(root, "priority.txt", externalRoots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Source != SourceLocal {
+		t.Errorf("expected SourceLocal for priority.txt, got %v", res.Source)
+	}
+
+	// Ambiguity
+	_, err = Resolve(root, "shared.txt", externalRoots)
+	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Errorf("expected ambiguity error, got %v", err)
+	}
+
+	// Not found
+	_, err = Resolve(root, "missing.txt", externalRoots)
+	if err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Errorf("expected not exist error, got %v", err)
+	}
+}
+
+func TestResolveTaggedReferenceExternalSafety(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ext := t.TempDir()
+	outside := filepath.Join(filepath.Dir(ext), "outside.txt")
+	if err := os.WriteFile(outside, []byte("outside\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	externalRoots := []ExternalRoot{
+		{Path: "ext", AbsPath: ext},
+	}
+
+	// Traversal
+	_, err := Resolve(root, "../outside.txt", externalRoots)
+	if err == nil || !strings.Contains(err.Error(), "escapes project root") {
+		t.Errorf("expected traversal rejection, got %v", err)
+	}
+
+	// Symlink escape
+	link := filepath.Join(ext, "escape.txt")
+	if err := os.Symlink(outside, link); err == nil {
+		if _, err := Resolve(root, "escape.txt", externalRoots); err == nil {
+			t.Error("expected symlink escape rejection from external root")
+		}
+	}
+
+	// Omitted by validator
+	externalRoots[0].IsOmitted = func(relPath, absPath string) bool {
+		return relPath == "secret.txt"
+	}
+	if err := os.WriteFile(filepath.Join(ext, "secret.txt"), []byte("secret\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Resolve(root, "secret.txt", externalRoots)
+	if err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Errorf("expected omitted file to be treated as not exist, got %v", err)
+	}
+}
+
+func TestCompleteTaggedReferencesExternalFallback(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ext := t.TempDir()
+
+	mustWrite := func(dir, path string) {
+		t.Helper()
+		full := filepath.Join(dir, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite(root, "local-file.txt")
+	mustWrite(ext, "external-file.txt")
+	mustWrite(root, "shared.txt")
+	mustWrite(ext, "shared.txt")
+
+	externalRoots := []ExternalRoot{
+		{Path: "ext", AbsPath: ext},
+	}
+
+	// 1. Local match
+	completions, err := Complete(root, "loc", externalRoots, 8, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(completions) != 1 || completions[0].Path != "local-file.txt" {
+		t.Fatalf("expected local-file.txt, got %v", suggestionsToPaths(completions))
+	}
+
+	// 2. External match
+	completions, err = Complete(root, "ext", externalRoots, 8, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(completions) != 1 || completions[0].Path != "external-file.txt" {
+		t.Fatalf("expected external-file.txt, got %v", suggestionsToPaths(completions))
+	}
+
+	// 3. Local priority (duplicate suppression)
+	completions, err = Complete(root, "sha", externalRoots, 8, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(completions) != 1 || completions[0].Path != "shared.txt" {
+		t.Fatalf("expected shared.txt, got %v", suggestionsToPaths(completions))
+	}
+
+	// 4. Omitted from external
+	mustWrite(ext, "secret.txt")
+	externalRoots[0].IsOmitted = func(relPath, absPath string) bool {
+		return relPath == "secret.txt"
+	}
+	completions, err = Complete(root, "sec", externalRoots, 8, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(completions) != 0 {
+		t.Fatalf("expected no completions for omitted file, got %v", suggestionsToPaths(completions))
+	}
+}
+
+func TestCompleteTaggedReferencesExternalBoundedLimit(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ext := t.TempDir()
+
+	mustWrite := func(dir, path string) {
+		t.Helper()
+		full := filepath.Join(dir, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite(root, "alpha.txt")
+	mustWrite(root, "beta.txt")
+
+	for i := range 10 {
+		mustWrite(ext, fmt.Sprintf("ext-%d.txt", i))
+	}
+
+	externalRoots := []ExternalRoot{
+		{Path: "ext", AbsPath: ext},
+	}
+
+	completions, err := Complete(root, "", externalRoots, 8, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(completions) > 8 {
+		t.Fatalf("expected at most 8 completions, got %d: %v", len(completions), suggestionsToPaths(completions))
+	}
+	if len(completions) < 2 {
+		t.Fatalf("expected at least 2 completions, got %d: %v", len(completions), suggestionsToPaths(completions))
+	}
+	if completions[0].Path != "alpha.txt" || completions[1].Path != "beta.txt" {
+		t.Fatalf("expected local files first, got %v", suggestionsToPaths(completions))
+	}
+
+	completions, err = Complete(root, "", externalRoots, 12, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(completions) > 12 {
+		t.Fatalf("expected at most 12 completions, got %d: %v", len(completions), suggestionsToPaths(completions))
+	}
+	if len(completions) < 2 {
+		t.Fatalf("expected at least 2 completions, got %d: %v", len(completions), suggestionsToPaths(completions))
+	}
+	if completions[0].Path != "alpha.txt" || completions[1].Path != "beta.txt" {
+		t.Fatalf("expected local files first, got %v", suggestionsToPaths(completions))
+	}
 }

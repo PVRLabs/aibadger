@@ -24,11 +24,29 @@ type Reference struct {
 }
 
 // ResolvedPath is the normalized path returned after validating a tagged file
-// reference against the project root.
+// reference against the project root or external context.
 type ResolvedPath struct {
-	Path    string
-	AbsPath string
-	IsDir   bool
+	Path       string
+	AbsPath    string
+	IsDir      bool
+	Source     SourceKind
+	SourceRoot string // Absolute path of the root that resolved this reference
+}
+
+// SourceKind describes whether a tagged file reference resolved project-locally
+// or to an external context root.
+type SourceKind int
+
+const (
+	SourceLocal SourceKind = iota
+	SourceExternal
+)
+
+// ExternalRoot represents a configured read-only context directory.
+type ExternalRoot struct {
+	Path      string                             // Display path (e.g. from .badger-context)
+	AbsPath   string                             // Absolute path on disk
+	IsOmitted func(relPath, absPath string) bool // Optional validator
 }
 
 // Suggestion is a shallow tagged-file completion candidate.
@@ -121,20 +139,104 @@ func ActiveTokenAt(input string, cursor int) (Reference, bool) {
 }
 
 // Resolve validates a tagged-file reference against projectRoot and returns a
-// normalized repo-relative file path.
-func Resolve(projectRoot, relPath string) (ResolvedPath, error) {
-	resolved, err := resolveExistingPath(projectRoot, relPath)
-	if err != nil {
-		return ResolvedPath{}, err
+// normalized repo-relative file path. It falls back to externalRoots if no
+// local match exists.
+func Resolve(projectRoot, relPath string, externalRoots []ExternalRoot) (ResolvedPath, error) {
+	resolved, localErr := resolveExistingPath(projectRoot, relPath)
+	if localErr == nil {
+		if resolved.IsDir {
+			return ResolvedPath{}, fmt.Errorf("tagged file path is a directory: %s", relPath)
+		}
+		resolved.Source = SourceLocal
+		return resolved, nil
 	}
-	if resolved.IsDir {
-		return ResolvedPath{}, fmt.Errorf("tagged file path is a directory: %s", relPath)
+
+	// Fallback to external context if local resolution failed because the path
+	// didn't exist or it escaped the project root.
+	isNotFound := strings.Contains(localErr.Error(), "does not exist")
+	isEscape := strings.Contains(localErr.Error(), "escapes project root")
+	if !isNotFound && !isEscape {
+		return ResolvedPath{}, localErr
 	}
-	return resolved, nil
+
+	var matches []ResolvedPath
+	seenAbs := make(map[string]bool)
+
+	addMatch := func(m ResolvedPath, root ExternalRoot) {
+		if seenAbs[m.AbsPath] || m.IsDir {
+			return
+		}
+		if root.IsOmitted != nil && root.IsOmitted(relPath, m.AbsPath) {
+			return
+		}
+		m.Path = relPath // Preserve original reference path for display and fallback resolution
+		m.Source = SourceExternal
+		m.SourceRoot = root.AbsPath
+		matches = append(matches, m)
+		seenAbs[m.AbsPath] = true
+	}
+
+	for _, root := range externalRoots {
+		// Strategy 1: Exact match or relative to external root (handles @spec.md)
+		if m, err := resolveExistingPath(root.AbsPath, relPath); err == nil {
+			addMatch(m, root)
+		}
+
+		// Strategy 2: relPath starts with root display path (handles @../badger-sidecar/docs/spec.md)
+		displayPrefix := root.Path + "/"
+		if strings.HasPrefix(relPath, displayPrefix) {
+			remainder := relPath[len(displayPrefix):]
+			if m, err := resolveExistingPath(root.AbsPath, remainder); err == nil {
+				addMatch(m, root)
+			}
+		}
+
+		// Strategy 3: relPath starts with stripped display path (handles @badger-sidecar/docs/spec.md)
+		stripped := strings.TrimLeft(root.Path, "./")
+		if stripped != "" && strings.HasPrefix(relPath, stripped+"/") {
+			remainder := relPath[len(stripped)+1:]
+			if m, err := resolveExistingPath(root.AbsPath, remainder); err == nil {
+				addMatch(m, root)
+			}
+		}
+	}
+
+	// Strategy 4: Loose resolution from project root (handles @../badger-sidecar/docs/spec.md safely)
+	if isEscape {
+		absRoot, _ := filepath.Abs(projectRoot)
+		fullPath := filepath.Clean(filepath.Join(absRoot, filepath.FromSlash(relPath)))
+		if resolved, err := filepath.EvalSymlinks(fullPath); err == nil {
+			fullPath = resolved
+		}
+
+		for _, root := range externalRoots {
+			rel, err := filepath.Rel(root.AbsPath, fullPath)
+			if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
+					addMatch(ResolvedPath{
+						Path:    relPath,
+						AbsPath: fullPath,
+						IsDir:   false,
+					}, root)
+				}
+			}
+		}
+	}
+
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	if len(matches) > 1 {
+		return ResolvedPath{}, fmt.Errorf("ambiguous tagged file reference %q: matches multiple external context roots", relPath)
+	}
+
+	return ResolvedPath{}, localErr
 }
 
-// Complete returns shallow suggestions for a tagged-file prefix.
-func Complete(projectRoot, prefix string, limit int, skip SkipFunc) ([]Suggestion, error) {
+// Complete returns shallow suggestions for a tagged-file prefix. It includes
+// external context suggestions when no local match exists or as lower-ranked
+// alternatives.
+func Complete(projectRoot, prefix string, externalRoots []ExternalRoot, limit int, skip SkipFunc) ([]Suggestion, error) {
 	if limit <= 0 {
 		limit = defaultCompletionLimit
 	}
@@ -149,6 +251,7 @@ func Complete(projectRoot, prefix string, limit int, skip SkipFunc) ([]Suggestio
 	}
 
 	scored := make([]scoredSuggestion, 0, len(candidates))
+	seenPaths := make(map[string]bool)
 	for _, candidate := range candidates {
 		rank, ok := scoreCompletionCandidate(prefix, candidate)
 		if !ok {
@@ -161,11 +264,50 @@ func Complete(projectRoot, prefix string, limit int, skip SkipFunc) ([]Suggestio
 			},
 			rank: rank,
 		})
+		seenPaths[candidate.Path] = true
+	}
+
+	for _, root := range externalRoots {
+		extCandidates, err := collectShallowCompletionCandidates(root.AbsPath, func(relPath string, isDir bool) bool {
+			if skip != nil && skip(relPath, isDir) {
+				return true
+			}
+			if root.IsOmitted != nil && root.IsOmitted(relPath, filepath.Join(root.AbsPath, relPath)) {
+				return true
+			}
+			return false
+		})
+		if err != nil {
+			continue
+		}
+		for _, candidate := range extCandidates {
+			if seenPaths[candidate.Path] {
+				continue
+			}
+			rank, ok := scoreCompletionCandidate(prefix, candidate)
+			if !ok {
+				continue
+			}
+			// External context matches are ranked slightly lower than local
+			// matches with the same score.
+			scored = append(scored, scoredSuggestion{
+				suggestion: Suggestion{
+					Path:  candidate.Path,
+					IsDir: candidate.IsDir,
+				},
+				rank:       rank,
+				isExternal: true,
+			})
+			seenPaths[candidate.Path] = true
+		}
 	}
 
 	sort.SliceStable(scored, func(i, j int) bool {
 		if scored[i].rank != scored[j].rank {
 			return scored[i].rank < scored[j].rank
+		}
+		if scored[i].isExternal != scored[j].isExternal {
+			return !scored[i].isExternal
 		}
 		if scored[i].suggestion.IsDir != scored[j].suggestion.IsDir {
 			return !scored[i].suggestion.IsDir && scored[j].suggestion.IsDir
@@ -192,6 +334,7 @@ type shallowCompletionCandidate struct {
 type scoredSuggestion struct {
 	suggestion Suggestion
 	rank       int
+	isExternal bool
 }
 
 func collectShallowCompletionCandidates(projectRoot string, skip SkipFunc) ([]shallowCompletionCandidate, error) {

@@ -215,7 +215,7 @@ func (m Model) viewOnboarding() string {
 		renderBold("First run"),
 		"",
 		"Badger is a lightweight local bridge between your codebase",
-		"and any AI chat (Claude, Cursor, GPT, etc.)",
+		"and any AI chat (Claude, ChatGPT, DeepSeek, Grok, etc.)",
 		"",
 		renderBold("How it works:"),
 		"",

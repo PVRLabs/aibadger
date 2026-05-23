@@ -67,10 +67,14 @@ For more commands, flags, and advanced usage, see [docs/usage.md](docs/usage.md)
 
 ### Example
 
-```text
+```bash
 badger
-# then type:  Review this change for bugs.
-#             [Paste git diff here]
+```
+
+Then type your goal:
+
+```text
+Understand how authentication works. @internal/auth.go @docs/auth-design.md
 ```
 
 For walkthroughs and more examples, see [docs/usage.md](docs/usage.md).

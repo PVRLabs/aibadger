@@ -777,8 +777,8 @@ func TestSubmitGoalDesignCommandSwitchesFocus(t *testing.T) {
 	if got.state != stateHome {
 		t.Fatalf("state = %v, want %v", got.state, stateHome)
 	}
-	if got.goalInput.Value() != defaultDesignPrompt {
-		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), defaultDesignPrompt)
+	if got.goalInput.Value() != protocol.DefaultDesignPrompt {
+		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), protocol.DefaultDesignPrompt)
 	}
 	if !strings.Contains(got.status.text, "Focus set to Design.") {
 		t.Fatalf("status = %q, want focus confirmation", got.status.text)
@@ -964,8 +964,8 @@ func TestDesignCompletionTabThenEnterSwitchesFocus(t *testing.T) {
 	if !strings.Contains(got.status.text, "Focus set to Design.") {
 		t.Fatalf("status = %q, want focus confirmation", got.status.text)
 	}
-	if got.goalInput.Value() != defaultDesignPrompt {
-		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), defaultDesignPrompt)
+	if got.goalInput.Value() != protocol.DefaultDesignPrompt {
+		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), protocol.DefaultDesignPrompt)
 	}
 	if cmd == nil {
 		t.Fatal("design action returned unexpected nil command")
@@ -990,8 +990,8 @@ func TestDesignCompletionEnterThenEnterSwitchesFocus(t *testing.T) {
 	if !strings.Contains(got.status.text, "Focus set to Design.") {
 		t.Fatalf("status = %q, want focus confirmation", got.status.text)
 	}
-	if got.goalInput.Value() != defaultDesignPrompt {
-		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), defaultDesignPrompt)
+	if got.goalInput.Value() != protocol.DefaultDesignPrompt {
+		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), protocol.DefaultDesignPrompt)
 	}
 	if cmd == nil {
 		t.Fatal("design action returned unexpected nil command")

@@ -48,7 +48,6 @@ const (
 	helpCommand           = "/help"
 	reviewCommand         = "/review"
 	designCommand         = "/design"
-	defaultDesignPrompt   = "Design: approach with tradeoffs, risks, implementation sequence, and deferrals.\n\nDescription: "
 )
 
 type Model struct {
@@ -478,7 +477,7 @@ func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
 	m.cfg.Focus = protocol.FocusDesign
 	m.status = successMessage("Focus set to Design.")
 	m.err = nil
-	m.setGoalInputValue(defaultDesignPrompt)
+	m.setGoalInputValue(protocol.DefaultDesignPrompt)
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
 	m.goalInput.Focus()

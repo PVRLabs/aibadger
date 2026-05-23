@@ -78,6 +78,8 @@ const reviewSchemaBConstraint = "\n[TASK]\n%s\n\n[OUTPUT CONSTRAINT]\n" +
 	"2. If no issues are found, state that clearly.\n" +
 	"3. Do not invent patches unless the user explicitly asks for a fix.\n"
 
+const DefaultDesignPrompt = "Design: approach with tradeoffs, risks, implementation sequence, and deferrals.\n\nDescription: "
+
 const designSchemaBConstraint = "\n[TASK]\n%s\n\n[OUTPUT CONSTRAINT]\n" +
 	"This is the final-answer step for a design task.\n" +
 	"Based ONLY on the provided [CONTEXT] and [PROJECT TOPOLOGY], explain the recommended approach, tradeoffs, or open decisions.\n" +

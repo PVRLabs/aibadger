@@ -92,6 +92,9 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if cfg.focus == protocol.FocusDesign {
+		headlessReviewGoal = applyDesignStartup(&badgerCfg, cfg)
+	}
 	if !cfg.headless {
 		if err := badger.Run(badgerCfg); err != nil {
 			fmt.Printf("TUI error: %v\n", err)
@@ -284,6 +287,17 @@ func validateReviewOptions(mode reviewtask.Mode, ref string) error {
 		return fmt.Errorf("unknown review mode %d", mode)
 	}
 	return nil
+}
+
+func applyDesignStartup(cfg *badger.Config, app appConfig) string {
+	if app.headless {
+		return protocol.DefaultDesignPrompt
+	}
+	cfg.SkipOnboarding = true
+	cfg.StartupGoal = protocol.DefaultDesignPrompt
+	cfg.StartupStatus = "Focus set to Design. Edit the goal before submitting."
+	cfg.StartupStatusSeverity = "success"
+	return ""
 }
 
 func applyReviewStartup(cfg *badger.Config, app appConfig) (string, error) {

@@ -121,6 +121,54 @@ func TestLoadConfigReviewFlagsAreMutuallyExclusive(t *testing.T) {
 	}
 }
 
+func TestApplyDesignStartupInteractive(t *testing.T) {
+	cfg := badger.DefaultConfig()
+	cfg.Root = t.TempDir()
+	app := appConfig{
+		focus: protocol.FocusDesign,
+	}
+
+	goal := applyDesignStartup(&cfg, app)
+	if goal != "" {
+		t.Fatalf("design goal = %q, want empty for interactive startup", goal)
+	}
+	if !cfg.SkipOnboarding {
+		t.Fatal("SkipOnboarding = false, want true")
+	}
+	if cfg.StartupGoal != protocol.DefaultDesignPrompt {
+		t.Fatalf("StartupGoal = %q, want %q", cfg.StartupGoal, protocol.DefaultDesignPrompt)
+	}
+	if cfg.StartupStatusSeverity != "success" {
+		t.Fatalf("StartupStatusSeverity = %q, want %q", cfg.StartupStatusSeverity, "success")
+	}
+	if cfg.StartupStatus == "" {
+		t.Fatal("StartupStatus is empty")
+	}
+	if !strings.Contains(cfg.StartupStatus, "Design") {
+		t.Fatalf("StartupStatus = %q, want message mentioning Design", cfg.StartupStatus)
+	}
+}
+
+func TestApplyDesignStartupHeadless(t *testing.T) {
+	cfg := badger.DefaultConfig()
+	cfg.Root = t.TempDir()
+	app := appConfig{
+		focus:    protocol.FocusDesign,
+		headless: true,
+	}
+
+	goal := applyDesignStartup(&cfg, app)
+	if goal == "" {
+		t.Fatal("headless design goal is empty")
+	}
+	if !strings.Contains(goal, "Design") {
+		t.Fatalf("headless design goal missing design template:\n%s", goal)
+	}
+	if cfg.StartupGoal != "" {
+		t.Fatalf("StartupGoal = %q, want empty for headless startup", cfg.StartupGoal)
+	}
+}
+
 func TestApplyReviewStartupUsesReviewPrompt(t *testing.T) {
 	repo := newGitRepo(t)
 	writeFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"updated\")\n}\n")

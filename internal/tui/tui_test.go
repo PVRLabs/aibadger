@@ -205,6 +205,27 @@ func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
 	}
 }
 
+func TestNewModelAppliesStartupDesignGoalWithEnoughHeight(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SettingsPath = filepath.Join(t.TempDir(), ".badger", "settings.json")
+	cfg.StartupGoal = protocol.DefaultDesignPrompt
+	cfg.StartupStatus = "Focus set to Design. Edit the goal before submitting."
+	cfg.StartupStatusSeverity = "success"
+	cfg.SkipOnboarding = true
+
+	m := NewModel("/tmp/project", cfg)
+
+	if m.state != stateHome {
+		t.Fatalf("state = %v, want %v", m.state, stateHome)
+	}
+	if got := m.goalInput.Value(); got != cfg.StartupGoal {
+		t.Fatalf("goal input = %q, want %q", got, cfg.StartupGoal)
+	}
+	if got := m.goalInput.Height(); got != 3 {
+		t.Fatalf("goal input height = %d, want 3", got)
+	}
+}
+
 func TestNewModelAppliesFallbackReviewGoalAndWarningStatus(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.StartupGoal = "Review the following change before committing."

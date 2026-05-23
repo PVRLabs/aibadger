@@ -21,6 +21,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/writer"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/term"
 )
 
 type state int
@@ -153,7 +154,7 @@ func NewModel(root string, cfg Config) Model {
 	goalInput.Placeholder = "Describe the task..."
 	goalInput.Prompt = "> "
 	goalInput.CharLimit = 0
-	goalInput.SetWidth(76)
+	goalInput.SetWidth(initialEditorWidth())
 	goalInput.SetHeight(goalEditorHeight("", 0))
 	goalInput.Focus()
 
@@ -161,7 +162,7 @@ func NewModel(root string, cfg Config) Model {
 	paste.Placeholder = "Paste here..."
 	paste.Prompt = "  "
 	paste.CharLimit = 0
-	paste.SetWidth(76)
+	paste.SetWidth(initialEditorWidth())
 	paste.SetHeight(12)
 	paste.Blur()
 
@@ -698,6 +699,13 @@ func (m Model) returnHome(status tuiMessage) (tea.Model, tea.Cmd) {
 
 func (m *Model) resizeGoalEditor() {
 	m.goalInput.SetHeight(goalEditorHeight(m.goalInput.Value(), m.height))
+}
+
+func initialEditorWidth() int {
+	if width, _, err := term.GetSize(os.Stdout.Fd()); err == nil && width > 0 {
+		return clamp(width-8, 40, 100)
+	}
+	return 76
 }
 
 func (m *Model) resetPaste(placeholder string) {

@@ -1,22 +1,36 @@
 ![AI Badger](assets/hero.png)
 # AI Badger
 
-AI Badger helps you use any AI chat with your local codebase without uploading your repository or requiring an AI provider API key.
+Badger is a lightweight local bridge between your codebase and any AI chat (Claude, ChatGPT, DeepSeek, Grok, etc.).
 
-It scans a project on your machine, maps the important project structure into a compact prompt, and helps you extract only the files or code spans your AI chat requests. You stay in control of what gets copied, reviewed, and written back.
+## How it works
 
-It stays local by default: no telemetry, no file uploads, and no cloud service required to prepare code context.
+**1. Map**  
+Enter your goal. Badger builds a prompt.  
+↳ You copy it → paste into your AI chat
 
-No API keys. No cloud dependency. No vendor lock-in.
+**2. Extract**  
+AI replies asking for specific files.  
+↳ You copy that → paste back into Badger
+
+**3. Apply**  
+Badger fetches those files, builds a second prompt.  
+↳ You copy it → paste into AI → review before writing
+
+✓ Fully local — nothing leaves your machine until you copy it  
+✓ You control every paste and every write
+
+[▶ Watch the interactive demo](https://pvrlabs.xyz/aibadger/demo.html)
 
 ![AI Badger demo](assets/demo.gif)
+
 _Map → Extract → Apply: prepare focused code context for any AI chat._
 
 ## Why AI Badger?
 
-- **Works with any AI chat** — AI Badger prepares local code context for manual paste into ChatGPT, Claude, Gemini, or any other chat interface when you choose to use one.
-- **Local-first by design** — normal use requires no API keys, no cloud service, no telemetry, and no network connection.
-- **Precise context extraction** — AI can ask for `FILE:`, `PREFIX:`, or `NEAR:` references, and AI Badger extracts the relevant file or nearby logical code block instead of dumping the whole repository.
+- **Works with any AI chat** — Prepares clean, local code context for manual paste into any chat interface.
+- **Local-first by design** — No API keys, no cloud service, no telemetry, and no network required.
+- **Precise context extraction** — AI requests only the files or spans it needs using `FILE:`, `PREFIX:`, or `NEAR:` selectors.
 
 ## Install
 
@@ -33,32 +47,30 @@ Or install the latest release with curl:
 curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | sh
 ```
 
-For source builds, release builds, version checks, and Windows install
-instructions, see [docs/install.md](docs/install.md).
+For source builds, release builds, version checks, and Windows install instructions, see [docs/install.md](docs/install.md).
 
-## Quick start
+## Quick Start
 
-[**Watch the interactive demo**](https://pvrlabs.xyz/aibadger/demo.html) - See how AI Badger works in a simple animated walkthrough.
+1. Run `badger` in your project root.
+2. Type your goal (or paste a git diff).
+3. Copy **Prompt 1 (Map)** and paste into your AI chat.
+4. When the AI asks for files, copy its response and paste back into Badger.
+5. Copy **Prompt 2 (Code Context)** back to the AI.
+6. Paste the AI’s final response into Badger to review and apply changes.
 
-1. **Goal** — Run `badger` in your project, type a goal like `Review this change for bugs`, paste a git diff, and press Enter.
-2. **Map** — AIBadger scans your project and shows **Prompt 1: Topology** (project structure and files, not source code). Copy it and paste into any AI chat (Claude, ChatGPT, Gemini, etc.).
-3. **Extract** — The AI asks for the files it needs. Copy its reply (e.g. `FILE:internal/scanner/scanner.go`) and paste it back into AIBadger. AIBadger prepares **Prompt 2: Code Context** with the relevant source.
-4. **Analyze** — Copy Prompt 2 back to the AI chat. The AI reads the code and responds with analysis or code changes.
-5. **Apply** — Paste the AI's final response into AIBadger, review the write plan, and confirm.
+### Specialized Modes
 
-## Example tasks
+- `badger review` — Starts directly in review mode with the current git diff pre-loaded.
+- `badger design` — Starts in design mode, focused on architecture, tradeoffs, and planning.
 
-1. Review a change before committing.
-2. Find bugs or performance issues in a focused area.
-3. Understand an unfamiliar part of a codebase.
-4. Make a focused implementation request.
+For more commands, flags, and advanced usage, see [docs/usage.md](docs/usage.md).
 
-Example review goal:
+### Example
 
 ```text
-Review the following change for bugs.
-
-[Paste git diff here]
+badger
+# then type:  Review this change for bugs.
+#             [Paste git diff here]
 ```
 
 For walkthroughs and more examples, see [docs/usage.md](docs/usage.md).

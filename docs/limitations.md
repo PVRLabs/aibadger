@@ -1,6 +1,6 @@
 # Limitations
 
-AIBadger is a context bridge, not an AI provider or autonomous coding agent.
+Badger is a context bridge, not an AI provider or autonomous coding agent.
 
 ## Current Constraints
 
@@ -10,4 +10,4 @@ AIBadger is a context bridge, not an AI provider or autonomous coding agent.
 
 ## Scope Notes
 
-The supported language detectors improve ranking for common project shapes, but AIBadger is designed to work across arbitrary repositories.
+The supported language detectors improve ranking for common project shapes, but Badger is designed to work across arbitrary repositories.

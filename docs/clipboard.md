@@ -1,6 +1,6 @@
 # Clipboard Dependencies
 
-AIBadger copies text to the system clipboard via a platform-native command.
+Badger copies text to the system clipboard via a platform-native command.
 Below are the required tools per platform.
 
 ## Linux

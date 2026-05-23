@@ -1,6 +1,6 @@
 # Usage
 
-AIBadger runs from the root of the project you want to inspect:
+Badger runs from the root of the project you want to inspect:
 
 ```bash
 badger
@@ -8,26 +8,61 @@ badger
 
 ## Walkthrough
 
-This example traces a full session end-to-end using a code review task.
+This example traces a full session end-to-end using `badger review`.
 
-### Step 1: State your goal
+### Step 1: Start a review
+
+```bash
+cd your-project
+badger review
+```
+
+Badger opens your editor with a prompt pre-filled from the current git diff. Review it, make any tweaks, then save and close to submit.
+
+> [!NOTE]
+> Only project structure and your diff are included — source code content stays local until you paste extraction commands.
+
+### Step 2: Copy Prompt 1 (Map) to your AI chat
+
+Badger scans the project and shows **Prompt 1 (Map)** — a compact map of the project's structure, key files, and your goal. Copy it and paste into your AI chat (Claude, ChatGPT, Gemini, etc.).
+
+> [!NOTE]
+> Prompt 1 contains file paths and structure only — your source code stays local.
+
+### Step 3: Paste the AI's extraction commands back
+
+The AI reads the topology and replies with the files it needs:
+
+```text
+FILE:internal/tui/tui.go
+NEAR:internal/tui/tui.go#handleKeypress
+```
+
+Copy those lines, paste them into Badger, and press Enter. Badger fetches only those files and prepares **Prompt 2 (Code Context)**.
+
+### Step 4: Copy Prompt 2 back to the AI chat
+
+Copy Prompt 2 and paste it into your AI chat. The AI now has both the project structure and the actual source code. It responds with its analysis and any suggested changes.
+
+### Step 5: Apply the AI's changes
+
+Paste the AI's full response into Badger. Badger parses any file changes, shows you a write plan listing what will be written to each file, and asks for confirmation. Review the plan and confirm to apply.
+
+## Manual mode
+
+If you're not doing a code review, run `badger` without arguments:
 
 ```bash
 cd your-project
 badger
 ```
 
-Type a goal. You can also paste a git diff if you want to provide details of the change.
-If you want Prompt 1 to include a specific file, type a tagged reference like
-`@docs/usage.md` in the goal input. Press `Tab` to complete `@` references
-from the shallow file list. Tagged references also resolve against
-[external context](usage.md#external-context) directories when no local
-file exists.
-
-For a zero-config code review, run `badger review`. Badger opens Review focus with an editable prompt seeded from the current git diff. Use `--staged`, `--branch <ref>`, or `--commit <sha>` to choose the diff source. If no diff is available or the repository is not git-backed, Badger leaves a manual fallback prompt in the editor.
+Type a goal at the prompt. You can also paste a git diff if you want to provide details of the change.
 
 > [!TIP]
-> AIBadger never reads your source code ahead of time — you explicitly provide context (like a diff or error output) so only what's needed leaves your machine.
+> Badger never reads your source code ahead of time — you explicitly provide context (like a diff or error output) so only what's needed leaves your machine.
+
+If you want Prompt 1 to include a specific file, type a tagged reference like `@docs/usage.md` in the goal input. Press `Tab` to complete `@` references from the shallow file list. Tagged references also resolve against [external context](#external-context) directories when no local file exists.
 
 ```text
 Review my uncommitted changes for bugs, edge cases, and performance issues.
@@ -42,59 +77,26 @@ index abc..def 100644
 +    }
 ```
 
-Press Enter.
-
-### Step 2: Copy Prompt 1 (Topology) to your AI chat
-
-AIBadger scans the project and shows **Prompt 1: Topology** — a compact map of the project's structure, key files, and your goal. Copy it and paste into your AI chat (Claude, ChatGPT, Gemini, etc.).
-
-> [!NOTE]
-> Prompt 1 contains file paths and structure only — your source code stays local.
-
-### Step 3: Paste the AI's extraction commands back
-
-The AI reads the topology and asks for specific files:
-
-```text
-To review the change, I need to see the TUI event handler:
-FILE:internal/tui/tui.go
-NEAR:internal/tui/tui.go#handleKeypress
-```
-
-Copy those lines, paste them into AIBadger, and press Enter. AIBadger fetches only those files and prepares **Prompt 2: Code Context**.
-
-### Step 4: Copy Prompt 2 back to the AI chat
-
-Copy Prompt 2 and paste it into your AI chat. The AI now has both the project structure and the actual source code. It responds with its analysis and any suggested changes.
-
-### Step 5: Apply the AI's changes
-
-Paste the AI's full response into AIBadger. AIBadger parses any file changes, shows you a write plan listing what will be written to each file, and asks for confirmation. Review the plan and confirm to apply.
+Press Enter. Then follow Steps 2-5 above.
 
 ## Example Tasks
 
-Type or paste one of these as the initial goal in AIBadger.
-
-### Review A Change Before Committing
-
-For small or focused changes, paste a review goal and diff as the initial task:
-
-```text
-Review the following change for bugs.
-
-[Paste git diff here]
-```
-
-```text
-Review the following change for bugs, performance issues, and missing tests.
-
-[Paste git diff here]
-```
+Type or paste one of these as the initial goal in Badger.
 
 ### Find Bugs Or Performance Issues
 
 ```text
 Look for correctness bugs, edge cases, and performance issues in the request extraction flow. Start from the relevant entrypoints and ask for only the files or spans needed.
+```
+
+### Design A Feature
+
+```bash
+badger design
+```
+
+```text
+Design a caching layer for the API client. Focus on the interface, eviction policy, and concurrency model before writing code. See @docs/api-spec.md for the current client contract.
 ```
 
 ### Troubleshoot Build Errors
@@ -126,7 +128,7 @@ Add validation so empty project names are rejected before saving. Keep the chang
 - `/help`: show the interactive command reference.
 - `/review`: seed an editable review prompt from the current git diff. It reuses the same review flow as `badger review`.
 - `/design`: switch the active focus to Design. The active focus appears in the status bar as `Focus: Design` and the prompt guides toward design recommendations instead of code patches.
-- `/exit`: quit AIBadger.
+- `/exit`: quit Badger.
 
 To start in a specific focus from the command line, pass the focus name as the
 first argument:
@@ -151,7 +153,7 @@ See [privacy.md](privacy.md) for the read-only and safety rules around external 
 
 ## Supported Projects
 
-AIBadger includes first-class scanning for:
+Badger includes first-class scanning for:
 
 - Go
 - Java

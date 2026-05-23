@@ -1,6 +1,6 @@
-# Releasing AIBadger
+# Releasing AI Badger
 
-This document describes the public OSS release process for AIBadger.
+This document describes the public OSS release process for AI Badger.
 
 Release tags use exact versions, such as `vX.Y.Z`. The `main` branch should
 carry the next development version, such as `vX.Y.Z-dev`, so source builds are

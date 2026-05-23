@@ -1,6 +1,6 @@
 # Privacy And Safety
 
-AIBadger is local-first.
+Badger is local-first.
 
 ## Guarantees
 
@@ -16,7 +16,7 @@ Secret and credential locations such as `.env` and `.git` are excluded from scan
 
 ## Consent Model
 
-AIBadger only copies content and applies file changes after explicit user confirmation.
+Badger only copies content and applies file changes after explicit user confirmation.
 
 ## External Context
 

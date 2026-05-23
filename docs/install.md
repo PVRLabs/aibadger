@@ -1,4 +1,4 @@
-# Install AIBadger
+# Install AI Badger
 
 This document covers install and build paths for the public OSS binary.
 

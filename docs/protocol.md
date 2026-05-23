@@ -1,10 +1,10 @@
 # Protocol
 
-AIBadger bridges your local project and an AI chat in a three-step exchange.
+Badger bridges your local project and an AI chat in a three-step exchange: **Map → Extract → Apply**.
 
 ## Step 1: Map
 
-**Prompt 1: Topology** has this structure:
+**Prompt 1 (Map)** — the project topology — has this structure:
 
 - **PROJECT TOPOLOGY** — languages, build stack, and module structure.
 - **SOURCE TREE** — packages with file names and sizes, grouped by priority
@@ -16,7 +16,7 @@ AIBadger bridges your local project and an AI chat in a three-step exchange.
 
 No source code is included.
 
-Copy Prompt 1 and paste it into an AI chat.
+Copy **Prompt 1 (Map)** and paste it into an AI chat.
 
 ## Step 2: Extract
 
@@ -32,13 +32,13 @@ PREFIX:internal/scanner/scanner.go#func ScanProject(
 NEAR:internal/scanner/scanner.go#detect project language
 ```
 
-Copy the AI's reply and paste it back into AIBadger. AIBadger extracts the
-relevant code and produces **Prompt 2: Code Context** — the extracted files or
+Copy the AI's reply and paste it back into Badger. Badger extracts the
+relevant code and produces **Prompt 2 (Code Context)** — the extracted files or
 code blocks with their full contents, alongside the project topology and task.
 
-## Step 3: Respond
+## Step 3: Apply
 
-Copy Prompt 2 back to the AI chat. The AI reads the code and can write back
+Copy **Prompt 2 (Code Context)** back to the AI chat. The AI reads the code and can write back
 using:
 
 - `--- File: <path> ---` ... content ... `--- End File ---` — creates or updates a file.

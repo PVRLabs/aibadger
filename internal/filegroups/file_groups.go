@@ -59,8 +59,32 @@ var (
 	}
 )
 
+var rootWebResourceNames = []string{
+	"sitemap.xml",
+	"robots.txt",
+	"manifest.json",
+	"site.webmanifest",
+	"favicon.ico",
+	"apple-touch-icon.png",
+	"favicon-32x32.png",
+	"favicon-16x16.png",
+	"browserconfig.xml",
+	"og-image.png",
+	"og-image.jpg",
+	"social-preview.png",
+	"social-preview.jpg",
+	"social-card.png",
+	"social-card.jpg",
+	"opengraph.png",
+	"opengraph.jpg",
+}
+
 func IsCriticalGuidanceDoc(base string) bool {
 	return containsLowerName(criticalGuidanceDocs, base)
+}
+
+func IsRootWebResourceName(name string) bool {
+	return containsLowerName(rootWebResourceNames, name)
 }
 
 func IsIdentityManifest(base string) bool {

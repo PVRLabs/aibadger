@@ -18,6 +18,12 @@ func TestScanIncludesStandardStaticWebResources(t *testing.T) {
 	writeTestFile(t, filepath.Join(tmpDir, "assets", "hero.svg"), "<svg></svg>\n")
 	writeTestFile(t, filepath.Join(tmpDir, "assets", "ignored.jar"), "jar")
 
+	writeTestFile(t, filepath.Join(tmpDir, "sitemap.xml"), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+	writeTestFile(t, filepath.Join(tmpDir, "robots.txt"), "User-agent: *\nDisallow:\n")
+	writeTestFile(t, filepath.Join(tmpDir, "site.webmanifest"), "{\"name\":\"test\"}\n")
+	writeTestFile(t, filepath.Join(tmpDir, "favicon.ico"), "ico")
+	writeTestFile(t, filepath.Join(tmpDir, "apple-touch-icon.png"), "png")
+
 	topology, err := NewScanner(tmpDir).Scan()
 	if err != nil {
 		t.Fatalf("Scan() error = %v", err)
@@ -68,6 +74,29 @@ func TestScanIncludesStandardStaticWebResources(t *testing.T) {
 	}
 	if hasAuxFile(assetsPkg.AuxFiles, filepath.Join("assets", "ignored.jar")) || hasTopFile(assetsPkg.TopFiles, filepath.Join("assets", "ignored.jar")) {
 		t.Fatalf("assets package surfaced omitted jar: top=%+v aux=%+v", assetsPkg.TopFiles, assetsPkg.AuxFiles)
+	}
+
+	rootWeb := findSourceRoot(module, "")
+	if rootWeb == nil {
+		t.Fatalf("module.SourceRoots = %+v, missing root web resources source root", module.SourceRoots)
+	}
+	if rootWeb.Role != "Web Resources" {
+		t.Fatalf("root web source root Role = %q, want Web Resources", rootWeb.Role)
+	}
+	if len(rootWeb.Packages) != 1 {
+		t.Fatalf("root web source root has %d packages, want 1", len(rootWeb.Packages))
+	}
+	rootPkg := &rootWeb.Packages[0]
+	if rootPkg.Name != "root" {
+		t.Fatalf("root web package Name = %q, want %q", rootPkg.Name, "root")
+	}
+	if rootPkg.FileCount != 5 {
+		t.Fatalf("root web package FileCount = %d, want 5", rootPkg.FileCount)
+	}
+	for _, name := range []string{"sitemap.xml", "robots.txt", "site.webmanifest", "favicon.ico", "apple-touch-icon.png"} {
+		if !hasTopFile(rootPkg.TopFiles, name) {
+			t.Fatalf("root web package TopFiles = %+v, missing %s", rootPkg.TopFiles, name)
+		}
 	}
 }
 

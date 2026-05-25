@@ -93,8 +93,15 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 
 		limit := 3
 		sourceRoot := findSourceRootInModule(module, winner.sourceRoot)
-		if (sourceRoot != nil && sourceRoot.Role == "Documentation") ||
-			strings.HasSuffix(strings.ToLower(winner.summary.Name), ".md") {
+		if sourceRoot != nil {
+			switch sourceRoot.Role {
+			case "Documentation":
+				limit = 5
+			case "Web Resources":
+				limit = 10
+			}
+		}
+		if strings.HasSuffix(strings.ToLower(winner.summary.Name), ".md") {
 			limit = 5
 		}
 
@@ -110,8 +117,11 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 		for sourceRootIdx := range module.SourceRoots {
 			sourceRoot := &module.SourceRoots[sourceRootIdx]
 			limit := 3
-			if sourceRoot.Role == "Documentation" {
+			switch sourceRoot.Role {
+			case "Documentation":
 				limit = 5
+			case "Web Resources":
+				limit = 10
 			}
 			for packageIdx := range sourceRoot.Packages {
 				pkg := &sourceRoot.Packages[packageIdx]

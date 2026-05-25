@@ -54,6 +54,10 @@ func isPlanningArtifactDoc(base string) bool {
 	return filegroups.IsPlanningArtifactDoc(base)
 }
 
+func isRootWebResourceName(name string) bool {
+	return filegroups.IsRootWebResourceName(name)
+}
+
 func isShallowDocumentationPath(lowerPath string) bool {
 	return filegroups.IsShallowDocumentationPath(lowerPath)
 }
@@ -78,6 +82,9 @@ func topologyFilePriority(file model.FileSummary) int {
 	}
 	if priority := highSignalDocPriority(lowerPath, base); priority > 0 {
 		return priority
+	}
+	if isRootWebResourceName(base) {
+		return 80
 	}
 	if isKnownStaticWebPath(lowerPath) {
 		return 80

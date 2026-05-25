@@ -277,6 +277,9 @@ func schemaATopFilePriority(file model.FileSummary) int {
 	if priority := schemaAHighSignalDocPriority(lowerPath, base); priority > 0 {
 		return priority
 	}
+	if isRootWebResourceName(base) {
+		return 80
+	}
 	if isKnownStaticWebPath(lowerPath) {
 		return 80
 	}

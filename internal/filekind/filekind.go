@@ -28,7 +28,7 @@ func classifyByName(path string) string {
 		".cpp", ".c", ".h", ".hpp", ".rs", ".rb", ".php", ".cs", ".kt", ".swift",
 		".html", ".htm", ".css", ".scss", ".sass", ".json", ".yaml", ".yml",
 		".toml", ".xml", ".ini", ".conf", ".properties", ".md", ".txt",
-		".sh", ".bash", ".zsh", ".sql":
+		".webmanifest", ".sh", ".bash", ".zsh", ".sql":
 		return model.FileKindSource
 	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
 		".woff", ".woff2", ".ttf", ".otf", ".mp3", ".mp4", ".mov", ".webm":

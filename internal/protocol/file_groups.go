@@ -14,6 +14,10 @@ func isShallowDocumentationPath(lowerPath string) bool {
 	return filegroups.IsShallowDocumentationPath(lowerPath)
 }
 
+func isRootWebResourceName(name string) bool {
+	return filegroups.IsRootWebResourceName(name)
+}
+
 func isKnownStaticWebPath(lowerPath string) bool {
 	return filegroups.IsKnownStaticWebPath(lowerPath)
 }

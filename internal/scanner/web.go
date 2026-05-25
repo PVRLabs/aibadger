@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/filegroups"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
@@ -19,7 +21,17 @@ func moduleWebResourceDirs() []string {
 
 // scanWebResources finds root-level static web resources for the shared scanner path.
 func scanWebResources(root string) ([]model.SourceRoot, error) {
-	return scanWebResourceDirs(root, root, standaloneWebResourceDirs())
+	sourceRoots, err := scanWebResourceDirs(root, root, standaloneWebResourceDirs())
+	if err != nil {
+		return nil, err
+	}
+
+	rootResources := scanKnownRootWebResources(root)
+	if rootResources != nil {
+		sourceRoots = append(sourceRoots, *rootResources)
+	}
+
+	return sourceRoots, nil
 }
 
 // scanModuleWebResources lets language detectors delegate known static resource directories.
@@ -143,6 +155,67 @@ func webPackageName(relPkgPath, packagePath string) string {
 		return "root"
 	}
 	return filepath.Base(packagePath)
+}
+
+// scanKnownRootWebResources finds known standard web resource files at the project root
+// (e.g., sitemap.xml, robots.txt, favicon.ico, web app manifests, social images).
+func scanKnownRootWebResources(root string) *model.SourceRoot {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+
+	var files []model.FileSummary
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !filegroups.IsRootWebResourceName(strings.ToLower(name)) {
+			continue
+		}
+		path := filepath.Join(root, name)
+		if shouldOmitFile(root, path, name) {
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			continue
+		}
+		kind := filekind.Classify(path)
+		files = append(files, model.FileSummary{
+			Name: name,
+			Path: relativePath(root, path),
+			Size: info.Size(),
+			Kind: kind,
+		})
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Path < files[j].Path
+	})
+
+	pkg := model.Package{
+		Name:      "root",
+		Path:      "",
+		FileCount: len(files),
+	}
+	for _, file := range files {
+		pkg.TopFiles = addTopFile(pkg.TopFiles, file, 10)
+	}
+	if len(pkg.TopFiles) > 0 {
+		pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
+	}
+
+	return &model.SourceRoot{
+		Path:      "",
+		Role:      "Web Resources",
+		FileCount: len(files),
+		Packages:  []model.Package{pkg},
+	}
 }
 
 func attachWebResourcesToTopology(topology *model.ProjectTopology, sourceRoots []model.SourceRoot) {

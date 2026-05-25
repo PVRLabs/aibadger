@@ -4,6 +4,7 @@ package tui
 // options.
 
 import (
+	"github.com/PVRLabs/aibadger/internal/brand"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/version"
 	"github.com/PVRLabs/aibadger/internal/workflow"
@@ -113,8 +114,8 @@ func (m *Model) workflowSession() *workflow.Session {
 
 func defaultScanFrames() []string {
 	return []string{
-		mascotFrame("Sniffing around...", "o.o"),
-		mascotFrame("Found some trails...", "-.-"),
-		mascotFrame("Almost there...", "o.o"),
+		brand.MascotFrame("Sniffing around...", "o.o"),
+		brand.MascotFrame("Found some trails...", "-.-"),
+		brand.MascotFrame("Almost there...", "o.o"),
 	}
 }

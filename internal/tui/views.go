@@ -24,7 +24,6 @@ const homeGoalPreviewBytes = 96
 const homeGoalPreviewLines = 3
 const goalEditorMinHeight = 2
 const goalEditorMaxHeight = 10
-const headerRule = "────────────────────────────────────────────────────────"
 const defaultDialogWidth = 78
 
 type slashCommandSuggestion struct {
@@ -205,10 +204,6 @@ func compactGoalPreview(text string) string {
 	return strings.Join(preview, "\n")
 }
 
-func mascotFrame(text string, face string) string {
-	return fmt.Sprintf(" /\\_/\\  %s\n( %s )", text, face)
-}
-
 func (m Model) viewOnboarding() string {
 	symbols := defaultDisplaySymbols()
 	body := strings.Join([]string{
@@ -241,22 +236,14 @@ func (m Model) viewOnboarding() string {
 
 func (m Model) headerView() string {
 	version := strings.TrimSpace(m.cfg.Version)
-	name := brand.Name
-	if version != "" {
-		name += " " + version
-	}
 	lines := []string{
-		headerRule,
-		headerLine(" /\\_/\\", titleStyle.Render(name)),
-		headerLine("( o.o )", helpStyle.Render(m.cfg.Subtitle)),
-		headerLine(" > ^ <", helpStyle.Render(m.pipelineView())),
-		headerRule,
+		brand.HeaderRule,
+		brand.HeaderLine(" /\\_/\\", titleStyle.Render(brand.VersionedName(version))),
+		brand.HeaderLine("( o.o )", helpStyle.Render(m.cfg.Subtitle)),
+		brand.HeaderLine(" > ^ <", helpStyle.Render(m.pipelineView())),
+		brand.HeaderRule,
 	}
 	return strings.Join(lines, "\n")
-}
-
-func headerLine(mascot string, text string) string {
-	return fmt.Sprintf("%-8s     %s", mascot, text)
 }
 
 func (m Model) pipelineView() string {

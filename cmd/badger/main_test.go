@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PVRLabs/aibadger/internal/github"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/version"
@@ -82,6 +84,17 @@ func TestLoadConfigFocusCommand(t *testing.T) {
 				t.Fatalf("focus = %q, want %q", cfg.focus, tt.focus)
 			}
 		})
+	}
+}
+
+func TestLoadConfigBadgeCommand(t *testing.T) {
+	cfg := loadConfig([]string{"badge"})
+
+	if !cfg.showBadge {
+		t.Fatal("showBadge = false, want true")
+	}
+	if cfg.focus != "" {
+		t.Fatalf("focus = %q, want empty for badge command", cfg.focus)
 	}
 }
 
@@ -342,6 +355,8 @@ func TestPrintUsageIncludesReviewEntrypoint(t *testing.T) {
 	})
 
 	for _, want := range []string{
+		"badger badge",
+		"Show GitHub stargazer scoreboard",
 		"badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]",
 		"`badger review` preloads an editable review prompt from the current git diff.",
 		"manual fallback prompt in the editor",
@@ -349,6 +364,142 @@ func TestPrintUsageIncludesReviewEntrypoint(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("printUsage output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestRunBadgeDeclineDoesNotFetch(t *testing.T) {
+	originalTerminalInteractive := terminalInteractiveFunc
+	originalFetch := fetchStargazersFunc
+	terminalInteractiveFunc = func() bool { return true }
+	fetchCalled := false
+	fetchStargazersFunc = func() ([]string, int, error) {
+		fetchCalled = true
+		return nil, 0, nil
+	}
+	defer func() {
+		terminalInteractiveFunc = originalTerminalInteractive
+		fetchStargazersFunc = originalFetch
+	}()
+
+	var out bytes.Buffer
+	if err := runBadge(strings.NewReader("n\n"), &out, io.Discard); err != nil {
+		t.Fatalf("runBadge() error = %v", err)
+	}
+	if fetchCalled {
+		t.Fatal("fetchStargazersFunc was called on decline")
+	}
+	if got := out.String(); !strings.Contains(got, "👍 No problem! Run 'badger badge' anytime to see the scoreboard.") {
+		t.Fatalf("output missing decline message:\n%s", got)
+	}
+}
+
+func TestRunBadgeSuccessRender(t *testing.T) {
+	originalTerminalInteractive := terminalInteractiveFunc
+	originalFetch := fetchStargazersFunc
+	terminalInteractiveFunc = func() bool { return true }
+	fetchStargazersFunc = func() ([]string, int, error) {
+		return []string{"user33", "user34", "user35", "user36", "user37", "user38", "user39", "user40", "user41", "user42"}, 42, nil
+	}
+	defer func() {
+		terminalInteractiveFunc = originalTerminalInteractive
+		fetchStargazersFunc = originalFetch
+	}()
+
+	var out bytes.Buffer
+	if err := runBadge(strings.NewReader("y\n\n"), &out, io.Discard); err != nil {
+		t.Fatalf("runBadge() error = %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"⭐ TOTAL STARS: 42",
+		"🌟 Recent supporters (last 10):",
+		"@user33",
+		"@user42",
+		"[S]tar the repo in browser",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunBadgeGazillionRender(t *testing.T) {
+	originalTerminalInteractive := terminalInteractiveFunc
+	originalFetch := fetchStargazersFunc
+	terminalInteractiveFunc = func() bool { return true }
+	fetchStargazersFunc = func() ([]string, int, error) {
+		return []string{"user091", "user092", "user093", "user094", "user095", "user096", "user097", "user098", "user099", "user100"}, 100, nil
+	}
+	defer func() {
+		terminalInteractiveFunc = originalTerminalInteractive
+		fetchStargazersFunc = originalFetch
+	}()
+
+	var out bytes.Buffer
+	if err := runBadge(strings.NewReader("y\n\n"), &out, io.Discard); err != nil {
+		t.Fatalf("runBadge() error = %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"A GAZILLION BADGERS have starred this repo!",
+		"Results may be cached",
+		"@user100",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunBadgeNetworkErrorRender(t *testing.T) {
+	originalTerminalInteractive := terminalInteractiveFunc
+	originalFetch := fetchStargazersFunc
+	terminalInteractiveFunc = func() bool { return true }
+	fetchStargazersFunc = func() ([]string, int, error) {
+		return nil, 0, errors.New("Could not fetch data: timeout")
+	}
+	defer func() {
+		terminalInteractiveFunc = originalTerminalInteractive
+		fetchStargazersFunc = originalFetch
+	}()
+
+	var out bytes.Buffer
+	if err := runBadge(strings.NewReader("y\n"), &out, io.Discard); err != nil {
+		t.Fatalf("runBadge() error = %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "❌ Could not fetch data: timeout") {
+		t.Fatalf("output missing network error:\n%s", got)
+	}
+}
+
+func TestRunBadgeRateLimitRender(t *testing.T) {
+	originalTerminalInteractive := terminalInteractiveFunc
+	originalFetch := fetchStargazersFunc
+	terminalInteractiveFunc = func() bool { return true }
+	fetchStargazersFunc = func() ([]string, int, error) {
+		return nil, 0, github.ErrRateLimit
+	}
+	defer func() {
+		terminalInteractiveFunc = originalTerminalInteractive
+		fetchStargazersFunc = originalFetch
+	}()
+
+	var out bytes.Buffer
+	if err := runBadge(strings.NewReader("y\n"), &out, io.Discard); err != nil {
+		t.Fatalf("runBadge() error = %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "⚠️ GitHub API rate limit hit. Try again in an hour.") {
+		t.Fatalf("output missing rate-limit error:\n%s", got)
+	}
+}
+
+func TestRunBadgeRejectsNonInteractive(t *testing.T) {
+	originalTerminalInteractive := terminalInteractiveFunc
+	terminalInteractiveFunc = func() bool { return false }
+	defer func() { terminalInteractiveFunc = originalTerminalInteractive }()
+
+	if err := runBadge(strings.NewReader(""), io.Discard, io.Discard); err == nil {
+		t.Fatal("runBadge() error = nil, want interactive-terminal rejection")
 	}
 }
 

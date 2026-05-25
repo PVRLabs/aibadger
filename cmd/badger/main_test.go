@@ -406,7 +406,7 @@ func TestRunBadgeSuccessRender(t *testing.T) {
 	}()
 
 	var out bytes.Buffer
-	if err := runBadge(strings.NewReader("y\n\n"), &out, io.Discard); err != nil {
+	if err := runBadge(strings.NewReader("y\n"), &out, io.Discard); err != nil {
 		t.Fatalf("runBadge() error = %v", err)
 	}
 	got := out.String()
@@ -436,7 +436,7 @@ func TestRunBadgeGazillionRender(t *testing.T) {
 	}()
 
 	var out bytes.Buffer
-	if err := runBadge(strings.NewReader("y\n\n"), &out, io.Discard); err != nil {
+	if err := runBadge(strings.NewReader("y\n"), &out, io.Discard); err != nil {
 		t.Fatalf("runBadge() error = %v", err)
 	}
 	got := out.String()

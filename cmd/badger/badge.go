@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +13,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/github"
 	"github.com/PVRLabs/aibadger/internal/version"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/term"
 )
 
 const badgeRepoURL = "https://github.com/PVRLabs/aibadger"
@@ -27,14 +27,13 @@ func runBadge(stdin io.Reader, stdout io.Writer, _ io.Writer) error {
 		return errors.New("badger badge requires an interactive terminal")
 	}
 
-	reader := bufio.NewReader(stdin)
 	fmt.Fprint(stdout, renderBadgePermissionPrompt())
 
-	choice, err := readBadgeChoice(reader)
+	choice, err := readKeypress(stdin)
 	if err != nil {
 		return err
 	}
-	if strings.ToLower(choice) != "y" {
+	if choice != 'y' && choice != 'Y' {
 		fmt.Fprintln(stdout, "👍 No problem! Run 'badger badge' anytime to see the scoreboard.")
 		return nil
 	}
@@ -50,16 +49,13 @@ func runBadge(stdin io.Reader, stdout io.Writer, _ io.Writer) error {
 	fmt.Fprint(stdout, renderBadgeActionPrompt())
 
 	for {
-		choice, err := readBadgeChoice(reader)
+		choice, err := readKeypress(stdin)
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			return err
+			return nil
 		}
 
-		switch strings.ToLower(choice) {
-		case "s":
+		switch choice {
+		case 's', 'S':
 			if err := openBrowserFunc(badgeRepoURL); err != nil {
 				fmt.Fprintln(stdout, badgeRepoURL)
 			}
@@ -71,20 +67,33 @@ func runBadge(stdin io.Reader, stdout io.Writer, _ io.Writer) error {
 	}
 }
 
-func readBadgeChoice(reader *bufio.Reader) (string, error) {
-	line, err := reader.ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return "", err
+func readKeypress(stdin io.Reader) (rune, error) {
+	if f, ok := stdin.(*os.File); ok && isCharDevice(f) {
+		fd := f.Fd()
+		oldState, err := term.MakeRaw(fd)
+		if err != nil {
+			return 0, err
+		}
+		defer term.Restore(fd, oldState)
+		var b [1]byte
+		if _, err := f.Read(b[:]); err != nil {
+			return 0, err
+		}
+		return rune(b[0]), nil
 	}
-	return strings.TrimSpace(line), nil
+	var b [1]byte
+	if _, err := stdin.Read(b[:]); err != nil {
+		return 0, err
+	}
+	return rune(b[0]), nil
 }
 
 func renderBadgePermissionPrompt() string {
 	return strings.Join([]string{
 		brand.HeaderRule,
-		brand.BadgeHeaderLine(" /\\_/\\", "🦡 "+brand.VersionedName(version.Version)),
+		brand.BadgeHeaderLine("   /\\_/\\", brand.VersionedName(version.Version)),
 		brand.BadgeHeaderLine("  ( o.o )", "Local-first code context for any AI chat"),
-		brand.BadgeHeaderLine(" > ^ <", "Pipeline: [Map] → Extract → Apply"),
+		brand.BadgeHeaderLine("   > ^ <", "Pipeline: [Map] → Extract → Apply"),
 		brand.HeaderRule,
 		"",
 		"   " + badgeBold("📡 Fetch supporter scoreboard from GitHub?"),
@@ -94,8 +103,6 @@ func renderBadgePermissionPrompt() string {
 		"   No data saved. One-time check.",
 		"",
 		"   " + badgeBold("Fetch scoreboard? (y/N)"),
-		"",
-		"   >",
 		"",
 	}, "\n")
 }
@@ -139,8 +146,6 @@ func renderBadgeActionPrompt() string {
 	return strings.Join([]string{
 		"",
 		"   [S]tar the repo in browser     [Enter] return home",
-		"",
-		"   >",
 		"",
 	}, "\n")
 }

@@ -10,7 +10,8 @@ import (
 
 // Scanner orchestrates the scanning process.
 type Scanner struct {
-	ProjectRoot string
+	ProjectRoot          string
+	MaxFilesPerDirectory int // 0 = unlimited
 }
 
 // NewScanner creates a new Scanner instance.
@@ -63,6 +64,9 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 	usedGenericFallback := false
 	if len(topology.Modules) == 0 {
 		det := NewGenericDetector()
+		if s.MaxFilesPerDirectory > 0 {
+			det.maxFilesPerDir = s.MaxFilesPerDirectory
+		}
 		modules, detErr := det.Detect(s.ProjectRoot)
 		if detErr == nil {
 			topology.Modules = modules

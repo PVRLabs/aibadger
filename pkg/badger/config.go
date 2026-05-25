@@ -31,6 +31,7 @@ type Config struct {
 	SchemaAConstraint         string // Optional: overrides Prompt 1 instructions
 	SchemaBConstraint         string // Optional: overrides Prompt 2 instructions
 	WhitespaceMode            string // "smart" (default), "exact", or "ignore"
+	MaxFilesPerDirectory      int
 }
 
 // DefaultConfig returns the OSS defaults used by the badger command.
@@ -52,6 +53,7 @@ func DefaultConfig() Config {
 		MaxContextFileBytes:       workflow.MaxContextFileBytes,
 		MaxTotalContextBytes:      workflow.MaxTotalContextBytes,
 		WhitespaceMode:            string(writer.DefaultWhitespaceMode),
+		MaxFilesPerDirectory:      workflow.MaxFilesPerDirectory,
 	}
 }
 
@@ -91,6 +93,9 @@ func (c Config) withDefaults() Config {
 	if c.MaxTotalContextBytes == 0 {
 		c.MaxTotalContextBytes = defaults.MaxTotalContextBytes
 	}
+	if c.MaxFilesPerDirectory == 0 {
+		c.MaxFilesPerDirectory = defaults.MaxFilesPerDirectory
+	}
 	if c.WhitespaceMode == "" {
 		c.WhitespaceMode = defaults.WhitespaceMode
 	}
@@ -118,6 +123,7 @@ func (c Config) tuiConfig() tui.Config {
 		MaxTotalContextBytes:      c.MaxTotalContextBytes,
 		SchemaAConstraint:         c.SchemaAConstraint,
 		SchemaBConstraint:         c.SchemaBConstraint,
+		MaxFilesPerDirectory:      c.MaxFilesPerDirectory,
 		WhitespaceMode:            writer.WhitespaceMode(c.WhitespaceMode),
 	}
 }

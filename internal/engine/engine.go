@@ -18,26 +18,34 @@ import (
 // write-planning workflow. CLI and future integration layers should depend on
 // this orchestration boundary instead of wiring lower-level packages directly.
 type Engine struct {
-	Root      string
-	Topology  *model.ProjectTopology
-	formatter *protocol.Formatter
-	extractor *extractor.Extractor
+	Root                 string
+	Topology             *model.ProjectTopology
+	maxFilesPerDirectory int
+	formatter            *protocol.Formatter
+	extractor            *extractor.Extractor
 }
 
 // New scans the project root and creates an engine for follow-up workflow
-// steps.
-func New(root string) (*Engine, error) {
+// steps. If maxFilesPerDir is 0, scanning is unlimited.
+func New(root string, maxFilesPerDir int) (*Engine, error) {
 	if err := CheckDisabled(root); err != nil {
 		return nil, err
 	}
 
 	s := scanner.NewScanner(root)
+	s.MaxFilesPerDirectory = maxFilesPerDir
 	topology, err := s.Scan()
 	if err != nil {
 		return nil, err
 	}
 
-	return FromTopology(root, topology), nil
+	return &Engine{
+		Root:                 root,
+		Topology:             topology,
+		maxFilesPerDirectory: maxFilesPerDir,
+		formatter:            protocol.NewFormatter(),
+		extractor:            extractor.NewExtractor(root, topology),
+	}, nil
 }
 
 // FromTopology creates an engine around an existing topology. This is useful

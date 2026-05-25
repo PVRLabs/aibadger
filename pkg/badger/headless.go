@@ -65,7 +65,7 @@ func RunHeadless(cfg Config, opts HeadlessOptions) error {
 	if !showHeadlessWrapper {
 		scanOutput = scanOutputSilent
 	}
-	eng, err := scanProject(stdout, cfg.Root, scanOutput)
+	eng, err := scanProject(stdout, cfg.Root, scanOutput, cfg.MaxFilesPerDirectory)
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
@@ -98,11 +98,11 @@ func headlessEngineOptions(cfg Config, opts HeadlessOptions) workflow.EngineOpti
 	return engOpts
 }
 
-func scanProject(w io.Writer, root string, output scanOutputMode) (*engine.Engine, error) {
+func scanProject(w io.Writer, root string, output scanOutputMode, maxFilesPerDir int) (*engine.Engine, error) {
 	if output != scanOutputSilent {
 		fmt.Fprint(w, "Scanning project... ")
 	}
-	eng, err := engine.New(root)
+	eng, err := engine.New(root, maxFilesPerDir)
 	if err != nil {
 		return nil, err
 	}

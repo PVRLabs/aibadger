@@ -353,7 +353,7 @@ func TestScanProjectQuietSuppressesTimingOutput(t *testing.T) {
 	}
 
 	var output bytes.Buffer
-	eng, err := scanProject(&output, tmpDir, scanOutputStable)
+	eng, err := scanProject(&output, tmpDir, scanOutputStable, 0)
 	if err != nil {
 		t.Fatalf("scanProject() error = %v", err)
 	}
@@ -388,7 +388,7 @@ func TestScanProjectSilentSuppressesWrapperOutput(t *testing.T) {
 	}
 
 	var output bytes.Buffer
-	eng, err := scanProject(&output, tmpDir, scanOutputSilent)
+	eng, err := scanProject(&output, tmpDir, scanOutputSilent, 0)
 	if err != nil {
 		t.Fatalf("scanProject() error = %v", err)
 	}

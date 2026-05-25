@@ -30,6 +30,7 @@ type Config struct {
 	SchemaAConstraint         string
 	SchemaBConstraint         string
 	WhitespaceMode            writer.WhitespaceMode
+	MaxFilesPerDirectory      int
 }
 
 func DefaultConfig() Config {
@@ -45,6 +46,7 @@ func DefaultConfig() Config {
 		MaxContextFileBytes:       workflow.MaxContextFileBytes,
 		MaxTotalContextBytes:      workflow.MaxTotalContextBytes,
 		WhitespaceMode:            writer.DefaultWhitespaceMode,
+		MaxFilesPerDirectory:      workflow.MaxFilesPerDirectory,
 	}
 }
 
@@ -77,6 +79,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.MaxTotalContextBytes == 0 {
 		c.MaxTotalContextBytes = defaults.MaxTotalContextBytes
+	}
+	if c.MaxFilesPerDirectory == 0 {
+		c.MaxFilesPerDirectory = defaults.MaxFilesPerDirectory
 	}
 	if c.WhitespaceMode == "" {
 		c.WhitespaceMode = defaults.WhitespaceMode

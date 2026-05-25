@@ -13,7 +13,8 @@ const maxGenericPackageFiles = 10
 
 // GenericDetector handles projects with no specific structure (e.g., Python, simple Go, etc.)
 type GenericDetector struct {
-	Exclusions map[string]bool
+	Exclusions     map[string]bool
+	maxFilesPerDir int
 }
 
 // NewGenericDetector creates a new GenericDetector.
@@ -53,6 +54,11 @@ func (d *GenericDetector) Detect(root string) ([]model.Module, error) {
 	packages := make(map[string]*model.Package)
 	extCounts := make(map[string]int)
 
+	var perDirFiles map[string]int
+	if d.maxFilesPerDir > 0 {
+		perDirFiles = make(map[string]int)
+	}
+
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -63,6 +69,14 @@ func (d *GenericDetector) Detect(root string) ([]model.Module, error) {
 				return filepath.SkipDir
 			}
 			return nil
+		}
+
+		if d.maxFilesPerDir > 0 {
+			dir := filepath.Dir(path)
+			perDirFiles[dir]++
+			if perDirFiles[dir] > d.maxFilesPerDir {
+				return nil
+			}
 		}
 
 		info, infoErr := entry.Info()

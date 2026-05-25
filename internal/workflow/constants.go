@@ -14,6 +14,7 @@ const (
 	TruncatedMaxPackages      = defaults.TruncatedMaxPackages
 	MaxContextFileBytes       = defaults.MaxContextFileBytes
 	MaxTotalContextBytes      = defaults.MaxTotalContextBytes
+	MaxFilesPerDirectory      = defaults.MaxFilesPerDirectory
 	StepNames                 = defaults.StepNames
 	TopologyPromptKind        = "Prompt 1: Topology"
 	CodeContextPromptKind     = "Prompt 2: Code Context"

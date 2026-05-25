@@ -15,5 +15,8 @@ const (
 	MaxContextFileBytes = 50 * 1024
 	// MaxTotalContextBytes caps the full Prompt 2 payload after per-file trimming.
 	MaxTotalContextBytes = 100000
+	// MaxFilesPerDirectory caps the number of files processed per directory in
+	// the generic detector. Prevents hangs on directories like C:\Windows\System32.
+	MaxFilesPerDirectory = 1000
 	StepNames            = "scan, goal, topology (aliases: map, prompt1), extraction, context (alias: prompt2), write-plan (alias: write)"
 )

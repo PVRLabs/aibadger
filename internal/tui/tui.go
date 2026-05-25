@@ -471,7 +471,7 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 	m.state = stateScanning
 	m.scanFrame = 0
 	m.goalInput.Blur()
-	return m, tea.Batch(scanProjectCmd(m.root), scanTick())
+	return m, tea.Batch(scanProjectCmd(m.root, m.cfg.MaxFilesPerDirectory), scanTick())
 }
 
 func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {

@@ -13,9 +13,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func scanProjectCmd(root string) tea.Cmd {
+func scanProjectCmd(root string, maxFilesPerDir int) tea.Cmd {
 	return func() tea.Msg {
-		eng, err := engine.New(root)
+		eng, err := engine.New(root, maxFilesPerDir)
 		return scanDoneMsg{eng: eng, err: err}
 	}
 }

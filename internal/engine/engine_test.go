@@ -132,7 +132,7 @@ func TestNewReturnsErrorWhenDisabledFileExists(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := New(root)
+	_, err := New(root, 0)
 	if err != ErrProjectDisabled {
 		t.Fatalf("New() error = %v, want ErrProjectDisabled", err)
 	}
@@ -147,7 +147,7 @@ func TestNewProceedsNormallyWhenNoDisabledFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eng, err := New(root)
+	eng, err := New(root, 0)
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
@@ -176,7 +176,7 @@ func TestNewLoadsExternalContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eng, err := New(root)
+	eng, err := New(root, 0)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -234,7 +234,7 @@ func TestNewRejectsInvalidExternalContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := New(root)
+	_, err := New(root, 0)
 	if err == nil {
 		t.Fatal("New() error = nil, want invalid .badger-context error")
 	}

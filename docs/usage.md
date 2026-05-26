@@ -127,7 +127,7 @@ Add validation so empty project names are rejected before saving. Keep the chang
 
 - `/help`: show the interactive command reference.
 - `/review`: seed an editable review prompt from the current git diff. It reuses the same review flow as `badger review`.
-- `/design`: switch the active focus to Design. The active focus appears in the status bar as `Focus: Design` and the prompt guides toward design recommendations instead of code patches.
+- `/design`: switch the active focus to Design. The active focus appears in the status bar as `Focus: Design` and the prompt seeds a short, conversational brainstorm.
 - `/exit`: quit Badger.
 
 To start in a specific focus from the command line, pass the focus name as the
@@ -135,7 +135,7 @@ first argument:
 
 ```bash
 badger          # Code focus (default)
-badger design   # Design focus — prompt asks for design recommendations
+badger design   # Design focus — prompt seeds a short, conversational brainstorm
 badger review   # Review focus — prompt is prefilled from the current git diff
 ```
 

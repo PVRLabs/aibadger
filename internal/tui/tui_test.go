@@ -876,6 +876,50 @@ func TestBadgeFetchCmdUsesStubbedFetcherForResult(t *testing.T) {
 	}
 }
 
+func TestBadgeFetchCmdUsesStubbedFetcherForGazillionResult(t *testing.T) {
+	originalFetch := fetchStargazersFunc
+	fetchStargazersFunc = func() ([]string, int, error) {
+		logins := make([]string, 100)
+		for i := 0; i < 100; i++ {
+			logins[i] = fmt.Sprintf("user%d", i)
+		}
+		return logins, 100, nil
+	}
+	defer func() { fetchStargazersFunc = originalFetch }()
+
+	msg, ok := badgeFetchCmd()().(badgeResultMsg)
+	if !ok {
+		t.Fatalf("badgeFetchCmd() returned %T, want badgeResultMsg", msg)
+	}
+	if msg.total != 100 || !msg.gazillion {
+		t.Fatalf("badgeResultMsg = %#v, want total 100 and gazillion true", msg)
+	}
+
+	m := NewModel("/tmp/project", DefaultConfig())
+	next, cmd := m.Update(msg)
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if got.state != stateBadgeResult {
+		t.Fatalf("state = %v, want %v", got.state, stateBadgeResult)
+	}
+	if cmd != nil {
+		t.Fatal("badge result returned unexpected command")
+	}
+	view := got.View()
+	for _, want := range []string{
+		"🦡🦡🦡 A GAZILLION BADGERS have starred this repo!",
+		"🌟 Recent supporters (last 10):",
+		"@user99",
+		"[S]tar the repo in browser     [Enter] continue",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("gazillion result view missing %q:\n%s", want, view)
+		}
+	}
+}
+
 func TestBadgeFetchCmdUsesStubbedFetcherForNetworkError(t *testing.T) {
 	originalFetch := fetchStargazersFunc
 	fetchStargazersFunc = func() ([]string, int, error) {

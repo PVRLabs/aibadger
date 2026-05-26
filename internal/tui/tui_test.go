@@ -438,8 +438,8 @@ func TestHomeViewRendersLargePastedGoalCompactly(t *testing.T) {
 		}
 	}
 	for _, unwanted := range []string{
-		"Type a goal, paste a diff, or use /review or /design, then press Enter.",
-		"Commands: /help, /review, /design, /exit",
+		"Type a goal, paste a diff, or use /review, /design, or /badge, then press Enter.",
+		"Commands: /help, /review, /design, /badge, /exit",
 		"Tag files with @path/to/file, then press Tab.",
 		"Preview:",
 	} {
@@ -694,11 +694,91 @@ func TestSubmitGoalHelpCommandShowsHelp(t *testing.T) {
 	for _, want := range []string{
 		"Tab            Complete / commands and @ files.",
 		"@path/to/file",
-		"/review        Seed an editable review prompt from the current git diff.",
+		"/review   - Start review mode",
+		"/badge    - Show GitHub stargazer scoreboard",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("help view missing %q:\n%s", want, view)
 		}
+	}
+}
+
+func TestSubmitGoalBadgeCommandShowsFlow(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/badge")
+
+	next, cmd := m.submitGoal()
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("submitGoal returned %T, want tui.Model", next)
+	}
+	if got.state != stateBadgePermissionPrompt {
+		t.Fatalf("state = %v, want %v", got.state, stateBadgePermissionPrompt)
+	}
+	if cmd == nil {
+		t.Fatal("badge permission prompt returned nil command")
+	}
+	view := got.View()
+	if !strings.Contains(view, "Fetch supporter scoreboard from GitHub? (y/n)") {
+		t.Fatalf("badge permission view missing prompt:\n%s", view)
+	}
+
+	next, cmd, handled := got.handleKeyConfirm()
+	if !handled {
+		t.Fatal("handleKeyConfirm did not handle badge permission prompt")
+	}
+	got, ok = next.(Model)
+	if !ok {
+		t.Fatalf("handleKeyConfirm returned %T, want tui.Model", next)
+	}
+	if got.state != stateBadgeFetching {
+		t.Fatalf("state = %v, want %v", got.state, stateBadgeFetching)
+	}
+	if cmd == nil {
+		t.Fatal("badge fetch returned unexpected nil command")
+	}
+
+	next, cmd = got.Update(badgeResultMsg{
+		logins:    []string{"ada", "bob"},
+		total:     2,
+		gazillion: false,
+	})
+	got, ok = next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if got.state != stateBadgeResult {
+		t.Fatalf("state = %v, want %v", got.state, stateBadgeResult)
+	}
+	if cmd != nil {
+		t.Fatal("badge result returned unexpected command")
+	}
+	view = got.View()
+	for _, want := range []string{
+		"⭐ TOTAL STARS: 2",
+		"🌟 Recent supporters (last 10):",
+		"@ada",
+		"@bob",
+		"[S]tar the repo in browser     [Enter] continue",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("badge result view missing %q:\n%s", want, view)
+		}
+	}
+
+	next, cmd, handled = got.handleKeyEnter()
+	if !handled {
+		t.Fatal("handleKeyEnter did not handle badge result dismissal")
+	}
+	got, ok = next.(Model)
+	if !ok {
+		t.Fatalf("handleKeyEnter returned %T, want tui.Model", next)
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if cmd == nil {
+		t.Fatal("badge return-home command returned unexpected nil command")
 	}
 }
 
@@ -866,10 +946,10 @@ func TestHomeViewSurfacesReviewUseCase(t *testing.T) {
 
 	view := m.View()
 
-	if !strings.Contains(view, "Type a goal, paste a diff, or use /review or /design, then press Enter.") {
+	if !strings.Contains(view, "Type a goal, paste a diff, or use /review, /design, or /badge, then press Enter.") {
 		t.Fatalf("home view missing review goal guidance:\n%s", view)
 	}
-	if !strings.Contains(view, "Commands: /help, /review, /design, /exit") {
+	if !strings.Contains(view, "Commands: /help, /review, /design, /badge, /exit") {
 		t.Fatalf("home view missing review command:\n%s", view)
 	}
 	for _, want := range []string{
@@ -896,6 +976,8 @@ func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 		"Seed an editable review prompt from the current git diff.",
 		"/design",
 		"Switch the active focus to Design.",
+		"/badge",
+		"Show GitHub stargazer scoreboard",
 		"/exit",
 		"Quit Badger.",
 	} {
@@ -1016,6 +1098,28 @@ func TestDesignCompletionEnterThenEnterSwitchesFocus(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("design action returned unexpected nil command")
+	}
+}
+
+func TestBadgeCompletionEnterSwitchesToBadgeFlow(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+
+	m.goalInput.SetValue("/ba")
+	m.refreshCompletionCandidate()
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.state != stateBadgePermissionPrompt {
+		t.Fatalf("state = %v, want %v", got.state, stateBadgePermissionPrompt)
+	}
+	if got.goalInput.Value() != "/badge" {
+		t.Fatalf("goal input = %q, want /badge", got.goalInput.Value())
+	}
+	if cmd == nil {
+		t.Fatal("badge action returned unexpected nil command")
 	}
 }
 

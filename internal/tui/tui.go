@@ -41,6 +41,10 @@ const (
 	stateManualCopy
 	stateHelp
 	statePromptFileReveal
+	stateBadgePermissionPrompt
+	stateBadgeFetching
+	stateBadgeResult
+	stateBadgeError
 )
 
 const (
@@ -49,6 +53,7 @@ const (
 	helpCommand           = "/help"
 	reviewCommand         = "/review"
 	designCommand         = "/design"
+	badgeCommand          = "/badge"
 )
 
 type Model struct {
@@ -84,6 +89,11 @@ type Model struct {
 
 	promptFileKind string
 	promptFilePath string
+
+	badgeLogins    []string
+	badgeTotal     int
+	badgeGazillion bool
+	badgeErrorText string
 
 	externalRoots       []taggedfile.ExternalRoot
 	completion          completionState
@@ -133,6 +143,20 @@ type contextDoneMsg struct {
 type writeDoneMsg struct {
 	updates []writer.FileUpdate
 	errs    []error
+}
+
+type badgePermissionPromptMsg struct{}
+
+type badgeFetchingMsg struct{}
+
+type badgeResultMsg struct {
+	logins    []string
+	total     int
+	gazillion bool
+}
+
+type badgeErrorMsg struct {
+	text string
 }
 
 // Run starts the interactive Bubble Tea TUI.
@@ -391,6 +415,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, textarea.Blink
+	case badgePermissionPromptMsg:
+		return m, nil
+	case badgeFetchingMsg:
+		return m, nil
+	case badgeResultMsg:
+		m.state = stateBadgeResult
+		m.badgeLogins = append([]string(nil), msg.logins...)
+		m.badgeTotal = msg.total
+		m.badgeGazillion = msg.gazillion
+		m.badgeErrorText = ""
+		m.status = tuiMessage{}
+		m.err = nil
+		return m, nil
+	case badgeErrorMsg:
+		m.state = stateBadgeError
+		m.badgeErrorText = msg.text
+		m.badgeLogins = nil
+		m.badgeTotal = 0
+		m.badgeGazillion = false
+		m.status = tuiMessage{}
+		m.err = nil
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -464,6 +510,9 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 	if goal == designCommand {
 		return m.handleDesignCommand()
 	}
+	if goal == badgeCommand {
+		return m.handleBadgeCommand()
+	}
 
 	m.goal = goal
 	m.status = tuiMessage{}
@@ -483,6 +532,18 @@ func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
 	m.completion.suppressedKey = ""
 	m.goalInput.Focus()
 	return m, textarea.Blink
+}
+
+func (m Model) handleBadgeCommand() (tea.Model, tea.Cmd) {
+	m.state = stateBadgePermissionPrompt
+	m.badgeLogins = nil
+	m.badgeTotal = 0
+	m.badgeGazillion = false
+	m.badgeErrorText = ""
+	m.status = tuiMessage{}
+	m.err = nil
+	m.goalInput.Blur()
+	return m, func() tea.Msg { return badgePermissionPromptMsg{} }
 }
 
 func parseReviewCommand(goal string) (string, bool) {
@@ -689,6 +750,10 @@ func (m Model) returnHome(status tuiMessage) (tea.Model, tea.Cmd) {
 	m.pendingSafetyExclusions = nil
 	m.updates = nil
 	m.response = ""
+	m.badgeLogins = nil
+	m.badgeTotal = 0
+	m.badgeGazillion = false
+	m.badgeErrorText = ""
 	m.setGoalInputValue("")
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""

@@ -74,6 +74,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if next, cmd, handled := m.handleKeyExitToHome(); handled {
 			return next, cmd
 		}
+
+	case "s", "S":
+		if next, cmd, handled := m.handleKeyBadgeBrowser(); handled {
+			return next, cmd
+		}
 	}
 
 	// Forward unhandled keys to the active input widget.
@@ -84,7 +89,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // except during states where interruption is not safe (scanning, writing).
 func (m Model) handleKeyEsc() (tea.Model, tea.Cmd) {
 	switch m.state {
-	case stateHome, stateScanning, stateWriting:
+	case stateHome, stateScanning, stateWriting, stateBadgeFetching:
 		// These states are either already home or mid-operation; esc is a no-op.
 		return m, nil
 	default:
@@ -130,6 +135,13 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		next, cmd := m.returnHome(neutralMessage("Ready for a goal."))
 		return next, cmd, true
 
+	case stateBadgePermissionPrompt:
+		return m, nil, false
+
+	case stateBadgeResult, stateBadgeError:
+		next, cmd := m.returnHome(neutralMessage("Ready for a goal."))
+		return next, cmd, true
+
 	case stateWaitingForExtractions, stateWaitingForCode:
 		// Enter is a fallback submit for the paste widget (paste events submit
 		// automatically; see forwardKeyToInput below).
@@ -168,6 +180,12 @@ func (m Model) handleKeyConfirm() (tea.Model, tea.Cmd, bool) {
 	if m.state == stateContextWarning {
 		next, cmd := m.acceptPartialExtractionWarning()
 		return next, cmd, true
+	}
+	if m.state == stateBadgePermissionPrompt {
+		next, cmd, handled := m.handleBadgePermissionConfirm()
+		if handled {
+			return next, cmd, true
+		}
 	}
 	if m.state == stateWritePreview {
 		m.state = stateWriting
@@ -210,6 +228,12 @@ func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
 	if m.state == statePromptFileReveal {
 		next, cmd := m.advanceAfterTempFile(m.promptFileKind, m.promptFilePath)
 		return next, cmd, true
+	}
+	if m.state == stateBadgePermissionPrompt {
+		next, cmd, handled := m.handleBadgePermissionDecline()
+		if handled {
+			return next, cmd, true
+		}
 	}
 	return m, nil, false
 }
@@ -304,6 +328,30 @@ func (m Model) handleKeyExitToHome() (tea.Model, tea.Cmd, bool) {
 	return m, nil, false
 }
 
+func (m Model) handleBadgePermissionConfirm() (tea.Model, tea.Cmd, bool) {
+	m.state = stateBadgeFetching
+	m.status = tuiMessage{}
+	m.badgeErrorText = ""
+	return m, tea.Batch(badgeFetchingCmd(), badgeFetchCmd()), true
+}
+
+func (m Model) handleBadgePermissionDecline() (tea.Model, tea.Cmd, bool) {
+	next, cmd := m.returnHome(neutralMessage("👍 No problem!"))
+	return next, cmd, true
+}
+
+func (m Model) handleKeyBadgeBrowser() (tea.Model, tea.Cmd, bool) {
+	if m.state != stateBadgeResult {
+		return m, nil, false
+	}
+	if err := openBrowser(badgeRepoURL); err != nil {
+		m.status = warningMessage(fmt.Sprintf("Could not open the browser automatically.\n%s", badgeRepoURL))
+		return m, nil, true
+	}
+	m.status = successMessage("Opened the repository in your browser.")
+	return m, nil, true
+}
+
 // forwardKeyToInput passes an unhandled key to whichever input widget is
 // currently active. For paste widgets, a detected paste event also triggers
 // an immediate submit so the user does not have to press Enter separately.
@@ -344,6 +392,14 @@ func keyboardHintsForState(st state) []string {
 		hints = []string{"Enter submit", "Ctrl+U clear line", "Esc cancel", "Ctrl+C quit"}
 	case stateContextWarning:
 		hints = []string{"Enter return", "Y proceed", "N return", "Esc cancel", "Ctrl+C quit"}
+	case stateBadgePermissionPrompt:
+		hints = []string{"Y fetch", "N cancel", "Ctrl+C quit"}
+	case stateBadgeFetching:
+		hints = []string{"Ctrl+C quit"}
+	case stateBadgeResult:
+		hints = []string{"S open browser", "Enter continue", "Ctrl+C quit"}
+	case stateBadgeError:
+		hints = []string{"Enter continue", "Ctrl+C quit"}
 	case stateScanning, stateWriting:
 		// Ctrl+C only.
 	default:

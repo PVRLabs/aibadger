@@ -145,7 +145,7 @@ func renderBadgeError(err error) string {
 func renderBadgeActionPrompt() string {
 	return strings.Join([]string{
 		"",
-		"   [S]tar the repo in browser     [Enter] return home",
+		"   [S]tar the repo in browser     [Enter] exit",
 		"",
 	}, "\n")
 }

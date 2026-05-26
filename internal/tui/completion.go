@@ -119,6 +119,9 @@ func (m Model) applyCompletionCandidate(candidate completionCandidate) (tea.Mode
 	if strings.TrimSpace(updated) == designCommand {
 		return m.handleDesignCommand()
 	}
+	if strings.TrimSpace(updated) == badgeCommand {
+		return m.handleBadgeCommand()
+	}
 
 	return m, nil
 }

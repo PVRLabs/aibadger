@@ -79,6 +79,14 @@ func (m Model) View() string {
 		b.WriteString(m.viewHelp())
 	case statePromptFileReveal:
 		b.WriteString(m.viewPromptFileReveal())
+	case stateBadgePermissionPrompt:
+		b.WriteString(m.viewBadgePermissionPrompt())
+	case stateBadgeFetching:
+		b.WriteString(m.viewBadgeFetching())
+	case stateBadgeResult:
+		b.WriteString(m.viewBadgeResult())
+	case stateBadgeError:
+		b.WriteString(m.viewBadgeError())
 	}
 
 	b.WriteString("\n\n")
@@ -92,8 +100,8 @@ func (m Model) viewHome() string {
 	}
 
 	var lines []string
-	lines = append(lines, "Type a goal, paste a diff, or use /review or /design, then press Enter.")
-	lines = append(lines, "Commands: /help, /review, /design, /exit")
+	lines = append(lines, "Type a goal, paste a diff, or use /review, /design, or /badge, then press Enter.")
+	lines = append(lines, "Commands: /help, /review, /design, /badge, /exit")
 	lines = append(lines, "Tag files with @path/to/file, then press Tab.")
 	lines = append(lines, "")
 	lines = append(lines, m.viewGoalInput())
@@ -162,6 +170,7 @@ func (m Model) slashCommandSuggestions() []slashCommandSuggestion {
 		{command: helpCommand, description: "Show commands and keyboard shortcuts."},
 		{command: reviewCommand, description: "Seed an editable review prompt from the current git diff."},
 		{command: designCommand, description: "Switch the active focus to Design."},
+		{command: badgeCommand, description: "Show GitHub stargazer scoreboard"},
 	}
 	if m.cfg.ExitCommand != "" {
 		suggestions = append(suggestions, slashCommandSuggestion{
@@ -336,14 +345,38 @@ func (m Model) viewManualCopy() string {
 	return m.renderBox(body)
 }
 
+func (m Model) viewBadgePermissionPrompt() string {
+	return strings.Join([]string{
+		"   📡 Fetch supporter scoreboard from GitHub? (y/n)",
+		"",
+		"   >",
+	}, "\n")
+}
+
+func (m Model) viewBadgeFetching() string {
+	return "   📡 Fetching..."
+}
+
+func (m Model) viewBadgeResult() string {
+	return renderBadgeScoreboard(m.badgeLogins, m.badgeTotal, m.badgeGazillion)
+}
+
+func (m Model) viewBadgeError() string {
+	if m.badgeErrorText == "" {
+		return "   ❌ Could not fetch the supporter scoreboard."
+	}
+	return "   " + m.badgeErrorText
+}
+
 func (m Model) viewHelp() string {
 	body := strings.Join([]string{
 		"Commands",
 		"",
-		"/help          Show this reference.",
-		"/review        Seed an editable review prompt from the current git diff.",
-		"/design        Switch the active focus to Design.",
-		"/exit          Quit Badger.",
+		"/help     - Show this help",
+		"/review   - Start review mode",
+		"/design   - Start design mode",
+		"/badge    - Show GitHub stargazer scoreboard",
+		"/exit     - Exit the application",
 		"",
 		"Keys",
 		"",
@@ -367,6 +400,35 @@ func (m Model) viewHelp() string {
 		body = fmt.Sprintf("%s\n\n%s", m.cfg.BuildInfo, body)
 	}
 	return m.renderBox(body)
+}
+
+func renderBadgeScoreboard(logins []string, total int, gazillion bool) string {
+	var lines []string
+	if gazillion {
+		lines = append(lines, "   🦡🦡🦡 A GAZILLION BADGERS have starred this repo!")
+		lines = append(lines, "   (Results may be cached — the true number is probably even higher)")
+		lines = append(lines, "")
+		lines = append(lines, "   🌟 Recent supporters (last 10):")
+		for _, login := range logins {
+			lines = append(lines, "     @"+login)
+		}
+		lines = append(lines, "")
+		lines = append(lines, "   [S]tar the repo in browser     [Enter] continue")
+		return strings.Join(lines, "\n")
+	}
+
+	lines = append(lines, "   ─────────────────────────────────────────────────")
+	lines = append(lines, fmt.Sprintf("   ⭐ TOTAL STARS: %d", total))
+	lines = append(lines, "   🌟 Recent supporters (last 10):")
+	for _, login := range logins {
+		lines = append(lines, "     @"+login)
+	}
+	lines = append(lines, "   ─────────────────────────────────────────────────")
+	lines = append(lines, "")
+	lines = append(lines, "   ✨ Your name not here yet?")
+	lines = append(lines, "")
+	lines = append(lines, "   [S]tar the repo in browser     [Enter] continue")
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) renderBox(body string) string {

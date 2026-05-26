@@ -416,6 +416,7 @@ func TestRunBadgeSuccessRender(t *testing.T) {
 		"@user33",
 		"@user42",
 		"[S]tar the repo in browser",
+		"[Enter] exit",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)

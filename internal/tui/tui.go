@@ -218,6 +218,17 @@ func NewModel(root string, cfg Config) Model {
 }
 
 func (m *Model) applyStartupGoal() {
+	if strings.TrimSpace(m.cfg.StartupGoal) == badgeCommand {
+		m.state = stateBadgePermissionPrompt
+		m.status = tuiMessage{}
+		m.err = nil
+		m.setGoalInputValue("")
+		m.resizeGoalEditor()
+		m.completion.suppressedKey = ""
+		m.goalInput.Blur()
+		m.paste.Blur()
+		return
+	}
 	m.state = stateHome
 	m.status = startupMessage(m.cfg.StartupStatusSeverity, m.cfg.StartupStatus)
 	m.err = nil

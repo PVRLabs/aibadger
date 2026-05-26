@@ -16,6 +16,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+var fetchStargazersFunc = github.FetchStargazers
+
 func scanProjectCmd(root string, maxFilesPerDir int) tea.Cmd {
 	return func() tea.Msg {
 		eng, err := engine.New(root, maxFilesPerDir)
@@ -84,7 +86,7 @@ func badgeFetchingCmd() tea.Cmd {
 
 func badgeFetchCmd() tea.Cmd {
 	return func() tea.Msg {
-		logins, total, err := github.FetchStargazers()
+		logins, total, err := fetchStargazersFunc()
 		if err != nil {
 			return badgeErrorMsg{text: badgeErrorText(err)}
 		}

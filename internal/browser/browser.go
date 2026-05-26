@@ -1,4 +1,4 @@
-package tui
+package browser
 
 import (
 	"fmt"
@@ -6,9 +6,10 @@ import (
 	"runtime"
 )
 
-const badgeRepoURL = "https://github.com/PVRLabs/aibadger"
+const AIBadgerRepoURL = "https://github.com/PVRLabs/aibadger"
 
-func openBrowser(url string) error {
+// Open launches the given URL in the system browser.
+func Open(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return exec.Command("open", url).Run()

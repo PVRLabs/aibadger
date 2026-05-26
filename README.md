@@ -63,6 +63,13 @@ For source builds, release builds, version checks, and Windows install instructi
 - `badger review` — Starts directly in review mode with the current git diff pre-loaded.
 - `badger design` — Starts in design mode, focused on architecture, tradeoffs, and planning.
 
+### Badge Scoreboard
+
+- `badger badge` — Launches the TUI with `/badge` preloaded for this repo.
+- It asks for confirmation before making a single GitHub API call.
+- Press `[S]` to open the repo in your browser and star it.
+- If the repo has 100 listed stargazers, Badger switches to "A GAZILLION BADGERS" mode.
+
 For more commands, flags, and advanced usage, see [docs/usage.md](docs/usage.md).
 
 ### Example

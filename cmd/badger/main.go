@@ -59,13 +59,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", cfg.parseErr)
 		os.Exit(1)
 	}
-	if cfg.showBadge {
-		if err := runBadge(os.Stdin, os.Stdout, os.Stderr); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
 	if hasHeadlessOnlyFlagsWithoutHeadless(cfg) {
 		fmt.Fprintln(os.Stderr, "Error: --step, --input, and --truncate-topology require --headless.")
 		os.Exit(1)
@@ -91,6 +84,12 @@ func main() {
 	badgerCfg := badger.DefaultConfig()
 	badgerCfg.BuildInfo = buildInfoLine()
 	badgerCfg.Focus = protocol.NormalizeFocus(cfg.focus)
+	if cfg.showBadge {
+		if err := applyBadgeStartup(&cfg, &badgerCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	var headlessReviewGoal string
 	if cfg.focus == protocol.FocusReview {
 		var err error
@@ -369,7 +368,7 @@ func hasHeadlessOnlyFlagsWithoutHeadless(cfg appConfig) bool {
 }
 
 func printUsage(cfg appConfig) {
-	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design] [--help]\n  badger [code|review|design] [--version]\n  badger badge                        Show GitHub stargazer scoreboard\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nStandard runs start the interactive BYOL workflow for the current directory.\nThe default focus is Code; use badger review or badger design to start in a different focus.\n`badger review` preloads an editable review prompt from the current git diff. Use `--staged`, `--branch <ref>`, or `--commit <sha>` to change the diff source. If no diff is available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
+	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design] [--help]\n  badger [code|review|design] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nStandard runs start the interactive BYOL workflow for the current directory.\nThe default focus is Code; use badger review or badger design to start in a different focus.\n`badger review` preloads an editable review prompt from the current git diff. Use `--staged`, `--branch <ref>`, or `--commit <sha>` to change the diff source. If no diff is available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
 
 	// Show note about dev flags in release builds
 	if releaseBuild {

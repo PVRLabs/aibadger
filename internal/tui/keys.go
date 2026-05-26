@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/browser"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -344,8 +345,8 @@ func (m Model) handleKeyBadgeBrowser() (tea.Model, tea.Cmd, bool) {
 	if m.state != stateBadgeResult {
 		return m, nil, false
 	}
-	if err := openBrowser(badgeRepoURL); err != nil {
-		m.status = warningMessage(fmt.Sprintf("Could not open the browser automatically.\n%s", badgeRepoURL))
+	if err := browser.Open(browser.AIBadgerRepoURL); err != nil {
+		m.status = warningMessage(fmt.Sprintf("Could not open the browser automatically.\n%s", browser.AIBadgerRepoURL))
 		return m, nil, true
 	}
 	m.status = successMessage("Opened the repository in your browser.")

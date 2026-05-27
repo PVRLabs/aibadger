@@ -261,9 +261,12 @@ func (m *Model) focusGoalAttachments() bool {
 	return true
 }
 
-func (m Model) goalInputAtEnd() bool {
-	input := m.goalInput.Value()
-	return m.goalInputCursorByteIndex() >= len(input)
+func (m Model) goalInputOnLastLine() bool {
+	value := m.goalInput.Value()
+	if value == "" {
+		return true
+	}
+	return m.goalInput.Line() >= countEditorLines(value)-1
 }
 
 func (m *Model) moveGoalAttachmentSelection(delta int) bool {

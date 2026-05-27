@@ -226,7 +226,7 @@ func (m Model) handleKeyDown() (tea.Model, tea.Cmd, bool) {
 		m.moveGoalAttachmentSelection(1)
 		return m, textarea.Blink, true
 	}
-	if len(m.goalAttachments) > 0 && m.goalInputAtEnd() {
+	if len(m.goalAttachments) > 0 && m.goalInputOnLastLine() {
 		if m.focusGoalAttachments() {
 			return m, textarea.Blink, true
 		}

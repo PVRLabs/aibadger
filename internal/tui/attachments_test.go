@@ -313,6 +313,31 @@ func TestGoalAttachmentDeletionKeepsNearestSelectionAndSubmitsRemainingAttachmen
 	}
 }
 
+func TestDownOnlyEntersAttachmentsFromLastTextareaLine(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("First line\nSecond line")
+	m.goalAttachments = []goalAttachment{
+		newGoalTextAttachment("paste", "attached context"),
+	}
+	m.goalFocus = goalFocusEditor
+	m.goalInput.Focus()
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	afterUp, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Up) returned %T, want tui.Model", next)
+	}
+
+	next, _ = afterUp.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Down) returned %T, want tui.Model", next)
+	}
+	if got.goalFocus != goalFocusEditor {
+		t.Fatalf("goalFocus = %v, want %v when cursor is not on last line", got.goalFocus, goalFocusEditor)
+	}
+}
+
 func TestDeletingLastAttachmentReturnsFocusToEditor(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("Review this change.")

@@ -27,7 +27,7 @@ const (
 
 var (
 	goalPasteAttachmentByteThreshold = 16 * 1024
-	goalPasteAttachmentLineThreshold = 30
+	goalPasteAttachmentLineThreshold = 40
 )
 
 const goalPasteFlushDelay = time.Second
@@ -267,7 +267,7 @@ func (m Model) renderGoalAttachmentRow(attachment goalAttachment, selected bool)
 }
 
 func formatGoalAttachmentRow(attachment goalAttachment) string {
-	parts := []string{fmt.Sprintf("[%s]", attachment.Type)}
+	parts := make([]string, 0, 2)
 	if attachment.Source != "" && !strings.EqualFold(attachment.Source, string(attachment.Type)) {
 		parts = append(parts, attachment.Source)
 	}
@@ -294,10 +294,10 @@ func truncateGoalAttachmentRow(text string, maxWidth int) string {
 		return text
 	}
 
-	const ellipsis = "..."
+	const ellipsis = "…"
 	ellipsisWidth := runewidth.StringWidth(ellipsis)
 	if maxWidth <= ellipsisWidth {
-		return strings.Repeat(".", maxWidth)
+		return ellipsis
 	}
 
 	var b strings.Builder

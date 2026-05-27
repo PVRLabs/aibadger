@@ -163,10 +163,10 @@ func TestViewGoalAttachmentsRendersSelectedRow(t *testing.T) {
 	if !strings.Contains(view, "Attachments:") {
 		t.Fatalf("home view missing attachments header:\n%s", view)
 	}
-	if !strings.Contains(view, "[text] · clipboard · [text:") {
+	if !strings.Contains(view, "clipboard · [text:") {
 		t.Fatalf("home view missing first compact attachment row:\n%s", view)
 	}
-	if !strings.Contains(view, "> [git diff] · [git diff: 1 files changed, +2/-1]") {
+	if !strings.Contains(view, "> [git diff: 1 files changed, +2/-1]") {
 		t.Fatalf("home view missing selected attachment row:\n%s", view)
 	}
 }
@@ -199,7 +199,7 @@ func TestRenderGoalAttachmentRowTruncatesSafely(t *testing.T) {
 	if runewidth.StringWidth(got) > m.goalAttachmentRowWidth() {
 		t.Fatalf("rendered row width = %d, want <= %d\n%s", runewidth.StringWidth(got), m.goalAttachmentRowWidth(), got)
 	}
-	if !strings.Contains(got, "...") {
+	if !strings.Contains(got, "…") {
 		t.Fatalf("rendered row did not truncate long text:\n%s", got)
 	}
 }

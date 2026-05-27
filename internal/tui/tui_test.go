@@ -1897,6 +1897,34 @@ func TestSlashCompletionEnterStartsReview(t *testing.T) {
 	}
 }
 
+func TestSlashCompletionHelpOnEnterAndTab(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		key  tea.KeyType
+	}{
+		{name: "enter", key: tea.KeyEnter},
+		{name: "tab", key: tea.KeyTab},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel("/tmp/project", DefaultConfig())
+			m.goalInput.SetValue("/h")
+			m.refreshCompletionCandidate()
+
+			next, cmd := m.handleKey(tea.KeyMsg{Type: tt.key})
+			got, ok := next.(Model)
+			if !ok {
+				t.Fatalf("handleKey returned %T, want tui.Model", next)
+			}
+			if got.state != stateHelp {
+				t.Fatalf("state = %v, want %v", got.state, stateHelp)
+			}
+			if cmd != nil {
+				t.Fatal("completion returned unexpected command")
+			}
+		})
+	}
+}
+
 func TestTaggedCompletionEnterAndTabInsertIntoActiveToken(t *testing.T) {
 	root := t.TempDir()
 	writeTaggedCompletionFixture(t, root, "docs/alpha.go")

@@ -20,8 +20,10 @@ const (
 )
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if next, cmd, handled := m.handleCompletionKey(msg.String()); handled {
-		return next, cmd
+	if m.goalFocus == goalFocusEditor {
+		if next, cmd, handled := m.handleCompletionKey(msg.String()); handled {
+			return next, cmd
+		}
 	}
 
 	if m.state == stateHome && msg.Type == tea.KeyEnter && msg.Alt {
@@ -46,6 +48,26 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "tab":
 		if next, cmd, handled := m.handleKeyTab(); handled {
+			return next, cmd
+		}
+
+	case "up":
+		if next, cmd, handled := m.handleKeyUp(); handled {
+			return next, cmd
+		}
+
+	case "down":
+		if next, cmd, handled := m.handleKeyDown(); handled {
+			return next, cmd
+		}
+
+	case "backspace":
+		if next, cmd, handled := m.handleKeyBackspace(); handled {
+			return next, cmd
+		}
+
+	case "delete":
+		if next, cmd, handled := m.handleKeyDelete(); handled {
 			return next, cmd
 		}
 
@@ -97,6 +119,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleKeyEsc cancels the current operation and returns to the home screen,
 // except during states where interruption is not safe (scanning, writing).
 func (m Model) handleKeyEsc() (tea.Model, tea.Cmd) {
+	if m.state == stateHome && m.goalFocus == goalFocusAttachments {
+		m.focusGoalEditor()
+		return m, textarea.Blink
+	}
 	switch m.state {
 	case stateHome, stateScanning, stateWriting, stateBadgeFetching:
 		// These states are either already home or mid-operation; esc is a no-op.
@@ -105,7 +131,7 @@ func (m Model) handleKeyEsc() (tea.Model, tea.Cmd) {
 		m.state = stateHome
 		m.status = neutralMessage("Cancelled. Ready for a new goal.")
 		m.err = nil
-		m.goalInput.Focus()
+		m.focusGoalEditor()
 		m.paste.Blur()
 		return m, textarea.Blink
 	}
@@ -118,7 +144,7 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 	case stateOnboarding:
 		// Dismiss the first-run onboarding screen and go to the goal input.
 		m.state = stateHome
-		m.goalInput.Focus()
+		m.focusGoalEditor()
 		return m, textarea.Blink, true
 
 	case stateHome:
@@ -164,10 +190,74 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 	return m, nil, false // key not applicable in current state
 }
 
-// handleKeyTab is a no-op as Tab completion is now handled by handleCompletionKey
-// at the beginning of handleKey.
+// handleKeyTab toggles between the goal editor and attachment list when the
+// home screen is showing attachments and completion is not active.
 func (m Model) handleKeyTab() (tea.Model, tea.Cmd, bool) {
+	if m.state == stateHome {
+		if m.goalFocus == goalFocusAttachments {
+			m.focusGoalEditor()
+			return m, textarea.Blink, true
+		}
+		if len(m.goalAttachments) > 0 {
+			if m.focusGoalAttachments() {
+				return m, textarea.Blink, true
+			}
+		}
+	}
 	return m, nil, false
+}
+
+func (m Model) handleKeyUp() (tea.Model, tea.Cmd, bool) {
+	if m.state != stateHome {
+		return m, nil, false
+	}
+	if m.goalFocus == goalFocusAttachments {
+		m.moveGoalAttachmentSelection(-1)
+		return m, textarea.Blink, true
+	}
+	return m, nil, false
+}
+
+func (m Model) handleKeyDown() (tea.Model, tea.Cmd, bool) {
+	if m.state != stateHome {
+		return m, nil, false
+	}
+	if m.goalFocus == goalFocusAttachments {
+		m.moveGoalAttachmentSelection(1)
+		return m, textarea.Blink, true
+	}
+	if len(m.goalAttachments) > 0 && m.goalInputAtEnd() {
+		if m.focusGoalAttachments() {
+			return m, textarea.Blink, true
+		}
+	}
+	return m, nil, false
+}
+
+func (m Model) handleKeyBackspace() (tea.Model, tea.Cmd, bool) {
+	if m.state != stateHome || m.goalFocus != goalFocusAttachments {
+		return m, nil, false
+	}
+	return m.handleGoalAttachmentDelete()
+}
+
+func (m Model) handleKeyDelete() (tea.Model, tea.Cmd, bool) {
+	if m.state != stateHome || m.goalFocus != goalFocusAttachments {
+		return m, nil, false
+	}
+	return m.handleGoalAttachmentDelete()
+}
+
+func (m Model) handleGoalAttachmentDelete() (tea.Model, tea.Cmd, bool) {
+	if !m.deleteGoalAttachmentSelection() {
+		return m, nil, false
+	}
+	if len(m.goalAttachments) == 0 {
+		m.status = neutralMessage("Removed the last attachment.")
+	} else {
+		m.status = neutralMessage(fmt.Sprintf("Removed attachment %d of %d.", m.goalAttachmentSelected+1, len(m.goalAttachments)))
+	}
+	return m, textarea.Blink, true
 }
 
 // handleKeyConfirm handles the "y/Y" key, which confirms actions on screens
@@ -369,10 +459,12 @@ func (m Model) forwardKeyToInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch m.state {
 	case stateHome:
-		m.goalInput, cmd = m.goalInput.Update(msg)
-		m.enforceGoalByteLimit(pastedKeyMsg(msg))
-		m.resizeGoalEditor()
-		m.pruneCompletionSuppression()
+		if m.goalFocus == goalFocusEditor {
+			m.goalInput, cmd = m.goalInput.Update(msg)
+			m.enforceGoalByteLimit(pastedKeyMsg(msg))
+			m.resizeGoalEditor()
+			m.pruneCompletionSuppression()
+		}
 	case stateWaitingForExtractions, stateWaitingForCode:
 		m.paste, cmd = m.paste.Update(msg)
 		if pastedKeyMsg(msg) {

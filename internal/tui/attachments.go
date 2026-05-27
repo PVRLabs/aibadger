@@ -243,3 +243,68 @@ func truncateGoalAttachmentRow(text string, maxWidth int) string {
 	b.WriteString(ellipsis)
 	return b.String()
 }
+
+func (m *Model) focusGoalEditor() {
+	m.goalFocus = goalFocusEditor
+	m.goalInput.Focus()
+}
+
+func (m *Model) focusGoalAttachments() bool {
+	if len(m.goalAttachments) == 0 {
+		return false
+	}
+	m.goalFocus = goalFocusAttachments
+	m.goalInput.Blur()
+	if m.goalAttachmentSelected < 0 || m.goalAttachmentSelected >= len(m.goalAttachments) {
+		m.goalAttachmentSelected = 0
+	}
+	return true
+}
+
+func (m Model) goalInputAtEnd() bool {
+	input := m.goalInput.Value()
+	return m.goalInputCursorByteIndex() >= len(input)
+}
+
+func (m *Model) moveGoalAttachmentSelection(delta int) bool {
+	if len(m.goalAttachments) == 0 {
+		return false
+	}
+	if m.goalAttachmentSelected < 0 {
+		m.goalAttachmentSelected = 0
+	}
+	next := m.goalAttachmentSelected + delta
+	if next < 0 {
+		next = 0
+	}
+	if next >= len(m.goalAttachments) {
+		next = len(m.goalAttachments) - 1
+	}
+	m.goalAttachmentSelected = next
+	return true
+}
+
+func (m *Model) deleteGoalAttachmentSelection() bool {
+	if len(m.goalAttachments) == 0 {
+		return false
+	}
+	index := m.goalAttachmentSelected
+	if index < 0 || index >= len(m.goalAttachments) {
+		index = 0
+	}
+	next := removeGoalAttachmentAt(m.goalAttachments, index)
+	if len(next) == 0 {
+		m.goalAttachments = nil
+		m.goalAttachmentSelected = -1
+		m.focusGoalEditor()
+		return true
+	}
+	if index >= len(next) {
+		index = len(next) - 1
+	}
+	m.goalAttachments = next
+	m.goalAttachmentSelected = index
+	m.goalFocus = goalFocusAttachments
+	m.goalInput.Blur()
+	return true
+}

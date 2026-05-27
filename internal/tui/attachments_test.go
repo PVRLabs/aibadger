@@ -5,6 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -184,5 +185,159 @@ func TestRenderGoalAttachmentRowTruncatesSafely(t *testing.T) {
 	}
 	if !strings.Contains(got, "...") {
 		t.Fatalf("rendered row did not truncate long text:\n%s", got)
+	}
+}
+
+func TestGoalAttachmentFocusNavigationAndDeletion(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("Review this change.")
+	m.goalAttachments = []goalAttachment{
+		newGoalTextAttachment("paste", "first"),
+		newGoalTextAttachment("paste", "second"),
+		newGoalTextAttachment("paste", "third"),
+	}
+	m.goalAttachmentSelected = 1
+	m.goalFocus = goalFocusEditor
+	m.goalInput.Focus()
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Tab) returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Focused() {
+		t.Fatal("goal input remained focused after moving to attachments")
+	}
+	if got.goalFocus != goalFocusAttachments {
+		t.Fatalf("goalFocus = %v, want %v", got.goalFocus, goalFocusAttachments)
+	}
+	if got.goalAttachmentSelected != 1 {
+		t.Fatalf("goalAttachmentSelected = %d, want 1", got.goalAttachmentSelected)
+	}
+	if cmd == nil {
+		t.Fatal("tab into attachments did not return a blink command")
+	}
+
+	next, cmd = got.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	got, ok = next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Down) returned %T, want tui.Model", next)
+	}
+	if got.goalAttachmentSelected != 2 {
+		t.Fatalf("goalAttachmentSelected after down = %d, want 2", got.goalAttachmentSelected)
+	}
+	if cmd == nil {
+		t.Fatal("attachment navigation did not return a blink command")
+	}
+
+	next, _ = got.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	got, ok = next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Down) returned %T, want tui.Model", next)
+	}
+	if got.goalAttachmentSelected != 2 {
+		t.Fatalf("goalAttachmentSelected after clamped down = %d, want 2", got.goalAttachmentSelected)
+	}
+
+	next, _ = got.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	got, ok = next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Up) returned %T, want tui.Model", next)
+	}
+	if got.goalAttachmentSelected != 1 {
+		t.Fatalf("goalAttachmentSelected after up = %d, want 1", got.goalAttachmentSelected)
+	}
+
+	next, _ = got.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	got, ok = next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Esc) returned %T, want tui.Model", next)
+	}
+	if got.goalFocus != goalFocusEditor {
+		t.Fatalf("goalFocus after esc = %v, want %v", got.goalFocus, goalFocusEditor)
+	}
+	if !got.goalInput.Focused() {
+		t.Fatal("goal input was not refocused after esc")
+	}
+}
+
+func TestGoalAttachmentDeletionKeepsNearestSelectionAndSubmitsRemainingAttachments(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("Review this change.")
+	m.goalAttachments = []goalAttachment{
+		newGoalTextAttachment("paste", "first"),
+		newGoalTextAttachment("paste", "second"),
+		newGoalTextAttachment("paste", "third"),
+	}
+	m.goalAttachmentSelected = 2
+	m.goalFocus = goalFocusAttachments
+	m.goalInput.Blur()
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyBackspace})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Backspace) returned %T, want tui.Model", next)
+	}
+	if len(got.goalAttachments) != 2 {
+		t.Fatalf("goalAttachments length after delete = %d, want 2", len(got.goalAttachments))
+	}
+	if got.goalAttachmentSelected != 1 {
+		t.Fatalf("goalAttachmentSelected after delete = %d, want 1", got.goalAttachmentSelected)
+	}
+	if got.goalAttachments[1].Text != "second" {
+		t.Fatalf("nearest selection fallback picked %q, want second", got.goalAttachments[1].Text)
+	}
+	if got.goalFocus != goalFocusAttachments {
+		t.Fatalf("goalFocus after delete = %v, want %v", got.goalFocus, goalFocusAttachments)
+	}
+	if got.goalInput.Focused() {
+		t.Fatal("goal input should stay blurred while attachments remain")
+	}
+	if cmd == nil {
+		t.Fatal("attachment delete did not return a blink command")
+	}
+
+	next, _ = got.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	submitted, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Enter) returned %T, want tui.Model", next)
+	}
+	if submitted.state != stateScanning {
+		t.Fatalf("state after submit = %v, want %v", submitted.state, stateScanning)
+	}
+	if strings.Contains(submitted.goal, "third") {
+		t.Fatalf("submitted goal still contained removed attachment:\n%s", submitted.goal)
+	}
+	if !strings.Contains(submitted.goal, "Attached text:") || !strings.Contains(submitted.goal, "first") || !strings.Contains(submitted.goal, "second") {
+		t.Fatalf("submitted goal missing remaining attachments:\n%s", submitted.goal)
+	}
+}
+
+func TestDeletingLastAttachmentReturnsFocusToEditor(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("Review this change.")
+	m.goalAttachments = []goalAttachment{
+		newGoalTextAttachment("paste", "only attachment"),
+	}
+	m.goalAttachmentSelected = 0
+	m.goalFocus = goalFocusAttachments
+	m.goalInput.Blur()
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyDelete})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Delete) returned %T, want tui.Model", next)
+	}
+	if len(got.goalAttachments) != 0 {
+		t.Fatalf("goalAttachments length = %d, want 0", len(got.goalAttachments))
+	}
+	if got.goalFocus != goalFocusEditor {
+		t.Fatalf("goalFocus after deleting last attachment = %v, want %v", got.goalFocus, goalFocusEditor)
+	}
+	if !got.goalInput.Focused() {
+		t.Fatal("goal input was not refocused after removing last attachment")
+	}
+	if strings.Contains(got.viewHome(), "Attachments:") {
+		t.Fatalf("home view still showed attachment section after deleting last item:\n%s", got.viewHome())
 	}
 }

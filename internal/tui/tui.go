@@ -357,7 +357,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = stateHome
 			m.err = msg.err
 			m.status = tuiMessage{}
-			m.goalInput.Focus()
+			m.focusGoalEditor()
 			return m, textarea.Blink
 		}
 		m.eng = msg.eng
@@ -444,7 +444,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setGoalInputValue("")
 		m.resizeGoalEditor()
 		m.completion.suppressedKey = ""
-		m.goalInput.Focus()
+		m.focusGoalEditor()
 		m.paste.Blur()
 		if len(msg.errs) > 0 {
 			m.status = errorMessage(fmt.Sprintf("Finished with %d apply error(s).", len(msg.errs)))
@@ -577,7 +577,7 @@ func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
 	m.setGoalAttachments(nil)
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
-	m.goalInput.Focus()
+	m.focusGoalEditor()
 	return m, textarea.Blink
 }
 
@@ -613,7 +613,7 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 	if err != nil {
 		m.status = errorMessage(fmt.Sprintf("Unable to prepare review prompt: %v", err))
 		m.err = nil
-		m.goalInput.Focus()
+		m.focusGoalEditor()
 		return m, textarea.Blink
 	}
 
@@ -630,7 +630,7 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 		m.setGoalAttachments(nil)
 	}
 	m.resizeGoalEditor()
-	m.goalInput.Focus()
+	m.focusGoalEditor()
 	m.paste.Blur()
 
 	status, severity := task.StartupStatus()
@@ -811,7 +811,7 @@ func (m Model) returnHome(status tuiMessage) (tea.Model, tea.Cmd) {
 	m.setGoalInputValue("")
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
-	m.goalInput.Focus()
+	m.focusGoalEditor()
 	m.paste.Blur()
 	return m, textarea.Blink
 }

@@ -41,7 +41,7 @@ type completionState struct {
 }
 
 func (m Model) currentCompletionCandidate() (completionCandidate, bool) {
-	if m.state != stateHome || m.completion.candidate.kind == completionKindNone {
+	if m.state != stateHome || m.goalFocus != goalFocusEditor || m.completion.candidate.kind == completionKindNone {
 		return completionCandidate{}, false
 	}
 	return m.completion.candidate, true

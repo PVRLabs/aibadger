@@ -409,15 +409,15 @@ func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []Extr
 		metadata = append(metadata, meta)
 	}
 
-	// 2. Compute footer once, outside the drop loop
+	// 2. Compute task and output constraints once, outside the drop loop
 	instr := f.currentInstructions()
-	footer := fmt.Sprintf(instr.SchemaBConstraint, query)
+	constraint := fmt.Sprintf(instr.SchemaBConstraint, query)
 
-	// 3. Total truncation (Drop Last File) — measure body only
+	// 3. Total truncation (Drop Last File)
 	if f.MaxTotalContextBytes > 0 {
 		for {
-			body := f.buildSchemaBBody(t, processed)
-			if len(body)+len(footer) <= f.MaxTotalContextBytes || len(processed) == 0 {
+			body := f.buildSchemaBBody(t, processed, constraint)
+			if len(body) <= f.MaxTotalContextBytes || len(processed) == 0 {
 				break
 			}
 			lastIdx := len(processed) - 1
@@ -426,14 +426,15 @@ func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []Extr
 		}
 	}
 
-	body := f.buildSchemaBBody(t, processed)
-	return body + footer, metadata
+	body := f.buildSchemaBBody(t, processed, constraint)
+	return body, metadata
 }
 
-func (f *Formatter) buildSchemaBBody(t *model.ProjectTopology, extractions []ExtractionResult) string {
+func (f *Formatter) buildSchemaBBody(t *model.ProjectTopology, extractions []ExtractionResult, constraint string) string {
 	var sb strings.Builder
 	f.writeTopologySection(&sb, t, len(extractions))
 
+	sb.WriteString(constraint)
 	sb.WriteString("\n[CONTEXT]\n")
 	for _, e := range extractions {
 		label := "Extracted Span"

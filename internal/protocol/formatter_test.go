@@ -819,6 +819,27 @@ func TestGenerateSchemaBIncludesFinalAnswerGuidance(t *testing.T) {
 	}
 }
 
+func TestGenerateSchemaBOrdersTaskConstraintBeforeContext(t *testing.T) {
+	formatter := NewFormatter()
+	output, _ := formatter.GenerateSchemaB(&model.ProjectTopology{}, []ExtractionResult{
+		{Path: "main.go", Content: "package main", FullFile: true},
+	}, "answer with the implementation")
+
+	taskIndex := strings.Index(output, "[TASK]")
+	constraintIndex := strings.Index(output, "[OUTPUT CONSTRAINT]")
+	contextIndex := strings.Index(output, "[CONTEXT]")
+
+	if taskIndex < 0 || constraintIndex < 0 || contextIndex < 0 {
+		t.Fatalf("Prompt 2 missing required sections:\n%s", output)
+	}
+	if !(taskIndex < constraintIndex && constraintIndex < contextIndex) {
+		t.Fatalf("Prompt 2 sections out of order: [TASK]=%d, [OUTPUT CONSTRAINT]=%d, [CONTEXT]=%d\n%s", taskIndex, constraintIndex, contextIndex, output)
+	}
+	if strings.Contains(output, "[FINAL REMINDER]") {
+		t.Fatalf("Prompt 2 must not emit a final reminder:\n%s", output)
+	}
+}
+
 func TestGenerateSchemaBTrimming(t *testing.T) {
 	formatter := NewFormatter()
 	formatter.MaxContextFileBytes = 20

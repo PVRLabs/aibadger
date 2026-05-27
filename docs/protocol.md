@@ -38,6 +38,13 @@ Copy the AI's reply and paste it back into Badger. Badger extracts the
 relevant code and produces **Prompt 2 (Code Context)** — the extracted files or
 code blocks with their full contents, alongside the project topology and task.
 
+Prompt 2 has this structure:
+
+- **PROJECT TOPOLOGY** — languages, build stack, module structure, and active extraction count.
+- **TASK** — your goal or question.
+- **OUTPUT CONSTRAINT** — instructs the AI to answer using the provided context, not selector lines.
+- **CONTEXT** — extracted file blocks such as `(Full File)`, `(Extracted Span)`, or `(Binary Summary)`.
+
 ## Step 3: Apply
 
 Copy **Prompt 2 (Code Context)** back to the AI chat. The AI reads the code and can write back

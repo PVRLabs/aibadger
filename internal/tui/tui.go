@@ -65,14 +65,16 @@ type Model struct {
 	status tuiMessage
 	err    error
 
-	goalInput              textarea.Model
-	paste                  textarea.Model
-	goalFocus              goalFocusState
-	goalAttachmentSelected int
-	goalAttachments        []goalAttachment
-	goalInputLastRuneAt    time.Time
-	goalPasteBuffer        string
-	goalPasteCapture       bool
+	goalInput               textarea.Model
+	paste                   textarea.Model
+	goalFocus               goalFocusState
+	goalAttachmentSelected  int
+	goalAttachments         []goalAttachment
+	goalInputLastRuneAt     time.Time
+	goalInputLastRuneBefore string
+	goalPasteBaseline       string
+	goalPasteBuffer         string
+	goalPasteCapture        bool
 
 	eng                     *engine.Engine
 	session                 *workflow.Session

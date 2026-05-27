@@ -109,10 +109,11 @@ func insertedText(before, after string) string {
 	return after[prefix:afterSuffix]
 }
 
-func (m *Model) startGoalPasteCapture(text string) tea.Cmd {
+func (m *Model) startGoalPasteCapture(baseline, text string) tea.Cmd {
 	m.goalPasteCapture = true
+	m.goalPasteBaseline = baseline
 	m.goalPasteBuffer = text
-	m.setGoalInputValue("")
+	m.setGoalInputValue(baseline)
 	m.resizeGoalEditor()
 	return tea.Tick(goalPasteFlushDelay, func(time.Time) tea.Msg { return goalPasteFlushMsg{} })
 }
@@ -126,16 +127,22 @@ func (m *Model) finishGoalPasteCapture() tea.Cmd {
 	if !m.goalPasteCapture {
 		return nil
 	}
+	baseline := m.goalPasteBaseline
 	buffer := m.goalPasteBuffer
 	m.goalPasteCapture = false
+	m.goalPasteBaseline = ""
 	m.goalPasteBuffer = ""
 	if buffer == "" {
 		return nil
 	}
 	if isLargeGoalPaste(buffer) {
+		m.setGoalInputValue(baseline)
+		m.resizeGoalEditor()
 		m.appendGoalAttachment(newGoalTextAttachment("paste", buffer))
 		return textarea.Blink
 	}
+	m.setGoalInputValue(baseline + buffer)
+	m.resizeGoalEditor()
 	return nil
 }
 

@@ -568,6 +568,60 @@ func TestLargeGoalBurstWithoutPasteFlagStillBecomesAttachment(t *testing.T) {
 	}
 }
 
+func TestLargeGoalBurstPreservesTypedInstruction(t *testing.T) {
+	origByteThreshold := goalPasteAttachmentByteThreshold
+	origLineThreshold := goalPasteAttachmentLineThreshold
+	goalPasteAttachmentByteThreshold = 8
+	goalPasteAttachmentLineThreshold = 30
+	t.Cleanup(func() {
+		goalPasteAttachmentByteThreshold = origByteThreshold
+		goalPasteAttachmentLineThreshold = origLineThreshold
+	})
+
+	instruction := "fix the login bug"
+	paste := strings.Repeat("x", goalPasteAttachmentByteThreshold+1)
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue(instruction)
+
+	var next tea.Model = m
+	for _, r := range []rune(paste) {
+		var ok bool
+		next, _ = next.(Model).Update(tea.KeyMsg{
+			Type:  tea.KeyRunes,
+			Runes: []rune{r},
+		})
+		_, ok = next.(Model)
+		if !ok {
+			t.Fatalf("Update returned %T, want tui.Model", next)
+		}
+	}
+	stale := next.(Model)
+	stale.goalInputLastRuneAt = time.Now().Add(-goalPasteFlushDelay)
+	next, _ = stale.Update(goalPasteFlushMsg{})
+	got := next.(Model)
+	if got.goalInput.Value() != instruction {
+		t.Fatalf("goal input = %q, want preserved instruction %q", got.goalInput.Value(), instruction)
+	}
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
+	}
+	if got.goalAttachments[0].Text != paste {
+		t.Fatalf("attachment text did not preserve split payload")
+	}
+
+	next, _ = got.submitGoal()
+	submitted := next.(Model)
+	if !strings.Contains(submitted.goal, instruction) {
+		t.Fatalf("submitted goal missing instruction:\n%s", submitted.goal)
+	}
+	if !strings.Contains(submitted.goal, "Attached text:") || !strings.Contains(submitted.goal, paste) {
+		t.Fatalf("submitted goal missing attachment:\n%s", submitted.goal)
+	}
+	if strings.Contains(submitted.goal, instruction+paste) {
+		t.Fatalf("submitted goal contains inline pasted payload:\n%s", submitted.goal)
+	}
+}
+
 func TestTypedInputDoesNotConvertToAttachment(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	input := strings.Repeat("x", 128)

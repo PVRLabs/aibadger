@@ -472,11 +472,35 @@ func (m Model) forwardKeyToInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.resizeGoalEditor()
 				m.appendGoalAttachment(newGoalTextAttachment("paste", pastedText))
 				m.goalInputLastRuneAt = time.Time{}
+				m.goalInputLastRuneBefore = ""
 				return m, textarea.Blink
 			}
 			if m.goalPasteCapture {
 				m.goalPasteBuffer += string(msg.Runes)
-				m.goalInput.SetValue(before)
+				if isLargeGoalPaste(m.goalPasteBuffer) {
+					m.goalInput.SetValue(m.goalPasteBaseline)
+				} else {
+					m.goalInput.SetValue(m.goalPasteBaseline + m.goalPasteBuffer)
+				}
+				m.resizeGoalEditor()
+				m.goalInputLastRuneAt = time.Now()
+				return m, tea.Tick(goalPasteFlushDelay, func(time.Time) tea.Msg { return goalPasteFlushMsg{} })
+			}
+			if m.goalPasteBurstLikely(msg) {
+				baseline := m.goalInputLastRuneBefore
+				buffer := before
+				if strings.HasPrefix(before, baseline) {
+					buffer = before[len(baseline):]
+				}
+				buffer += string(msg.Runes)
+				m.goalPasteCapture = true
+				m.goalPasteBaseline = baseline
+				m.goalPasteBuffer = buffer
+				if isLargeGoalPaste(buffer) {
+					m.goalInput.SetValue(baseline)
+				} else {
+					m.goalInput.SetValue(baseline + buffer)
+				}
 				m.resizeGoalEditor()
 				m.goalInputLastRuneAt = time.Now()
 				return m, tea.Tick(goalPasteFlushDelay, func(time.Time) tea.Msg { return goalPasteFlushMsg{} })
@@ -493,6 +517,7 @@ func (m Model) forwardKeyToInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						pastedText = string(msg.Runes)
 					}
 					m.goalPasteCapture = true
+					m.goalPasteBaseline = before
 					m.goalPasteBuffer = pastedText
 					m.goalInput.SetValue(before)
 					m.resizeGoalEditor()
@@ -500,6 +525,7 @@ func (m Model) forwardKeyToInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					return m, tea.Tick(goalPasteFlushDelay, func(time.Time) tea.Msg { return goalPasteFlushMsg{} })
 				}
 				m.goalInputLastRuneAt = time.Now()
+				m.goalInputLastRuneBefore = before
 			}
 		}
 	case stateWaitingForExtractions, stateWaitingForCode:

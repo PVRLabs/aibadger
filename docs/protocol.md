@@ -2,6 +2,8 @@
 
 Badger bridges your local project and an AI chat in a three-step exchange: **Map → Extract → Apply**.
 
+The goal editor may carry separate removable attachments, such as large pasted diffs or supporting notes. Those attachments stay outside the typed instruction surface and are assembled only when the goal is submitted.
+
 ## Step 1: Map
 
 **Prompt 1 (Map)** — the project topology — has this structure:

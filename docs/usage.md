@@ -21,6 +21,7 @@ Badger opens your editor with a prompt pre-filled from the current git diff. Rev
 
 > [!NOTE]
 > Only project structure and your diff are included — source code content stays local until you paste extraction commands.
+> Large pasted review context may be preserved as a separate removable attachment so the editor stays focused on your instruction.
 
 ### Step 2: Copy Prompt 1 (Map) to your AI chat
 
@@ -57,7 +58,7 @@ cd your-project
 badger
 ```
 
-Type a goal at the prompt. You can also paste a git diff if you want to provide details of the change.
+Type a goal at the prompt. You can also paste a git diff or other supporting text if you want to provide details of the change; large pasted context may be kept as a removable attachment so the goal stays readable.
 
 > [!TIP]
 > Badger never reads your source code ahead of time — you explicitly provide context (like a diff or error output) so only what's needed leaves your machine.

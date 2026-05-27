@@ -3,8 +3,11 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/charmbracelet/bubbles/textarea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -21,6 +24,13 @@ const (
 	goalAttachmentGitDiff goalAttachmentType = "git diff"
 	goalAttachmentText    goalAttachmentType = "text"
 )
+
+var (
+	goalPasteAttachmentByteThreshold = 16 * 1024
+	goalPasteAttachmentLineThreshold = 30
+)
+
+const goalPasteFlushDelay = time.Second
 
 type goalAttachment struct {
 	Type         goalAttachmentType
@@ -73,6 +83,60 @@ func formatGoalAttachmentSummary(attachment goalAttachment) string {
 	default:
 		return fmt.Sprintf("[text: %s, %d lines]", protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines)
 	}
+}
+
+func isLargeGoalPaste(text string) bool {
+	return len(text) > goalPasteAttachmentByteThreshold || countTextLines(text) > goalPasteAttachmentLineThreshold
+}
+
+func insertedText(before, after string) string {
+	if before == after {
+		return ""
+	}
+	prefix := 0
+	for prefix < len(before) && prefix < len(after) && before[prefix] == after[prefix] {
+		prefix++
+	}
+	beforeSuffix := len(before)
+	afterSuffix := len(after)
+	for beforeSuffix > prefix && afterSuffix > prefix && before[beforeSuffix-1] == after[afterSuffix-1] {
+		beforeSuffix--
+		afterSuffix--
+	}
+	if prefix > afterSuffix {
+		return ""
+	}
+	return after[prefix:afterSuffix]
+}
+
+func (m *Model) startGoalPasteCapture(text string) tea.Cmd {
+	m.goalPasteCapture = true
+	m.goalPasteBuffer = text
+	m.setGoalInputValue("")
+	m.resizeGoalEditor()
+	return tea.Tick(goalPasteFlushDelay, func(time.Time) tea.Msg { return goalPasteFlushMsg{} })
+}
+
+func (m *Model) appendGoalPasteCapture(text string) tea.Cmd {
+	m.goalPasteBuffer += text
+	return tea.Tick(goalPasteFlushDelay, func(time.Time) tea.Msg { return goalPasteFlushMsg{} })
+}
+
+func (m *Model) finishGoalPasteCapture() tea.Cmd {
+	if !m.goalPasteCapture {
+		return nil
+	}
+	buffer := m.goalPasteBuffer
+	m.goalPasteCapture = false
+	m.goalPasteBuffer = ""
+	if buffer == "" {
+		return nil
+	}
+	if isLargeGoalPaste(buffer) {
+		m.appendGoalAttachment(newGoalTextAttachment("paste", buffer))
+		return textarea.Blink
+	}
+	return nil
 }
 
 func assembleGoalSubmission(instruction string, attachments []goalAttachment) string {
@@ -181,7 +245,7 @@ func (m Model) viewGoalAttachments() string {
 	var lines []string
 	lines = append(lines, renderBold("Attachments:"))
 	for i, attachment := range m.goalAttachments {
-		lines = append(lines, m.renderGoalAttachmentRow(attachment, i == m.goalAttachmentSelected))
+		lines = append(lines, m.renderGoalAttachmentRow(attachment, m.goalFocus == goalFocusAttachments && i == m.goalAttachmentSelected))
 	}
 	return strings.Join(lines, "\n")
 }

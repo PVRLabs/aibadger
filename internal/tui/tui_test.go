@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/PVRLabs/aibadger/internal/clipboard"
@@ -360,7 +361,7 @@ func TestSubmitGoalTransitionsToScanning(t *testing.T) {
 
 func TestGoalPasteBelowLimitIsRetainedWithoutWarning(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
-	paste := strings.Repeat("x", workflow.LargePromptBytes-1)
+	paste := strings.Repeat("x", goalPasteAttachmentByteThreshold-1)
 
 	next, _ := m.Update(tea.KeyMsg{
 		Type:  tea.KeyRunes,
@@ -376,6 +377,36 @@ func TestGoalPasteBelowLimitIsRetainedWithoutWarning(t *testing.T) {
 	}
 	if !got.status.empty() {
 		t.Fatalf("status = %#v, want empty", got.status)
+	}
+}
+
+func TestLargeGoalPasteBecomesTextAttachmentByBytes(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	paste := strings.Repeat("x", goalPasteAttachmentByteThreshold+1)
+
+	next, _ := m.Update(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune(paste),
+		Paste: true,
+	})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty inline editor after attachment conversion", got.goalInput.Value())
+	}
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
+	}
+	if got.goalAttachments[0].Type != goalAttachmentText {
+		t.Fatalf("attachment type = %q, want %q", got.goalAttachments[0].Type, goalAttachmentText)
+	}
+	if got.goalAttachments[0].Text != paste {
+		t.Fatalf("attachment text did not preserve pasted payload")
+	}
+	if got.goalAttachments[0].Source != "paste" {
+		t.Fatalf("attachment source = %q, want paste", got.goalAttachments[0].Source)
 	}
 }
 
@@ -400,6 +431,166 @@ func TestGoalPastePreservesMultilineText(t *testing.T) {
 	}
 	if got.goalInput.Height() != 4 {
 		t.Fatalf("goal input height = %d, want 4", got.goalInput.Height())
+	}
+}
+
+func TestLargeGoalPasteBecomesTextAttachmentByLines(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	paste := strings.Join([]string{
+		"line 01", "line 02", "line 03", "line 04", "line 05",
+		"line 06", "line 07", "line 08", "line 09", "line 10",
+		"line 11", "line 12", "line 13", "line 14", "line 15",
+		"line 16", "line 17", "line 18", "line 19", "line 20",
+		"line 21", "line 22", "line 23", "line 24", "line 25",
+		"line 26", "line 27", "line 28", "line 29", "line 30",
+		"line 31",
+	}, "\n")
+
+	next, _ := m.Update(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune(paste),
+		Paste: true,
+	})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
+	}
+	if got.goalAttachments[0].Text != paste {
+		t.Fatalf("attachment text did not preserve pasted payload")
+	}
+	if got.goalAttachments[0].Lines != goalPasteAttachmentLineThreshold+1 {
+		t.Fatalf("attachment lines = %d, want %d", got.goalAttachments[0].Lines, goalPasteAttachmentLineThreshold+1)
+	}
+}
+
+func TestLargeGoalInsertWithoutPasteFlagStillBecomesAttachment(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	paste := strings.Join([]string{
+		"line 01", "line 02", "line 03", "line 04", "line 05",
+		"line 06", "line 07", "line 08", "line 09", "line 10",
+		"line 11", "line 12", "line 13", "line 14", "line 15",
+		"line 16", "line 17", "line 18", "line 19", "line 20",
+		"line 21", "line 22", "line 23", "line 24", "line 25",
+		"line 26", "line 27", "line 28", "line 29", "line 30",
+		"line 31",
+	}, "\n")
+
+	next, _ := m.Update(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune(paste),
+	})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
+	}
+	if got.goalAttachments[0].Text != paste {
+		t.Fatalf("attachment text did not preserve pasted payload")
+	}
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty inline editor after attachment conversion", got.goalInput.Value())
+	}
+}
+
+func TestLargeGoalPastePreservesExistingInstruction(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	instruction := "Review the following change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing."
+	paste := strings.Repeat(strings.Join([]string{
+		"[PROJECT TOPOLOGY]",
+		"Languages: Go",
+		"Stack: Go Modules",
+		"Structure: Single Module",
+	}, "\n")+"\n", 80)
+	m.goalInput.SetValue(instruction)
+
+	next, _ := m.Update(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune(paste),
+		Paste: true,
+	})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != instruction {
+		t.Fatalf("goal input = %q, want preserved instruction %q", got.goalInput.Value(), instruction)
+	}
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
+	}
+	if got.goalAttachments[0].Text != paste {
+		t.Fatalf("attachment text = %q, want pasted payload", got.goalAttachments[0].Text)
+	}
+}
+
+func TestLargeGoalBurstWithoutPasteFlagStillBecomesAttachment(t *testing.T) {
+	origByteThreshold := goalPasteAttachmentByteThreshold
+	origLineThreshold := goalPasteAttachmentLineThreshold
+	goalPasteAttachmentByteThreshold = 8
+	goalPasteAttachmentLineThreshold = 30
+	t.Cleanup(func() {
+		goalPasteAttachmentByteThreshold = origByteThreshold
+		goalPasteAttachmentLineThreshold = origLineThreshold
+	})
+
+	m := NewModel("/tmp/project", DefaultConfig())
+	paste := strings.Repeat("x", goalPasteAttachmentByteThreshold+1)
+
+	var next tea.Model = m
+	for _, r := range []rune(paste) {
+		var ok bool
+		next, _ = next.(Model).Update(tea.KeyMsg{
+			Type:  tea.KeyRunes,
+			Runes: []rune{r},
+		})
+		_, ok = next.(Model)
+		if !ok {
+			t.Fatalf("Update returned %T, want tui.Model", next)
+		}
+	}
+	stale := next.(Model)
+	stale.goalInputLastRuneAt = time.Now().Add(-goalPasteFlushDelay)
+	next, _ = stale.Update(goalPasteFlushMsg{})
+	got := next.(Model)
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
+	}
+	if got.goalAttachments[0].Text != paste {
+		t.Fatalf("attachment text did not preserve split payload")
+	}
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty inline editor after attachment conversion", got.goalInput.Value())
+	}
+}
+
+func TestTypedInputDoesNotConvertToAttachment(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	input := strings.Repeat("x", 128)
+	var next tea.Model = m
+	for _, r := range input {
+		current := next.(Model)
+		current.goalInputLastRuneAt = time.Time{}
+		var ok bool
+		next, _ = current.Update(tea.KeyMsg{
+			Type:  tea.KeyRunes,
+			Runes: []rune{r},
+		})
+		_, ok = next.(Model)
+		if !ok {
+			t.Fatalf("Update returned %T, want tui.Model", next)
+		}
+	}
+	got := next.(Model)
+	if len(got.goalAttachments) != 0 {
+		t.Fatalf("goalAttachments length = %d, want 0", len(got.goalAttachments))
+	}
+	if got.goalInput.Value() == "" {
+		t.Fatal("typed input was not inserted into the goal editor")
 	}
 }
 
@@ -555,14 +746,20 @@ func TestGoalPasteOverLimitWarnsWithActualAndRetainedSizes(t *testing.T) {
 	if !ok {
 		t.Fatalf("Update returned %T, want tui.Model", next)
 	}
-	if len(got.goalInput.Value()) != workflow.LargePromptBytes {
-		t.Fatalf("goal length = %d, want %d", len(got.goalInput.Value()), workflow.LargePromptBytes)
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty inline editor after attachment conversion", got.goalInput.Value())
 	}
-	if got.status.severity != messageWarning {
-		t.Fatalf("status severity = %v, want warning", got.status.severity)
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
 	}
-	if got.status.text != "Pasted goal was truncated from 52KB to 50KB." {
-		t.Fatalf("status text = %q", got.status.text)
+	if got.goalAttachments[0].Type != goalAttachmentText {
+		t.Fatalf("attachment type = %q, want %q", got.goalAttachments[0].Type, goalAttachmentText)
+	}
+	if got.goalAttachments[0].Text != paste {
+		t.Fatal("large pasted payload was not preserved exactly")
+	}
+	if got.status.severity != messageNeutral {
+		t.Fatalf("status severity = %v, want neutral", got.status.severity)
 	}
 }
 
@@ -579,14 +776,17 @@ func TestGoalPasteOverByteLimitTrimsAtUTF8Boundary(t *testing.T) {
 	if !ok {
 		t.Fatalf("Update returned %T, want tui.Model", next)
 	}
-	if len(got.goalInput.Value()) > workflow.LargePromptBytes {
-		t.Fatalf("goal length = %d, want <= %d", len(got.goalInput.Value()), workflow.LargePromptBytes)
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
 	}
-	if !utf8.ValidString(got.goalInput.Value()) {
-		t.Fatal("goal input is not valid UTF-8")
+	if got.goalAttachments[0].Text != paste {
+		t.Fatal("large pasted UTF-8 payload was not preserved exactly")
 	}
-	if got.status.severity != messageWarning {
-		t.Fatalf("status severity = %v, want warning", got.status.severity)
+	if !utf8.ValidString(got.goalAttachments[0].Text) {
+		t.Fatal("attachment text is not valid UTF-8")
+	}
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty inline editor after attachment conversion", got.goalInput.Value())
 	}
 }
 

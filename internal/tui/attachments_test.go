@@ -155,6 +155,7 @@ func TestViewGoalAttachmentsRendersSelectedRow(t *testing.T) {
 		newGoalTextAttachment("clipboard", "first attachment"),
 		newGoalGitDiffAttachmentWithStats("git diff", "diff --git a/a.go b/a.go\n", 1, 2, 1),
 	}
+	m.goalFocus = goalFocusAttachments
 	m.goalAttachmentSelected = 1
 
 	view := m.viewHome()
@@ -167,6 +168,21 @@ func TestViewGoalAttachmentsRendersSelectedRow(t *testing.T) {
 	}
 	if !strings.Contains(view, "> [git diff] · [git diff: 1 files changed, +2/-1]") {
 		t.Fatalf("home view missing selected attachment row:\n%s", view)
+	}
+}
+
+func TestViewGoalAttachmentsDoesNotShowSelectionWhileEditingGoal(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalAttachments = []goalAttachment{
+		newGoalTextAttachment("clipboard", "first attachment"),
+	}
+	m.goalFocus = goalFocusEditor
+	m.goalAttachmentSelected = 0
+
+	view := m.viewHome()
+
+	if strings.Contains(view, "> [text]") {
+		t.Fatalf("home view showed attachment selection while editing goal:\n%s", view)
 	}
 }
 
@@ -258,6 +274,36 @@ func TestGoalAttachmentFocusNavigationAndDeletion(t *testing.T) {
 	}
 	if !got.goalInput.Focused() {
 		t.Fatal("goal input was not refocused after esc")
+	}
+}
+
+func TestGoalAttachmentUpOnFirstItemReturnsToEditor(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("Review this change.")
+	m.goalAttachments = []goalAttachment{
+		newGoalTextAttachment("paste", "first"),
+		newGoalTextAttachment("paste", "second"),
+	}
+	m.goalAttachmentSelected = 0
+	m.goalFocus = goalFocusAttachments
+	m.goalInput.Blur()
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Up) returned %T, want tui.Model", next)
+	}
+	if got.goalFocus != goalFocusEditor {
+		t.Fatalf("goalFocus after up on first attachment = %v, want %v", got.goalFocus, goalFocusEditor)
+	}
+	if !got.goalInput.Focused() {
+		t.Fatal("goal input was not refocused after leaving the first attachment")
+	}
+	if got.goalAttachmentSelected != 0 {
+		t.Fatalf("goalAttachmentSelected = %d, want 0", got.goalAttachmentSelected)
+	}
+	if cmd == nil {
+		t.Fatal("up on first attachment did not return a blink command")
 	}
 }
 

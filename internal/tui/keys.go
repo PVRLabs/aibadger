@@ -6,6 +6,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/PVRLabs/aibadger/internal/browser"
 	"github.com/PVRLabs/aibadger/internal/workflow"
@@ -212,6 +213,10 @@ func (m Model) handleKeyUp() (tea.Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	if m.goalFocus == goalFocusAttachments {
+		if m.goalAttachmentSelected <= 0 {
+			m.focusGoalEditor()
+			return m, textarea.Blink, true
+		}
 		m.moveGoalAttachmentSelection(-1)
 		return m, textarea.Blink, true
 	}
@@ -460,10 +465,42 @@ func (m Model) forwardKeyToInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.state {
 	case stateHome:
 		if m.goalFocus == goalFocusEditor {
+			before := m.goalInput.Value()
+			if isGoalPasteInsert(msg) && isLargeGoalPaste(string(msg.Runes)) {
+				pastedText := string(msg.Runes)
+				m.goalInput.SetValue(before)
+				m.resizeGoalEditor()
+				m.appendGoalAttachment(newGoalTextAttachment("paste", pastedText))
+				m.goalInputLastRuneAt = time.Time{}
+				return m, textarea.Blink
+			}
+			if m.goalPasteCapture {
+				m.goalPasteBuffer += string(msg.Runes)
+				m.goalInput.SetValue(before)
+				m.resizeGoalEditor()
+				m.goalInputLastRuneAt = time.Now()
+				return m, tea.Tick(goalPasteFlushDelay, func(time.Time) tea.Msg { return goalPasteFlushMsg{} })
+			}
 			m.goalInput, cmd = m.goalInput.Update(msg)
 			m.enforceGoalByteLimit(pastedKeyMsg(msg))
 			m.resizeGoalEditor()
 			m.pruneCompletionSuppression()
+			if msg.Type == tea.KeyRunes {
+				after := m.goalInput.Value()
+				if isLargeGoalPaste(after) {
+					pastedText := insertedText(before, after)
+					if pastedText == "" {
+						pastedText = string(msg.Runes)
+					}
+					m.goalPasteCapture = true
+					m.goalPasteBuffer = pastedText
+					m.goalInput.SetValue(before)
+					m.resizeGoalEditor()
+					m.goalInputLastRuneAt = time.Now()
+					return m, tea.Tick(goalPasteFlushDelay, func(time.Time) tea.Msg { return goalPasteFlushMsg{} })
+				}
+				m.goalInputLastRuneAt = time.Now()
+			}
 		}
 	case stateWaitingForExtractions, stateWaitingForCode:
 		m.paste, cmd = m.paste.Update(msg)
@@ -473,6 +510,20 @@ func (m Model) forwardKeyToInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, cmd
+}
+
+func isGoalPasteInsert(msg tea.KeyMsg) bool {
+	if msg.Type != tea.KeyRunes {
+		return false
+	}
+	return msg.Paste || len(msg.Runes) > 1
+}
+
+func (m Model) goalPasteBurstLikely(msg tea.KeyMsg) bool {
+	if msg.Type != tea.KeyRunes || len(msg.Runes) != 1 || m.goalInputLastRuneAt.IsZero() {
+		return false
+	}
+	return time.Since(m.goalInputLastRuneAt) < goalPasteFlushDelay
 }
 
 func (m Model) statusLine() string {

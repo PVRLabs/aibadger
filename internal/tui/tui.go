@@ -70,6 +70,9 @@ type Model struct {
 	goalFocus              goalFocusState
 	goalAttachmentSelected int
 	goalAttachments        []goalAttachment
+	goalInputLastRuneAt    time.Time
+	goalPasteBuffer        string
+	goalPasteCapture       bool
 
 	eng                     *engine.Engine
 	session                 *workflow.Session
@@ -162,6 +165,8 @@ type badgeErrorMsg struct {
 	text string
 }
 
+type goalPasteFlushMsg struct{}
+
 // Run starts the interactive Bubble Tea TUI.
 func Run(root string) error {
 	return RunWithConfig(root, DefaultConfig())
@@ -251,6 +256,17 @@ func (m *Model) setGoalAttachments(attachments []goalAttachment) {
 	m.goalFocus = goalFocusEditor
 	if len(m.goalAttachments) == 0 {
 		m.goalAttachmentSelected = -1
+		return
+	}
+	if m.goalAttachmentSelected < 0 || m.goalAttachmentSelected >= len(m.goalAttachments) {
+		m.goalAttachmentSelected = 0
+	}
+}
+
+func (m *Model) appendGoalAttachment(attachment goalAttachment) {
+	m.goalAttachments = append(m.goalAttachments, attachment)
+	if len(m.goalAttachments) == 1 {
+		m.goalAttachmentSelected = 0
 		return
 	}
 	if m.goalAttachmentSelected < 0 || m.goalAttachmentSelected >= len(m.goalAttachments) {
@@ -482,6 +498,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = tuiMessage{}
 		m.err = nil
 		return m, nil
+	case goalPasteFlushMsg:
+		if !m.goalPasteCapture {
+			return m, nil
+		}
+		if !m.goalInputLastRuneAt.IsZero() && time.Since(m.goalInputLastRuneAt) < goalPasteFlushDelay {
+			return m, nil
+		}
+		if cmd := m.finishGoalPasteCapture(); cmd != nil {
+			return m, cmd
+		}
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -536,6 +563,9 @@ func (m Model) handleClipboardFallbackSave(msg savePromptDoneMsg) (tea.Model, te
 }
 
 func (m Model) submitGoal() (tea.Model, tea.Cmd) {
+	if finishCmd := m.finishGoalPasteCapture(); finishCmd != nil {
+		return m.submitGoal()
+	}
 	instruction := strings.TrimSpace(m.goalInput.Value())
 	goal := assembleGoalSubmission(instruction, m.goalAttachments)
 	if goal == "" {

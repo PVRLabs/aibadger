@@ -174,10 +174,32 @@ func TestViewGoalAttachmentsRendersSelectedRow(t *testing.T) {
 	}
 }
 
+func TestViewGoalAttachmentsRendersPreviewForSelectedAttachment(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalAttachments = []goalAttachment{
+		newGoalTextAttachment("paste", "alpha\nbeta\ngamma"),
+		newGoalTextAttachment("paste", "delta\nepsilon"),
+	}
+	m.goalFocus = goalFocusAttachments
+	m.goalAttachmentSelected = 1
+
+	view := m.viewGoalAttachments()
+
+	if !strings.Contains(view, "> paste · [text:") {
+		t.Fatalf("view missing selected attachment row:\n%s", view)
+	}
+	if !strings.Contains(view, "    delta\n    epsilon") {
+		t.Fatalf("view missing selected attachment preview:\n%s", view)
+	}
+	if strings.Contains(view, "    alpha") {
+		t.Fatalf("view rendered preview for unselected attachment:\n%s", view)
+	}
+}
+
 func TestViewGoalAttachmentsDoesNotShowSelectionWhileEditingGoal(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalAttachments = []goalAttachment{
-		newGoalTextAttachment("clipboard", "first attachment"),
+		newGoalTextAttachment("clipboard", "first attachment\npreview line"),
 	}
 	m.goalFocus = goalFocusEditor
 	m.goalAttachmentSelected = 0
@@ -186,6 +208,65 @@ func TestViewGoalAttachmentsDoesNotShowSelectionWhileEditingGoal(t *testing.T) {
 
 	if strings.Contains(view, "> [text]") {
 		t.Fatalf("home view showed attachment selection while editing goal:\n%s", view)
+	}
+	if strings.Contains(view, "    first attachment") {
+		t.Fatalf("home view showed attachment preview while editing goal:\n%s", view)
+	}
+}
+
+func TestGoalAttachmentPreviewHidesEmptyText(t *testing.T) {
+	attachment := newGoalTextAttachment("paste", "")
+
+	if got := attachment.previewLines(); len(got) != 0 {
+		t.Fatalf("previewLines() = %#v, want empty", got)
+	}
+}
+
+func TestGoalAttachmentPreviewLimitsLinesAndShowsContinuation(t *testing.T) {
+	attachment := newGoalTextAttachment("paste", "one\ntwo\nthree\nfour")
+
+	got := attachment.previewLines()
+	want := []string{"one", "two", "three", "…"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("previewLines() = %#v, want %#v", got, want)
+	}
+}
+
+func TestGoalAttachmentPreviewTruncatesWideLinesSafely(t *testing.T) {
+	attachment := newGoalTextAttachment("paste", strings.Repeat("界", 60))
+
+	got := attachment.previewLines()
+	if len(got) != 2 {
+		t.Fatalf("previewLines() length = %d, want 2: %#v", len(got), got)
+	}
+	if !utf8.ValidString(got[0]) {
+		t.Fatalf("truncated preview line is not valid UTF-8: %q", got[0])
+	}
+	if runewidth.StringWidth(got[0]) > goalAttachmentPreviewLineWidth {
+		t.Fatalf("truncated preview width = %d, want <= %d: %q", runewidth.StringWidth(got[0]), goalAttachmentPreviewLineWidth, got[0])
+	}
+	if got[1] != "…" {
+		t.Fatalf("preview continuation = %q, want ellipsis", got[1])
+	}
+}
+
+func TestGoalAttachmentDiffPreviewCapsSourceBytes(t *testing.T) {
+	attachment := newGoalGitDiffAttachment("git diff", strings.Repeat("a", goalAttachmentDiffPreviewMaxBytes)+"界\nhidden")
+
+	got := attachment.previewLines()
+	if len(got) == 0 {
+		t.Fatal("previewLines() returned empty diff preview")
+	}
+	if strings.Contains(strings.Join(got, "\n"), "hidden") {
+		t.Fatalf("diff preview included content after byte cap: %#v", got)
+	}
+	for _, line := range got {
+		if !utf8.ValidString(line) {
+			t.Fatalf("diff preview line is not valid UTF-8: %q", line)
+		}
+	}
+	if got[len(got)-1] != "…" {
+		t.Fatalf("diff preview missing continuation after byte cap: %#v", got)
 	}
 }
 

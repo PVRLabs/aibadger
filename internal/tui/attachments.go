@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -33,6 +34,12 @@ var (
 const (
 	goalPasteBurstWindow = 20 * time.Millisecond
 	goalPasteFlushDelay  = time.Second
+)
+
+const (
+	goalAttachmentPreviewMaxLines     = 3
+	goalAttachmentPreviewLineWidth    = 76
+	goalAttachmentDiffPreviewMaxBytes = 500
 )
 
 type goalAttachment struct {
@@ -259,6 +266,88 @@ func countTextLines(text string) int {
 	return lines
 }
 
+func (attachment goalAttachment) previewLines() []string {
+	text := attachment.Text
+	switch attachment.Type {
+	case goalAttachmentText:
+	case goalAttachmentGitDiff:
+		var capped bool
+		text, capped = firstValidUTF8Bytes(text, goalAttachmentDiffPreviewMaxBytes)
+		lines, truncated := previewContentLines(text)
+		if capped && len(lines) > 0 {
+			truncated = true
+		}
+		return truncateGoalAttachmentPreviewLines(lines, truncated)
+	default:
+		return nil
+	}
+	lines, truncated := previewContentLines(text)
+	return truncateGoalAttachmentPreviewLines(lines, truncated)
+}
+
+func previewContentLines(text string) ([]string, bool) {
+	text = strings.TrimRight(text, "\r\n")
+	if text == "" {
+		return nil, false
+	}
+
+	lines := make([]string, 0, goalAttachmentPreviewMaxLines)
+	start := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] != '\n' && text[i] != '\r' {
+			continue
+		}
+		lines = append(lines, text[start:i])
+		if len(lines) == goalAttachmentPreviewMaxLines {
+			return lines, hasPreviewContentAfterLineBreak(text, i)
+		}
+		if text[i] == '\r' && i+1 < len(text) && text[i+1] == '\n' {
+			i++
+		}
+		start = i + 1
+	}
+
+	lines = append(lines, text[start:])
+	return lines, false
+}
+
+func hasPreviewContentAfterLineBreak(text string, lineBreak int) bool {
+	next := lineBreak + 1
+	if text[lineBreak] == '\r' && next < len(text) && text[next] == '\n' {
+		next++
+	}
+	return strings.TrimRight(text[next:], "\r\n") != ""
+}
+
+func truncateGoalAttachmentPreviewLines(lines []string, truncated bool) []string {
+	if len(lines) == 0 {
+		return nil
+	}
+	preview := make([]string, 0, len(lines)+1)
+	for _, line := range lines {
+		truncatedLine := truncateGoalAttachmentRow(line, goalAttachmentPreviewLineWidth)
+		if truncatedLine != line {
+			truncated = true
+		}
+		preview = append(preview, truncatedLine)
+	}
+	if truncated {
+		preview = append(preview, "…")
+	}
+	return preview
+}
+
+func firstValidUTF8Bytes(text string, maxBytes int) (string, bool) {
+	if maxBytes <= 0 || len(text) <= maxBytes {
+		return text, false
+	}
+	limit := maxBytes
+	for limit > 0 && !utf8.ValidString(text[:limit]) {
+		limit--
+	}
+	return text[:limit], true
+}
+
 func (m Model) viewGoalAttachments() string {
 	if len(m.goalAttachments) == 0 {
 		return ""
@@ -267,7 +356,13 @@ func (m Model) viewGoalAttachments() string {
 	var lines []string
 	lines = append(lines, renderBold("Attachments:"))
 	for i, attachment := range m.goalAttachments {
-		lines = append(lines, m.renderGoalAttachmentRow(attachment, m.goalFocus == goalFocusAttachments && i == m.goalAttachmentSelected))
+		selected := m.goalFocus == goalFocusAttachments && i == m.goalAttachmentSelected
+		lines = append(lines, m.renderGoalAttachmentRow(attachment, selected))
+		if selected {
+			for _, previewLine := range attachment.previewLines() {
+				lines = append(lines, "    "+previewLine)
+			}
+		}
 	}
 	return strings.Join(lines, "\n")
 }

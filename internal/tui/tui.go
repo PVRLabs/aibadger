@@ -65,9 +65,11 @@ type Model struct {
 	status tuiMessage
 	err    error
 
-	goalInput       textarea.Model
-	paste           textarea.Model
-	goalAttachments []goalAttachment
+	goalInput              textarea.Model
+	paste                  textarea.Model
+	goalFocus              goalFocusState
+	goalAttachmentSelected int
+	goalAttachments        []goalAttachment
 
 	eng                     *engine.Engine
 	session                 *workflow.Session
@@ -192,13 +194,15 @@ func NewModel(root string, cfg Config) Model {
 	paste.Blur()
 
 	m := Model{
-		root:          root,
-		cfg:           cfg,
-		state:         stateHome,
-		goalInput:     goalInput,
-		paste:         paste,
-		session:       workflow.NewSession(nil, cfg.WhitespaceMode),
-		externalRoots: loadExternalRoots(root),
+		root:                   root,
+		cfg:                    cfg,
+		state:                  stateHome,
+		goalInput:              goalInput,
+		paste:                  paste,
+		goalFocus:              goalFocusEditor,
+		goalAttachmentSelected: -1,
+		session:                workflow.NewSession(nil, cfg.WhitespaceMode),
+		externalRoots:          loadExternalRoots(root),
 	}
 
 	settings, showOnboarding, onboardingCompleted := loadSettingsState(cfg.SettingsPath)
@@ -224,7 +228,7 @@ func (m *Model) applyStartupGoal() {
 		m.status = tuiMessage{}
 		m.err = nil
 		m.setGoalInputValue("")
-		m.goalAttachments = nil
+		m.setGoalAttachments(nil)
 		m.resizeGoalEditor()
 		m.completion.suppressedKey = ""
 		m.goalInput.Blur()
@@ -235,11 +239,23 @@ func (m *Model) applyStartupGoal() {
 	m.status = startupMessage(m.cfg.StartupStatusSeverity, m.cfg.StartupStatus)
 	m.err = nil
 	m.setGoalInputValue(m.cfg.StartupGoal)
-	m.goalAttachments = startupGoalAttachments(m.cfg)
+	m.setGoalAttachments(startupGoalAttachments(m.cfg))
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
 	m.goalInput.Focus()
 	m.paste.Blur()
+}
+
+func (m *Model) setGoalAttachments(attachments []goalAttachment) {
+	m.goalAttachments = append([]goalAttachment(nil), attachments...)
+	m.goalFocus = goalFocusEditor
+	if len(m.goalAttachments) == 0 {
+		m.goalAttachmentSelected = -1
+		return
+	}
+	if m.goalAttachmentSelected < 0 || m.goalAttachmentSelected >= len(m.goalAttachments) {
+		m.goalAttachmentSelected = 0
+	}
 }
 
 func startupGoalAttachments(cfg Config) []goalAttachment {
@@ -424,7 +440,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commands = nil
 		m.updates = nil
 		m.response = ""
-		m.goalAttachments = nil
+		m.setGoalAttachments(nil)
 		m.setGoalInputValue("")
 		m.resizeGoalEditor()
 		m.completion.suppressedKey = ""
@@ -558,7 +574,7 @@ func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
 	m.status = successMessage("Focus set to Design.")
 	m.err = nil
 	m.setGoalInputValue(protocol.DefaultDesignPrompt)
-	m.goalAttachments = nil
+	m.setGoalAttachments(nil)
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
 	m.goalInput.Focus()
@@ -573,7 +589,7 @@ func (m Model) handleBadgeCommand() (tea.Model, tea.Cmd) {
 	m.badgeErrorText = ""
 	m.status = tuiMessage{}
 	m.err = nil
-	m.goalAttachments = nil
+	m.setGoalAttachments(nil)
 	m.goalInput.Blur()
 	return m, func() tea.Msg { return badgePermissionPromptMsg{} }
 }
@@ -608,10 +624,10 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 	m.completion.suppressedKey = ""
 	if task.FailureClassification == reviewtask.FailureNone {
 		m.setGoalInputValue(task.Instruction)
-		m.goalAttachments = []goalAttachment{newGoalGitDiffAttachmentWithStats("git diff", task.Diff, task.FilesChanged, task.Additions, task.Deletions)}
+		m.setGoalAttachments([]goalAttachment{newGoalGitDiffAttachmentWithStats("git diff", task.Diff, task.FilesChanged, task.Additions, task.Deletions)})
 	} else {
 		m.setGoalInputValue(task.StartupPrompt())
-		m.goalAttachments = nil
+		m.setGoalAttachments(nil)
 	}
 	m.resizeGoalEditor()
 	m.goalInput.Focus()

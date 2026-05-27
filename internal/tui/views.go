@@ -96,7 +96,17 @@ func (m Model) View() string {
 
 func (m Model) viewHome() string {
 	if m.homeGoalPreviewActive() {
-		return m.viewGoalPreview()
+		if len(m.goalAttachments) == 0 {
+			return m.viewGoalPreview()
+		}
+		var lines []string
+		lines = append(lines, m.viewGoalPreview())
+		lines = append(lines, "")
+		lines = append(lines, m.viewGoalAttachments())
+		if suggestions := m.viewCompletionSuggestions(); suggestions != "" {
+			lines = append(lines, "", suggestions)
+		}
+		return strings.Join(lines, "\n")
 	}
 
 	var lines []string
@@ -104,7 +114,10 @@ func (m Model) viewHome() string {
 	lines = append(lines, "Commands: /help, /review, /design, /badge, /exit")
 	lines = append(lines, "Tag files with @path/to/file, then press Tab.")
 	lines = append(lines, "")
-	lines = append(lines, m.viewGoalInput())
+	lines = append(lines, m.viewGoalInputSection())
+	if attachments := m.viewGoalAttachments(); attachments != "" {
+		lines = append(lines, "", attachments)
+	}
 	if suggestions := m.viewCompletionSuggestions(); suggestions != "" {
 		lines = append(lines, "", suggestions)
 	}
@@ -117,6 +130,10 @@ func (m Model) viewGoalInput() string {
 	}
 
 	return m.goalInput.View()
+}
+
+func (m Model) viewGoalInputSection() string {
+	return m.viewGoalInput()
 }
 
 func (m Model) homeGoalPreviewActive() bool {

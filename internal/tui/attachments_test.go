@@ -3,6 +3,9 @@ package tui
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"github.com/mattn/go-runewidth"
 )
 
 func TestCountTextLines(t *testing.T) {
@@ -131,5 +134,55 @@ func TestSubmitGoalAssemblesAttachments(t *testing.T) {
 	}
 	if !strings.Contains(got.goal, "Attached text:") || !strings.Contains(got.goal, "attached context") {
 		t.Fatalf("assembled goal missing attachment payload:\n%s", got.goal)
+	}
+}
+
+func TestViewGoalAttachmentsHidesEmptyState(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+
+	if got := m.viewGoalAttachments(); got != "" {
+		t.Fatalf("viewGoalAttachments() = %q, want empty", got)
+	}
+	if strings.Contains(m.viewHome(), "Attachments:") {
+		t.Fatalf("home view showed empty attachment section:\n%s", m.viewHome())
+	}
+}
+
+func TestViewGoalAttachmentsRendersSelectedRow(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalAttachments = []goalAttachment{
+		newGoalTextAttachment("clipboard", "first attachment"),
+		newGoalGitDiffAttachmentWithStats("git diff", "diff --git a/a.go b/a.go\n", 1, 2, 1),
+	}
+	m.goalAttachmentSelected = 1
+
+	view := m.viewHome()
+
+	if !strings.Contains(view, "Attachments:") {
+		t.Fatalf("home view missing attachments header:\n%s", view)
+	}
+	if !strings.Contains(view, "[text] · clipboard · [text:") {
+		t.Fatalf("home view missing first compact attachment row:\n%s", view)
+	}
+	if !strings.Contains(view, "> [git diff] · [git diff: 1 files changed, +2/-1]") {
+		t.Fatalf("home view missing selected attachment row:\n%s", view)
+	}
+}
+
+func TestRenderGoalAttachmentRowTruncatesSafely(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.width = 28
+	attachment := newGoalTextAttachment("clip🔧board", strings.Repeat("世界", 10))
+
+	got := m.renderGoalAttachmentRow(attachment, false)
+
+	if !utf8.ValidString(got) {
+		t.Fatal("rendered attachment row is not valid UTF-8")
+	}
+	if runewidth.StringWidth(got) > m.goalAttachmentRowWidth() {
+		t.Fatalf("rendered row width = %d, want <= %d\n%s", runewidth.StringWidth(got), m.goalAttachmentRowWidth(), got)
+	}
+	if !strings.Contains(got, "...") {
+		t.Fatalf("rendered row did not truncate long text:\n%s", got)
 	}
 }

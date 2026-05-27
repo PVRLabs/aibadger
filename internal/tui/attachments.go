@@ -5,6 +5,14 @@ import (
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/mattn/go-runewidth"
+)
+
+type goalFocusState int
+
+const (
+	goalFocusEditor goalFocusState = iota
+	goalFocusAttachments
 )
 
 type goalAttachmentType string
@@ -163,4 +171,75 @@ func countTextLines(text string) int {
 		return 0
 	}
 	return strings.Count(text, "\n") + 1
+}
+
+func (m Model) viewGoalAttachments() string {
+	if len(m.goalAttachments) == 0 {
+		return ""
+	}
+
+	var lines []string
+	lines = append(lines, renderBold("Attachments:"))
+	for i, attachment := range m.goalAttachments {
+		lines = append(lines, m.renderGoalAttachmentRow(attachment, i == m.goalAttachmentSelected))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) renderGoalAttachmentRow(attachment goalAttachment, selected bool) string {
+	row := formatGoalAttachmentRow(attachment)
+	row = truncateGoalAttachmentRow(row, m.goalAttachmentRowWidth()-2)
+	if selected {
+		return renderBold("> " + row)
+	}
+	return "  " + row
+}
+
+func formatGoalAttachmentRow(attachment goalAttachment) string {
+	parts := []string{fmt.Sprintf("[%s]", attachment.Type)}
+	if attachment.Source != "" && !strings.EqualFold(attachment.Source, string(attachment.Type)) {
+		parts = append(parts, attachment.Source)
+	}
+	if attachment.Summary != "" {
+		parts = append(parts, attachment.Summary)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (m Model) goalAttachmentRowWidth() int {
+	width := m.contentWidth()
+	if width <= 0 {
+		width = defaultDialogWidth
+	}
+	width -= 4
+	if width < 16 {
+		return 16
+	}
+	return width
+}
+
+func truncateGoalAttachmentRow(text string, maxWidth int) string {
+	if maxWidth <= 0 || runewidth.StringWidth(text) <= maxWidth {
+		return text
+	}
+
+	const ellipsis = "..."
+	ellipsisWidth := runewidth.StringWidth(ellipsis)
+	if maxWidth <= ellipsisWidth {
+		return strings.Repeat(".", maxWidth)
+	}
+
+	var b strings.Builder
+	width := 0
+	limit := maxWidth - ellipsisWidth
+	for _, r := range text {
+		rw := runewidth.RuneWidth(r)
+		if width+rw > limit {
+			break
+		}
+		b.WriteRune(r)
+		width += rw
+	}
+	b.WriteString(ellipsis)
+	return b.String()
 }

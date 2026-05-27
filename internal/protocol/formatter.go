@@ -72,38 +72,66 @@ func (f *Formatter) GenerateSchemaA(t *model.ProjectTopology, query string) stri
 // GenerateSchemaAWithTaggedFiles builds Prompt 1: Topology and appends a
 // user-selected tagged-files section when paths are supplied.
 func (f *Formatter) GenerateSchemaAWithTaggedFiles(t *model.ProjectTopology, query string, taggedFiles []TaggedFile) string {
-	var sb strings.Builder
+	var header strings.Builder
+	f.writeTopologySection(&header, t, 0)
+	header.WriteString("\n[SOURCE TREE]\n")
+	headerStr := header.String()
 
-	f.writeTopologySection(&sb, t, 0)
-	sb.WriteString("\n[SOURCE TREE]\n")
-
-	pkgCount := 0
+	var packages []string
 	for _, m := range t.Modules {
 		for _, pkg := range schemaAPackages(m) {
 			line := formatPackageLine(pkg)
 			if line == "" {
 				continue
 			}
-			if f.MaxPackages > 0 && pkgCount >= f.MaxPackages {
-				if pkgCount == f.MaxPackages {
-					sb.WriteString("... [Truncated due to size limit] ...\n")
-				}
-				pkgCount++
-				continue
-			}
-			sb.WriteString(line)
-			sb.WriteString("\n")
-			pkgCount++
+			packages = append(packages, line)
 		}
 	}
 
-	f.writeExternalContextSection(&sb, t)
-	f.writeTaggedFilesSection(&sb, taggedFiles)
-	sb.WriteString("\n")
-	instr := f.currentInstructions()
-	sb.WriteString(fmt.Sprintf(instr.SchemaAConstraint, query))
+	var etcBuilder strings.Builder
+	f.writeExternalContextSection(&etcBuilder, t)
+	f.writeTaggedFilesSection(&etcBuilder, taggedFiles)
+	etcBuilder.WriteString("\n")
+	etcStr := etcBuilder.String()
 
-	return sb.String()
+	instr := f.currentInstructions()
+	footer := fmt.Sprintf(instr.SchemaAConstraint, query)
+
+	keep := len(packages)
+
+	if f.MaxTotalContextBytes > 0 && keep > 0 {
+		fixedSize := len(headerStr) + len(etcStr) + len(footer)
+		available := f.MaxTotalContextBytes - fixedSize
+		if available < 0 {
+			available = 0
+		}
+		bodySize := 0
+		for _, line := range packages {
+			bodySize += len(line) + 1
+		}
+		for keep > 0 && bodySize > available {
+			keep--
+			bodySize -= len(packages[keep]) + 1
+		}
+	}
+
+	if f.MaxPackages > 0 && keep > f.MaxPackages {
+		keep = f.MaxPackages
+	}
+
+	var result strings.Builder
+	result.WriteString(headerStr)
+	for i := 0; i < keep; i++ {
+		result.WriteString(packages[i])
+		result.WriteString("\n")
+	}
+	if keep < len(packages) {
+		result.WriteString("... [Truncated due to size limit] ...\n")
+	}
+	result.WriteString(etcStr)
+	result.WriteString(footer)
+
+	return result.String()
 }
 
 func (f *Formatter) writeExternalContextSection(sb *strings.Builder, t *model.ProjectTopology) {
@@ -381,11 +409,15 @@ func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []Extr
 		metadata = append(metadata, meta)
 	}
 
-	// 2. Total truncation (Drop Last File)
+	// 2. Compute footer once, outside the drop loop
+	instr := f.currentInstructions()
+	footer := fmt.Sprintf(instr.SchemaBConstraint, query)
+
+	// 3. Total truncation (Drop Last File) — measure body only
 	if f.MaxTotalContextBytes > 0 {
 		for {
-			schema := f.buildSchemaB(t, processed, query)
-			if len(schema) <= f.MaxTotalContextBytes || len(processed) == 0 {
+			body := f.buildSchemaBBody(t, processed)
+			if len(body)+len(footer) <= f.MaxTotalContextBytes || len(processed) == 0 {
 				break
 			}
 			lastIdx := len(processed) - 1
@@ -394,10 +426,11 @@ func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []Extr
 		}
 	}
 
-	return f.buildSchemaB(t, processed, query), metadata
+	body := f.buildSchemaBBody(t, processed)
+	return body + footer, metadata
 }
 
-func (f *Formatter) buildSchemaB(t *model.ProjectTopology, extractions []ExtractionResult, query string) string {
+func (f *Formatter) buildSchemaBBody(t *model.ProjectTopology, extractions []ExtractionResult) string {
 	var sb strings.Builder
 	f.writeTopologySection(&sb, t, len(extractions))
 
@@ -413,9 +446,6 @@ func (f *Formatter) buildSchemaB(t *model.ProjectTopology, extractions []Extract
 		sb.WriteString(e.Content)
 		sb.WriteString("\n--- End File ---\n")
 	}
-
-	instr := f.currentInstructions()
-	sb.WriteString(fmt.Sprintf(instr.SchemaBConstraint, query))
 
 	return sb.String()
 }

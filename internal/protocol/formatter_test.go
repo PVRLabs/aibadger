@@ -654,6 +654,112 @@ func TestGenerateSchemaATruncation(t *testing.T) {
 	}
 }
 
+func TestGenerateSchemaAByteBudgetTruncation(t *testing.T) {
+	shortFooter := PromptInstructions{
+		SchemaAConstraint: "[TASK]\n%s\n\n[CONSTRAINT]\nfooter\n",
+		SchemaBConstraint: "",
+	}
+
+	// Packages appear in topology literal order (module/source-root iteration).
+	// The drop loop removes from the tail, so pkg2 (last in literal) is dropped first.
+	topology := &model.ProjectTopology{
+		Languages: []string{"Go"},
+		Modules: []model.Module{
+			{
+				SourceRoots: []model.SourceRoot{
+					{
+						Packages: []model.Package{
+							{
+								Path:      "pkg1",
+								FileCount: 2,
+								TopFiles:  []model.FileSummary{{Name: "big.go", Path: "pkg1/big.go", Size: 50000}},
+							},
+							{
+								Path:      "pkg2",
+								FileCount: 1,
+								TopFiles:  []model.FileSummary{{Name: "small.go", Path: "pkg2/small.go", Size: 10}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	noLimit := NewFormatter()
+	noLimit.SetPromptInstructions(shortFooter)
+	full := noLimit.GenerateSchemaA(topology, "test")
+
+	// Set budget to 1 byte less than full — forces one package to be dropped.
+	formatter := NewFormatter()
+	formatter.SetPromptInstructions(shortFooter)
+	formatter.MaxTotalContextBytes = len(full) - 1
+	formatter.MaxPackages = 0
+
+	output := formatter.GenerateSchemaA(topology, "test")
+
+	if !strings.Contains(output, "[TASK]") {
+		t.Errorf("footer must always be present, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Pkg: pkg1") {
+		t.Errorf("expected pkg1 to be present (first package, should be kept), got:\n%s", output)
+	}
+	if strings.Contains(output, "Pkg: pkg2") {
+		t.Errorf("expected pkg2 to be truncated by byte budget, got:\n%s", output)
+	}
+	if !strings.Contains(output, "... [Truncated due to size limit] ...") {
+		t.Errorf("expected truncation marker, got:\n%s", output)
+	}
+}
+
+func TestGenerateSchemaAByteBudgetExcludesFooterFromDropLoop(t *testing.T) {
+	// Use a short custom footer so fixed overhead is small.
+	shortFooter := PromptInstructions{
+		SchemaAConstraint: "[TASK]\n%s\n\n[CONSTRAINT]\nfooter\n",
+		SchemaBConstraint: "",
+	}
+	// Build the fixed overhead with no packages.
+	noLimit := NewFormatter()
+	noLimit.SetPromptInstructions(shortFooter)
+	empty := noLimit.GenerateSchemaA(&model.ProjectTopology{}, "test")
+
+	// Set the budget smaller than the fixed overhead + one package line.
+	// The footer must still appear even though nothing else fits.
+	formatter := NewFormatter()
+	formatter.SetPromptInstructions(shortFooter)
+	formatter.MaxTotalContextBytes = len(empty) - 1
+	formatter.MaxPackages = 0
+	topology := &model.ProjectTopology{
+		Modules: []model.Module{
+			{
+				SourceRoots: []model.SourceRoot{
+					{
+						Packages: []model.Package{
+							{
+								Path:      "pkg1",
+								FileCount: 2,
+								TopFiles:  []model.FileSummary{{Name: "big.go", Path: "pkg1/big.go", Size: 50000}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	output := formatter.GenerateSchemaA(topology, "test")
+
+	if !strings.Contains(output, "[TASK]") {
+		t.Errorf("footer must always be present even with tight byte budget, got:\n%s", output)
+	}
+	if !strings.Contains(output, "[CONSTRAINT]") {
+		t.Errorf("full constraint footer must be present, got:\n%s", output)
+	}
+	if strings.Contains(output, "Pkg: pkg1") {
+		t.Errorf("pkg1 should be dropped when there is no byte budget, got:\n%s", output)
+	}
+}
+
 func TestGenerateSchemaB(t *testing.T) {
 	formatter := NewFormatter()
 	topology := &model.ProjectTopology{

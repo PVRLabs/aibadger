@@ -11,27 +11,35 @@ import (
 
 // Config is the public integration surface for launching Badger.
 type Config struct {
-	Root                      string
-	TUISubtitle               string
-	TUIVersion                string
-	BuildInfo                 string
-	Focus                     protocol.Focus
-	StartupGoal               string
-	StartupStatus             string
-	StartupStatusSeverity     string
-	SkipOnboarding            bool
-	ScanFrames                []string
-	ExitCommand               string
-	SettingsPath              string
-	LargeProjectFileThreshold int
-	LargePromptByteThreshold  int
-	TruncatedMaxPackages      int
-	MaxContextFileBytes       int    // 0 uses the default; negative disables per-file trimming.
-	MaxTotalContextBytes      int    // 0 uses the default; negative disables total context trimming.
-	SchemaAConstraint         string // Optional: overrides Prompt 1 instructions
-	SchemaBConstraint         string // Optional: overrides Prompt 2 instructions
-	WhitespaceMode            string // "smart" (default), "exact", or "ignore"
-	MaxFilesPerDirectory      int
+	Root                          string
+	TUISubtitle                   string
+	TUIVersion                    string
+	BuildInfo                     string
+	Focus                         protocol.Focus
+	StartupGoal                   string
+	StartupAttachmentType         string
+	StartupAttachmentSource       string
+	StartupAttachmentText         string
+	StartupAttachmentSizeBytes    int64
+	StartupAttachmentLines        int
+	StartupAttachmentFilesChanged int
+	StartupAttachmentAdditions    int
+	StartupAttachmentDeletions    int
+	StartupStatus                 string
+	StartupStatusSeverity         string
+	SkipOnboarding                bool
+	ScanFrames                    []string
+	ExitCommand                   string
+	SettingsPath                  string
+	LargeProjectFileThreshold     int
+	LargePromptByteThreshold      int
+	TruncatedMaxPackages          int
+	MaxContextFileBytes           int    // 0 uses the default; negative disables per-file trimming.
+	MaxTotalContextBytes          int    // 0 uses the default; negative disables total context trimming.
+	SchemaAConstraint             string // Optional: overrides Prompt 1 instructions
+	SchemaBConstraint             string // Optional: overrides Prompt 2 instructions
+	WhitespaceMode                string // "smart" (default), "exact", or "ignore"
+	MaxFilesPerDirectory          int
 }
 
 // DefaultConfig returns the OSS defaults used by the badger command.
@@ -105,25 +113,33 @@ func (c Config) withDefaults() Config {
 func (c Config) tuiConfig() tui.Config {
 	c = c.withDefaults()
 	return tui.Config{
-		Subtitle:                  c.TUISubtitle,
-		Version:                   c.TUIVersion,
-		BuildInfo:                 c.BuildInfo,
-		Focus:                     c.Focus,
-		StartupGoal:               c.StartupGoal,
-		StartupStatus:             c.StartupStatus,
-		StartupStatusSeverity:     c.StartupStatusSeverity,
-		SkipOnboarding:            c.SkipOnboarding,
-		ScanFrames:                append([]string(nil), c.ScanFrames...),
-		ExitCommand:               c.ExitCommand,
-		SettingsPath:              c.SettingsPath,
-		LargeProjectFileThreshold: c.LargeProjectFileThreshold,
-		LargePromptByteThreshold:  c.LargePromptByteThreshold,
-		TruncatedMaxPackages:      c.TruncatedMaxPackages,
-		MaxContextFileBytes:       c.MaxContextFileBytes,
-		MaxTotalContextBytes:      c.MaxTotalContextBytes,
-		SchemaAConstraint:         c.SchemaAConstraint,
-		SchemaBConstraint:         c.SchemaBConstraint,
-		MaxFilesPerDirectory:      c.MaxFilesPerDirectory,
-		WhitespaceMode:            writer.WhitespaceMode(c.WhitespaceMode),
+		Subtitle:                      c.TUISubtitle,
+		Version:                       c.TUIVersion,
+		BuildInfo:                     c.BuildInfo,
+		Focus:                         c.Focus,
+		StartupGoal:                   c.StartupGoal,
+		StartupAttachmentType:         c.StartupAttachmentType,
+		StartupAttachmentSource:       c.StartupAttachmentSource,
+		StartupAttachmentText:         c.StartupAttachmentText,
+		StartupAttachmentSizeBytes:    c.StartupAttachmentSizeBytes,
+		StartupAttachmentLines:        c.StartupAttachmentLines,
+		StartupAttachmentFilesChanged: c.StartupAttachmentFilesChanged,
+		StartupAttachmentAdditions:    c.StartupAttachmentAdditions,
+		StartupAttachmentDeletions:    c.StartupAttachmentDeletions,
+		StartupStatus:                 c.StartupStatus,
+		StartupStatusSeverity:         c.StartupStatusSeverity,
+		SkipOnboarding:                c.SkipOnboarding,
+		ScanFrames:                    append([]string(nil), c.ScanFrames...),
+		ExitCommand:                   c.ExitCommand,
+		SettingsPath:                  c.SettingsPath,
+		LargeProjectFileThreshold:     c.LargeProjectFileThreshold,
+		LargePromptByteThreshold:      c.LargePromptByteThreshold,
+		TruncatedMaxPackages:          c.TruncatedMaxPackages,
+		MaxContextFileBytes:           c.MaxContextFileBytes,
+		MaxTotalContextBytes:          c.MaxTotalContextBytes,
+		SchemaAConstraint:             c.SchemaAConstraint,
+		SchemaBConstraint:             c.SchemaBConstraint,
+		MaxFilesPerDirectory:          c.MaxFilesPerDirectory,
+		WhitespaceMode:                writer.WhitespaceMode(c.WhitespaceMode),
 	}
 }

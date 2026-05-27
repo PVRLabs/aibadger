@@ -22,6 +22,15 @@ func TestBuildDefaultDiffPrompt(t *testing.T) {
 	if task.Diff == "" {
 		t.Fatal("Diff is empty")
 	}
+	if task.Instruction == "" {
+		t.Fatal("Instruction is empty")
+	}
+	if strings.Contains(task.Instruction, "Diff:") {
+		t.Fatalf("Instruction unexpectedly included diff body:\n%s", task.Instruction)
+	}
+	if task.FilesChanged == 0 {
+		t.Fatal("FilesChanged is zero")
+	}
 	for _, want := range []string{
 		"Review the following change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing.",
 		"Additional focus:",
@@ -116,6 +125,9 @@ func TestBuildExtraFocusText(t *testing.T) {
 		if !strings.Contains(task.FallbackPrompt, want) {
 			t.Fatalf("FallbackPrompt missing %q:\n%s", want, task.FallbackPrompt)
 		}
+	}
+	if !strings.Contains(task.Instruction, "Check error handling and nil guards.") {
+		t.Fatalf("Instruction missing extra focus text:\n%s", task.Instruction)
 	}
 }
 

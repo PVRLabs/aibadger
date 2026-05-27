@@ -199,6 +199,18 @@ func TestApplyReviewStartupUsesReviewPrompt(t *testing.T) {
 	if cfg.StartupGoal == "" {
 		t.Fatal("StartupGoal is empty")
 	}
+	if strings.Contains(cfg.StartupGoal, "Diff:") {
+		t.Fatalf("StartupGoal unexpectedly contains raw diff text:\n%s", cfg.StartupGoal)
+	}
+	if cfg.StartupAttachmentType != "git diff" {
+		t.Fatalf("StartupAttachmentType = %q, want git diff", cfg.StartupAttachmentType)
+	}
+	if cfg.StartupAttachmentText == "" {
+		t.Fatal("StartupAttachmentText is empty")
+	}
+	if cfg.StartupAttachmentFilesChanged == 0 {
+		t.Fatal("StartupAttachmentFilesChanged is zero")
+	}
 	if cfg.StartupStatusSeverity != "success" {
 		t.Fatalf("StartupStatusSeverity = %q, want %q", cfg.StartupStatusSeverity, "success")
 	}
@@ -294,6 +306,15 @@ func TestApplyReviewStartupUsesFallbackPromptWhenNoDiff(t *testing.T) {
 	}
 	if cfg.StartupGoal == "" {
 		t.Fatal("StartupGoal is empty")
+	}
+	if strings.Contains(cfg.StartupGoal, "Diff:") {
+		t.Fatalf("StartupGoal unexpectedly contains raw diff text:\n%s", cfg.StartupGoal)
+	}
+	if cfg.StartupAttachmentText != "" {
+		t.Fatalf("StartupAttachmentText = %q, want empty for fallback prompt", cfg.StartupAttachmentText)
+	}
+	if cfg.StartupAttachmentType != "" {
+		t.Fatalf("StartupAttachmentType = %q, want empty for fallback prompt", cfg.StartupAttachmentType)
 	}
 }
 

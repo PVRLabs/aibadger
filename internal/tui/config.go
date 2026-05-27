@@ -12,26 +12,34 @@ import (
 )
 
 type Config struct {
-	Subtitle                  string
-	Version                   string
-	BuildInfo                 string
-	Focus                     protocol.Focus
-	StartupGoal               string
-	StartupStatus             string
-	StartupStatusSeverity     string
-	SkipOnboarding            bool
-	ScanFrames                []string
-	ExitCommand               string
-	SettingsPath              string
-	LargeProjectFileThreshold int
-	LargePromptByteThreshold  int
-	TruncatedMaxPackages      int
-	MaxContextFileBytes       int // 0 uses the default; negative disables per-file trimming.
-	MaxTotalContextBytes      int // 0 uses the default; negative disables total context trimming.
-	SchemaAConstraint         string
-	SchemaBConstraint         string
-	WhitespaceMode            writer.WhitespaceMode
-	MaxFilesPerDirectory      int
+	Subtitle                      string
+	Version                       string
+	BuildInfo                     string
+	Focus                         protocol.Focus
+	StartupGoal                   string
+	StartupAttachmentType         string
+	StartupAttachmentSource       string
+	StartupAttachmentText         string
+	StartupAttachmentSizeBytes    int64
+	StartupAttachmentLines        int
+	StartupAttachmentFilesChanged int
+	StartupAttachmentAdditions    int
+	StartupAttachmentDeletions    int
+	StartupStatus                 string
+	StartupStatusSeverity         string
+	SkipOnboarding                bool
+	ScanFrames                    []string
+	ExitCommand                   string
+	SettingsPath                  string
+	LargeProjectFileThreshold     int
+	LargePromptByteThreshold      int
+	TruncatedMaxPackages          int
+	MaxContextFileBytes           int // 0 uses the default; negative disables per-file trimming.
+	MaxTotalContextBytes          int // 0 uses the default; negative disables total context trimming.
+	SchemaAConstraint             string
+	SchemaBConstraint             string
+	WhitespaceMode                writer.WhitespaceMode
+	MaxFilesPerDirectory          int
 }
 
 func DefaultConfig() Config {

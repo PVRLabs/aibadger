@@ -185,17 +185,6 @@ func (m Model) slashCommandSuggestions() []slashCommandSuggestion {
 	return suggestions
 }
 
-func countTextLines(text string) int {
-	if text == "" {
-		return 0
-	}
-	text = strings.TrimRight(text, "\n")
-	if text == "" {
-		return 0
-	}
-	return strings.Count(text, "\n") + 1
-}
-
 func compactGoalPreview(text string) string {
 	var preview []string
 	for _, line := range strings.Split(text, "\n") {

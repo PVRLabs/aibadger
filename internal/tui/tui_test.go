@@ -179,7 +179,13 @@ func TestNewModelSkipsOnboardingWhenCompleted(t *testing.T) {
 func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SettingsPath = filepath.Join(t.TempDir(), ".badger", "settings.json")
-	cfg.StartupGoal = "Review this diff for nil dereferences."
+	cfg.StartupGoal = "Review this change for concrete bugs."
+	cfg.StartupAttachmentType = "git diff"
+	cfg.StartupAttachmentSource = "git diff"
+	cfg.StartupAttachmentText = "diff --git a/app.go b/app.go\n"
+	cfg.StartupAttachmentFilesChanged = 1
+	cfg.StartupAttachmentAdditions = 1
+	cfg.StartupAttachmentDeletions = 0
 	cfg.StartupStatus = "Loaded review prompt from the current git diff. Edit it before submitting."
 	cfg.StartupStatusSeverity = "success"
 	cfg.SkipOnboarding = true
@@ -194,6 +200,15 @@ func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
 	}
 	if got := m.goalInput.Value(); got != cfg.StartupGoal {
 		t.Fatalf("goal input = %q, want %q", got, cfg.StartupGoal)
+	}
+	if len(m.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(m.goalAttachments))
+	}
+	if m.goalAttachments[0].Type != goalAttachmentGitDiff {
+		t.Fatalf("attachment type = %q, want %q", m.goalAttachments[0].Type, goalAttachmentGitDiff)
+	}
+	if m.goalAttachments[0].Text != cfg.StartupAttachmentText {
+		t.Fatalf("attachment text = %q, want %q", m.goalAttachments[0].Text, cfg.StartupAttachmentText)
 	}
 	if m.status.severity != messageSuccess {
 		t.Fatalf("status severity = %v, want %v", m.status.severity, messageSuccess)
@@ -263,6 +278,9 @@ func TestNewModelAppliesFallbackReviewGoalAndWarningStatus(t *testing.T) {
 	}
 	if got := m.goalInput.Value(); got != cfg.StartupGoal {
 		t.Fatalf("goal input = %q, want %q", got, cfg.StartupGoal)
+	}
+	if len(m.goalAttachments) != 0 {
+		t.Fatalf("goalAttachments length = %d, want 0", len(m.goalAttachments))
 	}
 	if !strings.Contains(m.View(), cfg.StartupStatus) {
 		t.Fatalf("view missing warning status:\n%s", m.View())
@@ -1041,8 +1059,20 @@ func TestSubmitGoalReviewCommandUsesPreparedPrompt(t *testing.T) {
 	if strings.Contains(got.goalInput.Value(), "/review") {
 		t.Fatalf("goal input still contains command text: %q", got.goalInput.Value())
 	}
-	if !strings.Contains(got.goalInput.Value(), "Diff:") {
-		t.Fatalf("goal input missing diff prompt:\n%s", got.goalInput.Value())
+	if strings.Contains(got.goalInput.Value(), "Diff:") {
+		t.Fatalf("goal input unexpectedly contains diff body:\n%s", got.goalInput.Value())
+	}
+	if !strings.Contains(got.goalInput.Value(), "Review the following change for concrete bugs") {
+		t.Fatalf("goal input missing review instruction:\n%s", got.goalInput.Value())
+	}
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
+	}
+	if got.goalAttachments[0].Type != goalAttachmentGitDiff {
+		t.Fatalf("goal attachment type = %q, want %q", got.goalAttachments[0].Type, goalAttachmentGitDiff)
+	}
+	if !strings.Contains(got.goalAttachments[0].Text, "println(\"updated\")") {
+		t.Fatalf("goal attachment missing diff content:\n%s", got.goalAttachments[0].Text)
 	}
 	if !strings.Contains(got.status.text, "Loaded review prompt from the current git diff") {
 		t.Fatalf("status = %q, want success review status", got.status.text)
@@ -1064,6 +1094,9 @@ func TestSubmitGoalReviewCommandUsesExtraFocusText(t *testing.T) {
 	}
 	if got.state != stateHome {
 		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
 	}
 	if !strings.Contains(got.goalInput.Value(), "Additional focus:") {
 		t.Fatalf("goal input missing additional focus heading:\n%s", got.goalInput.Value())
@@ -1088,6 +1121,9 @@ func TestSubmitGoalReviewCommandUsesFallbackPromptWhenNoDiff(t *testing.T) {
 	}
 	if got.state != stateHome {
 		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if len(got.goalAttachments) != 0 {
+		t.Fatalf("goalAttachments length = %d, want 0", len(got.goalAttachments))
 	}
 	if !strings.Contains(got.goalInput.Value(), "Paste the diff below or replace this text with the change you want reviewed.") {
 		t.Fatalf("goal input missing manual fallback text:\n%s", got.goalInput.Value())
@@ -1374,8 +1410,14 @@ func TestHomeTabCompletesReviewSuggestionAndStartsReview(t *testing.T) {
 	if got.cfg.Focus != protocol.FocusReview {
 		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusReview)
 	}
-	if !strings.Contains(got.goalInput.Value(), "Diff:") {
-		t.Fatalf("goal input missing diff prompt:\n%s", got.goalInput.Value())
+	if strings.Contains(got.goalInput.Value(), "Diff:") {
+		t.Fatalf("goal input unexpectedly contains diff body:\n%s", got.goalInput.Value())
+	}
+	if !strings.Contains(got.goalInput.Value(), "Review the following change for concrete bugs") {
+		t.Fatalf("goal input missing review instruction:\n%s", got.goalInput.Value())
+	}
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
 	}
 	if !strings.Contains(got.status.text, "Loaded review prompt from the current git diff") {
 		t.Fatalf("status = %q, want review success", got.status.text)
@@ -1883,8 +1925,14 @@ func TestSlashCompletionEnterStartsReview(t *testing.T) {
 	if got.cfg.Focus != protocol.FocusReview {
 		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusReview)
 	}
-	if !strings.Contains(got.goalInput.Value(), "Diff:") {
-		t.Fatalf("goal input missing diff prompt:\n%s", got.goalInput.Value())
+	if strings.Contains(got.goalInput.Value(), "Diff:") {
+		t.Fatalf("goal input unexpectedly contains diff body:\n%s", got.goalInput.Value())
+	}
+	if !strings.Contains(got.goalInput.Value(), "Review the following change for concrete bugs") {
+		t.Fatalf("goal input missing review instruction:\n%s", got.goalInput.Value())
+	}
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
 	}
 	if got.state != stateHome {
 		t.Fatalf("state = %v, want home", got.state)

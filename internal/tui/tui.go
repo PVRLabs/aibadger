@@ -65,8 +65,9 @@ type Model struct {
 	status tuiMessage
 	err    error
 
-	goalInput textarea.Model
-	paste     textarea.Model
+	goalInput       textarea.Model
+	paste           textarea.Model
+	goalAttachments []goalAttachment
 
 	eng                     *engine.Engine
 	session                 *workflow.Session
@@ -223,6 +224,7 @@ func (m *Model) applyStartupGoal() {
 		m.status = tuiMessage{}
 		m.err = nil
 		m.setGoalInputValue("")
+		m.goalAttachments = nil
 		m.resizeGoalEditor()
 		m.completion.suppressedKey = ""
 		m.goalInput.Blur()
@@ -233,10 +235,25 @@ func (m *Model) applyStartupGoal() {
 	m.status = startupMessage(m.cfg.StartupStatusSeverity, m.cfg.StartupStatus)
 	m.err = nil
 	m.setGoalInputValue(m.cfg.StartupGoal)
+	m.goalAttachments = startupGoalAttachments(m.cfg)
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
 	m.goalInput.Focus()
 	m.paste.Blur()
+}
+
+func startupGoalAttachments(cfg Config) []goalAttachment {
+	text := strings.TrimSpace(cfg.StartupAttachmentText)
+	if text == "" {
+		return nil
+	}
+
+	kind := goalAttachmentType(strings.TrimSpace(cfg.StartupAttachmentType))
+	source := strings.TrimSpace(cfg.StartupAttachmentSource)
+	if kind == goalAttachmentText {
+		return []goalAttachment{newGoalTextAttachment(source, cfg.StartupAttachmentText)}
+	}
+	return []goalAttachment{newGoalGitDiffAttachmentWithStats(source, cfg.StartupAttachmentText, cfg.StartupAttachmentFilesChanged, cfg.StartupAttachmentAdditions, cfg.StartupAttachmentDeletions)}
 }
 
 func startupMessage(severity, text string) tuiMessage {
@@ -407,6 +424,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commands = nil
 		m.updates = nil
 		m.response = ""
+		m.goalAttachments = nil
 		m.setGoalInputValue("")
 		m.resizeGoalEditor()
 		m.completion.suppressedKey = ""
@@ -502,26 +520,27 @@ func (m Model) handleClipboardFallbackSave(msg savePromptDoneMsg) (tea.Model, te
 }
 
 func (m Model) submitGoal() (tea.Model, tea.Cmd) {
-	goal := strings.TrimSpace(m.goalInput.Value())
+	instruction := strings.TrimSpace(m.goalInput.Value())
+	goal := assembleGoalSubmission(instruction, m.goalAttachments)
 	if goal == "" {
 		return m, nil
 	}
-	if goal == m.cfg.ExitCommand {
+	if instruction == m.cfg.ExitCommand {
 		return m, tea.Quit
 	}
-	if goal == helpCommand {
+	if instruction == helpCommand {
 		m.state = stateHelp
 		m.goalInput.Blur()
 		m.status = tuiMessage{}
 		return m, nil
 	}
-	if reviewExtraFocus, ok := parseReviewCommand(goal); ok {
+	if reviewExtraFocus, ok := parseReviewCommand(instruction); ok {
 		return m.handleReviewCommand(reviewExtraFocus)
 	}
-	if goal == designCommand {
+	if instruction == designCommand {
 		return m.handleDesignCommand()
 	}
-	if goal == badgeCommand {
+	if instruction == badgeCommand {
 		return m.handleBadgeCommand()
 	}
 
@@ -539,6 +558,7 @@ func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
 	m.status = successMessage("Focus set to Design.")
 	m.err = nil
 	m.setGoalInputValue(protocol.DefaultDesignPrompt)
+	m.goalAttachments = nil
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
 	m.goalInput.Focus()
@@ -553,6 +573,7 @@ func (m Model) handleBadgeCommand() (tea.Model, tea.Cmd) {
 	m.badgeErrorText = ""
 	m.status = tuiMessage{}
 	m.err = nil
+	m.goalAttachments = nil
 	m.goalInput.Blur()
 	return m, func() tea.Msg { return badgePermissionPromptMsg{} }
 }
@@ -585,7 +606,13 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 	m.goal = ""
 	m.err = nil
 	m.completion.suppressedKey = ""
-	m.setGoalInputValue(task.StartupPrompt())
+	if task.FailureClassification == reviewtask.FailureNone {
+		m.setGoalInputValue(task.Instruction)
+		m.goalAttachments = []goalAttachment{newGoalGitDiffAttachmentWithStats("git diff", task.Diff, task.FilesChanged, task.Additions, task.Deletions)}
+	} else {
+		m.setGoalInputValue(task.StartupPrompt())
+		m.goalAttachments = nil
+	}
 	m.resizeGoalEditor()
 	m.goalInput.Focus()
 	m.paste.Blur()

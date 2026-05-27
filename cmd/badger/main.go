@@ -328,8 +328,28 @@ func applyReviewStartup(cfg *badger.Config, app appConfig) (string, error) {
 	}
 
 	cfg.SkipOnboarding = true
-	cfg.StartupGoal = reviewTask.StartupPrompt()
 	cfg.StartupStatus, cfg.StartupStatusSeverity = reviewTask.StartupStatus()
+	if reviewTask.FailureClassification == reviewtask.FailureNone {
+		cfg.StartupGoal = reviewTask.Instruction
+		cfg.StartupAttachmentType = "git diff"
+		cfg.StartupAttachmentSource = "git diff"
+		cfg.StartupAttachmentText = reviewTask.Diff
+		cfg.StartupAttachmentSizeBytes = int64(len(reviewTask.Diff))
+		cfg.StartupAttachmentLines = strings.Count(strings.TrimRight(reviewTask.Diff, "\n"), "\n") + 1
+		cfg.StartupAttachmentFilesChanged = reviewTask.FilesChanged
+		cfg.StartupAttachmentAdditions = reviewTask.Additions
+		cfg.StartupAttachmentDeletions = reviewTask.Deletions
+	} else {
+		cfg.StartupGoal = reviewTask.StartupPrompt()
+		cfg.StartupAttachmentType = ""
+		cfg.StartupAttachmentSource = ""
+		cfg.StartupAttachmentText = ""
+		cfg.StartupAttachmentSizeBytes = 0
+		cfg.StartupAttachmentLines = 0
+		cfg.StartupAttachmentFilesChanged = 0
+		cfg.StartupAttachmentAdditions = 0
+		cfg.StartupAttachmentDeletions = 0
+	}
 	return "", nil
 }
 

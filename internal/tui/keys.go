@@ -229,6 +229,7 @@ func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
 		m.state = stateHome
 		m.status = neutralMessage("Write cancelled. Ready for a new goal.")
 		m.setGoalInputValue("")
+		m.goalAttachments = nil
 		m.completion.suppressedKey = ""
 		m.resizeGoalEditor()
 		m.goalInput.Focus()

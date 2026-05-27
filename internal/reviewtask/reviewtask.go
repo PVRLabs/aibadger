@@ -61,7 +61,11 @@ type Task struct {
 	Mode                  Mode
 	Ref                   string
 	ExtraFocus            string
+	Instruction           string
 	Diff                  string
+	FilesChanged          int
+	Additions             int
+	Deletions             int
 	Prompt                string
 	FallbackPrompt        string
 	FailureClassification FailureClassification
@@ -115,9 +119,10 @@ func Build(root string, opts Options) (Task, error) {
 	}
 
 	task := Task{
-		Mode:       opts.Mode,
-		Ref:        strings.TrimSpace(opts.Ref),
-		ExtraFocus: strings.TrimSpace(opts.ExtraFocus),
+		Mode:        opts.Mode,
+		Ref:         strings.TrimSpace(opts.Ref),
+		ExtraFocus:  strings.TrimSpace(opts.ExtraFocus),
+		Instruction: buildReviewInstruction(strings.TrimSpace(opts.ExtraFocus)),
 	}
 
 	if !isGitRepository(root) {
@@ -127,7 +132,7 @@ func Build(root string, opts Options) (Task, error) {
 		return task, nil
 	}
 
-	diff, err := resolveDiff(root, opts.Mode, task.Ref)
+	diff, filesChanged, additions, deletions, err := resolveDiff(root, opts.Mode, task.Ref)
 	if err != nil {
 		return Task{}, err
 	}
@@ -141,6 +146,9 @@ func Build(root string, opts Options) (Task, error) {
 	}
 
 	task.Diff = diff
+	task.FilesChanged = filesChanged
+	task.Additions = additions
+	task.Deletions = deletions
 	task.FallbackPrompt = buildFallbackPrompt(task.ExtraFocus)
 	task.Prompt = buildReviewPrompt(task.ExtraFocus, diff)
 	return task, nil
@@ -162,23 +170,73 @@ func validateOptions(opts Options) error {
 	return nil
 }
 
-func resolveDiff(root string, mode Mode, ref string) (string, error) {
+func resolveDiff(root string, mode Mode, ref string) (string, int, int, int, error) {
 	switch mode {
 	case ModeDefault:
-		return runGit(root, "diff", "--no-ext-diff", "--unified=3", "HEAD")
+		return resolveDiffAndStats(root, []string{"diff", "--no-ext-diff", "--unified=3", "HEAD"}, []string{"diff", "--no-ext-diff", "--numstat", "HEAD"})
 	case ModeStaged:
-		return runGit(root, "diff", "--no-ext-diff", "--unified=3", "--cached")
+		return resolveDiffAndStats(root, []string{"diff", "--no-ext-diff", "--unified=3", "--cached"}, []string{"diff", "--no-ext-diff", "--numstat", "--cached"})
 	case ModeBranch:
 		base, err := runGit(root, "merge-base", "HEAD", ref)
 		if err != nil {
-			return "", err
+			return "", 0, 0, 0, err
 		}
-		return runGit(root, "diff", "--no-ext-diff", "--unified=3", strings.TrimSpace(base), "HEAD")
+		base = strings.TrimSpace(base)
+		return resolveDiffAndStats(root, []string{"diff", "--no-ext-diff", "--unified=3", base, "HEAD"}, []string{"diff", "--no-ext-diff", "--numstat", base, "HEAD"})
 	case ModeCommit:
-		return runGit(root, "show", "--no-ext-diff", "--format=", "--unified=3", ref)
+		return resolveDiffAndStats(root, []string{"show", "--no-ext-diff", "--format=", "--unified=3", ref}, []string{"show", "--no-ext-diff", "--format=", "--numstat", ref})
 	default:
-		return "", fmt.Errorf("unknown review mode %d", mode)
+		return "", 0, 0, 0, fmt.Errorf("unknown review mode %d", mode)
 	}
+}
+
+func resolveDiffAndStats(root string, diffArgs, numstatArgs []string) (string, int, int, int, error) {
+	diff, err := runGit(root, diffArgs...)
+	if err != nil {
+		return "", 0, 0, 0, err
+	}
+	numstat, err := runGit(root, numstatArgs...)
+	if err != nil {
+		return "", 0, 0, 0, err
+	}
+	filesChanged, additions, deletions := parseNumstat(numstat)
+	return diff, filesChanged, additions, deletions, nil
+}
+
+func parseNumstat(output string) (filesChanged, additions, deletions int) {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) < 3 {
+			continue
+		}
+		filesChanged++
+		if fields[0] != "-" {
+			if n, err := parsePositiveInt(fields[0]); err == nil {
+				additions += n
+			}
+		}
+		if fields[1] != "-" {
+			if n, err := parsePositiveInt(fields[1]); err == nil {
+				deletions += n
+			}
+		}
+	}
+	return filesChanged, additions, deletions
+}
+
+func parsePositiveInt(s string) (int, error) {
+	var n int
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, fmt.Errorf("invalid integer %q", s)
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n, nil
 }
 
 func isGitRepository(root string) bool {
@@ -201,11 +259,16 @@ func runGit(root string, args ...string) (string, error) {
 }
 
 func buildReviewPrompt(extraFocus, diff string) string {
+	lines := []string{buildReviewInstruction(extraFocus)}
+	lines = append(lines, "", "Diff:", diff)
+	return strings.Join(lines, "\n")
+}
+
+func buildReviewInstruction(extraFocus string) string {
 	lines := []string{defaultReviewGoal}
 	if extraFocus != "" {
 		lines = append(lines, "", "Additional focus:", extraFocus)
 	}
-	lines = append(lines, "", "Diff:", diff)
 	return strings.Join(lines, "\n")
 }
 

@@ -87,7 +87,8 @@ Type or paste one of these as the initial goal in Badger.
 ### Find Bugs Or Performance Issues
 
 ```text
-Look for correctness bugs, edge cases, and performance issues in the request extraction flow. Start from the relevant entrypoints and ask for only the files or spans needed.
+Look for correctness bugs, edge cases, and performance issues in the request extraction flow.
+Start from the relevant entrypoints and ask for only the files or spans needed.
 ```
 
 ### Design A Feature
@@ -97,7 +98,8 @@ badger design
 ```
 
 ```text
-Design a caching layer for the API client. Focus on the interface, eviction policy, and concurrency model before writing code. See @docs/api-spec.md for the current client contract.
+Design a caching layer for the API client. Focus on the interface, eviction policy,
+and concurrency model. See @docs/api-spec.md for the current client contract.
 ```
 
 ### Troubleshoot Build Errors
@@ -115,13 +117,15 @@ WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
 ### Understand Unfamiliar Code
 
 ```text
-Explain how authentication is wired in this project. Start with the main entrypoints and request only the files needed to trace the login flow.
+Explain how authentication is wired in this project.
+Start with the main entrypoints and request only the files needed to trace the login flow.
 ```
 
 ### Make A Focused Implementation Request
 
 ```text
-Add validation so empty project names are rejected before saving. Keep the change small and include any tests that should change.
+Add validation so empty project names are rejected before saving.
+Keep the change small and include any tests that should change.
 ```
 
 ## Commands
@@ -140,6 +144,17 @@ badger design   # Design focus — prompt seeds a short, conversational brainsto
 badger review   # Review focus — prompt is prefilled from the current git diff
 ```
 
+## Attachments
+
+When you paste a git diff, error output, or other supporting text into
+Badger, it is preserved as a **removable attachment** so the goal input
+stays clean and focused. The `badger review` command automatically
+attaches the current git diff.
+
+Use the **arrow keys** to cycle through attachments — the focused
+attachment's details are shown inline, and you can remove it before
+submitting.
+
 ## External Context
 
 You can add read-only external directories by creating a `.badger-context` file in the project root, one path per line.
@@ -147,7 +162,7 @@ You can add read-only external directories by creating a `.badger-context` file 
 Example:
 
 ```text
-../badger-sidecar/docs
+../shared/docs
 ```
 
 See [privacy.md](privacy.md) for the read-only and safety rules around external context.

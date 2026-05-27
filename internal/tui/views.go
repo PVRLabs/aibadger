@@ -13,6 +13,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
+	"github.com/mattn/go-runewidth"
 )
 
 const minTextResponsePreviewLines = 12
@@ -625,8 +626,8 @@ func clamp(value, min, max int) int {
 	return value
 }
 
-func goalEditorHeight(text string, terminalHeight int) int {
-	contentLines := countEditorLines(text)
+func goalEditorHeight(text string, terminalHeight, editorWidth int) int {
+	contentLines := countEditorVisualLines(text, editorWidth)
 	if contentLines < goalEditorMinHeight {
 		contentLines = goalEditorMinHeight
 	}
@@ -638,4 +639,23 @@ func countEditorLines(text string) int {
 		return 0
 	}
 	return strings.Count(text, "\n") + 1
+}
+
+func countEditorVisualLines(text string, editorWidth int) int {
+	if text == "" {
+		return 0
+	}
+	if editorWidth <= 0 {
+		return countEditorLines(text)
+	}
+	lines := 0
+	for _, line := range strings.Split(text, "\n") {
+		width := runewidth.StringWidth(line)
+		wrapped := (width + editorWidth - 1) / editorWidth
+		if wrapped < 1 {
+			wrapped = 1
+		}
+		lines += wrapped
+	}
+	return lines
 }

@@ -30,7 +30,10 @@ var (
 	goalPasteAttachmentLineThreshold = 40
 )
 
-const goalPasteFlushDelay = time.Second
+const (
+	goalPasteBurstWindow = 20 * time.Millisecond
+	goalPasteFlushDelay  = time.Second
+)
 
 type goalAttachment struct {
 	Type         goalAttachmentType

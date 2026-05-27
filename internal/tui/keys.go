@@ -549,7 +549,7 @@ func (m Model) goalPasteBurstLikely(msg tea.KeyMsg) bool {
 	if msg.Type != tea.KeyRunes || len(msg.Runes) != 1 || m.goalInputLastRuneAt.IsZero() {
 		return false
 	}
-	return time.Since(m.goalInputLastRuneAt) < goalPasteFlushDelay
+	return time.Since(m.goalInputLastRuneAt) < goalPasteBurstWindow
 }
 
 func (m Model) statusLine() string {

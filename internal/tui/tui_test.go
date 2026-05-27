@@ -238,8 +238,8 @@ func TestNewModelAppliesStartupDesignGoalWithEnoughHeight(t *testing.T) {
 	if got := m.goalInput.Value(); got != cfg.StartupGoal {
 		t.Fatalf("goal input = %q, want %q", got, cfg.StartupGoal)
 	}
-	if got := m.goalInput.Height(); got != 3 {
-		t.Fatalf("goal input height = %d, want 3", got)
+	if got := m.goalInput.Height(); got != 4 {
+		t.Fatalf("goal input height = %d, want 4", got)
 	}
 }
 
@@ -652,6 +652,37 @@ func TestTypedInputDoesNotConvertToAttachment(t *testing.T) {
 	}
 }
 
+func TestHumanPacedTypingDoesNotEnterPasteCapture(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	input := "review the failing login flow"
+	var next tea.Model = m
+	for i, r := range input {
+		current := next.(Model)
+		if i > 0 {
+			current.goalInputLastRuneAt = time.Now().Add(-100 * time.Millisecond)
+		}
+		var ok bool
+		next, _ = current.Update(tea.KeyMsg{
+			Type:  tea.KeyRunes,
+			Runes: []rune{r},
+		})
+		_, ok = next.(Model)
+		if !ok {
+			t.Fatalf("Update returned %T, want tui.Model", next)
+		}
+	}
+	got := next.(Model)
+	if got.goalPasteCapture {
+		t.Fatal("human-paced typing entered paste capture")
+	}
+	if len(got.goalAttachments) != 0 {
+		t.Fatalf("goalAttachments length = %d, want 0", len(got.goalAttachments))
+	}
+	if got.goalInput.Value() != input {
+		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), input)
+	}
+}
+
 func TestGoalPastePreservesDiffText(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	diff := strings.Join([]string{
@@ -875,20 +906,23 @@ func TestGoalEditorHeightAdaptsToContent(t *testing.T) {
 		name           string
 		text           string
 		terminalHeight int
+		editorWidth    int
 		want           int
 	}{
 		{name: "empty", text: "", terminalHeight: 0, want: goalEditorMinHeight},
 		{name: "one line", text: "review this", terminalHeight: 0, want: goalEditorMinHeight},
 		{name: "multiple lines", text: "one\ntwo\nthree", terminalHeight: 0, want: 3},
 		{name: "trailing blank line counts", text: "one\ntwo\n", terminalHeight: 0, want: 3},
+		{name: "wrapped line counts visual rows", text: "1234567890123456789012345", terminalHeight: 0, editorWidth: 10, want: 3},
+		{name: "wrapped lines combine with hard newlines", text: "123456789012345\n\nabc", terminalHeight: 0, editorWidth: 10, want: 4},
 		{name: "long input caps at max", text: strings.Repeat("line\n", 20), terminalHeight: 0, want: goalEditorMaxHeight},
 		{name: "terminal height does not change cap", text: strings.Repeat("line\n", 20), terminalHeight: 32, want: goalEditorMaxHeight},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := goalEditorHeight(tt.text, tt.terminalHeight); got != tt.want {
-				t.Fatalf("goalEditorHeight(%q, %d) = %d, want %d", tt.text, tt.terminalHeight, got, tt.want)
+			if got := goalEditorHeight(tt.text, tt.terminalHeight, tt.editorWidth); got != tt.want {
+				t.Fatalf("goalEditorHeight(%q, %d, %d) = %d, want %d", tt.text, tt.terminalHeight, tt.editorWidth, got, tt.want)
 			}
 		})
 	}
@@ -908,6 +942,28 @@ func TestGoalEditorHeightGrowsForTypedMultilineGoal(t *testing.T) {
 
 	if got.goalInput.Height() != 3 {
 		t.Fatalf("goal input height = %d, want 3", got.goalInput.Height())
+	}
+}
+
+func TestGoalEditorHeightGrowsForWrappedGoalLine(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 48, Height: 32})
+	resized, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+
+	next, _ = resized.Update(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune("Review this long instruction that wraps across several visible rows before the user adds another hard newline."),
+	})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+
+	if got.goalInput.Height() <= goalEditorMinHeight {
+		t.Fatalf("goal input height = %d, want growth for wrapped visual rows", got.goalInput.Height())
 	}
 }
 

@@ -24,6 +24,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return next, cmd
 	}
 
+	if m.state == stateHome && msg.Type == tea.KeyEnter && msg.Alt {
+		m.goalInput.InsertRune('\n')
+		m.enforceGoalByteLimit(false)
+		m.resizeGoalEditor()
+		m.refreshCompletionCandidate()
+		return m, textarea.Blink
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
@@ -388,9 +396,9 @@ func keyboardHintsForState(st state) []string {
 	hints := []string{"Ctrl+C quit"}
 	switch st {
 	case stateHome:
-		hints = []string{"Enter submit", "Ctrl+U clear line", "Ctrl+C quit"}
+		hints = []string{"Enter submit", "Ctrl+C quit"}
 	case stateWaitingForExtractions, stateWaitingForCode:
-		hints = []string{"Enter submit", "Ctrl+U clear line", "Esc cancel", "Ctrl+C quit"}
+		hints = []string{"Enter submit", "Esc cancel", "Ctrl+C quit"}
 	case stateContextWarning:
 		hints = []string{"Enter return", "Y proceed", "N return", "Esc cancel", "Ctrl+C quit"}
 	case stateBadgePermissionPrompt:

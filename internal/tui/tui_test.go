@@ -435,6 +435,30 @@ func TestHomeEnterSubmitsMultilinePastedGoal(t *testing.T) {
 	}
 }
 
+func TestHomeAltEnterInsertsNewlineWithoutSubmitting(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("Review this diff")
+	m.goalInput.SetCursor(len("Review this diff"))
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter, Alt: true})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if got.goalInput.Value() != "Review this diff\n" {
+		t.Fatalf("goal input = %q, want newline insertion", got.goalInput.Value())
+	}
+	if got.goal != "" {
+		t.Fatalf("goal = %q, want empty before submit", got.goal)
+	}
+	if cmd == nil {
+		t.Fatal("Alt+Enter did not return a cursor blink command")
+	}
+}
+
 func TestHomeViewRendersLargePastedGoalCompactly(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	goal := strings.Repeat(strings.Join([]string{
@@ -580,6 +604,7 @@ func TestGoalEditorHeightAdaptsToContent(t *testing.T) {
 		{name: "empty", text: "", terminalHeight: 0, want: goalEditorMinHeight},
 		{name: "one line", text: "review this", terminalHeight: 0, want: goalEditorMinHeight},
 		{name: "multiple lines", text: "one\ntwo\nthree", terminalHeight: 0, want: 3},
+		{name: "trailing blank line counts", text: "one\ntwo\n", terminalHeight: 0, want: 3},
 		{name: "long input caps at max", text: strings.Repeat("line\n", 20), terminalHeight: 0, want: goalEditorMaxHeight},
 		{name: "terminal height does not change cap", text: strings.Repeat("line\n", 20), terminalHeight: 32, want: goalEditorMaxHeight},
 	}
@@ -607,6 +632,16 @@ func TestGoalEditorHeightGrowsForTypedMultilineGoal(t *testing.T) {
 
 	if got.goalInput.Height() != 3 {
 		t.Fatalf("goal input height = %d, want 3", got.goalInput.Height())
+	}
+}
+
+func TestGoalEditorHeightGrowsForTrailingBlankLines(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("line one\nline two\n")
+	m.resizeGoalEditor()
+
+	if got := m.goalInput.Height(); got != 3 {
+		t.Fatalf("goal input height = %d, want 3", got)
 	}
 }
 
@@ -2435,7 +2470,11 @@ func TestInputStateStatusLinesShowKeyboardHints(t *testing.T) {
 
 			view := m.View()
 
-			for _, want := range []string{"Enter submit", "Ctrl+U clear line", "Ctrl+C quit"} {
+			wants := []string{"Enter submit", "Ctrl+C quit"}
+			if tt.state != stateHome {
+				wants = append(wants, "Esc cancel")
+			}
+			for _, want := range wants {
 				if !strings.Contains(view, want) {
 					t.Fatalf("view missing %q:\n%s", want, view)
 				}
@@ -2452,6 +2491,9 @@ func TestHelpDocumentsCtrlU(t *testing.T) {
 
 	if !strings.Contains(view, "Ctrl+U") || !strings.Contains(view, "Clear line") {
 		t.Fatalf("help view missing Ctrl+U clear-line documentation:\n%s", view)
+	}
+	if !strings.Contains(view, "Alt+Enter") || !strings.Contains(view, "newline") {
+		t.Fatalf("help view missing Alt+Enter newline documentation:\n%s", view)
 	}
 }
 

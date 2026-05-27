@@ -380,6 +380,7 @@ func (m Model) viewHelp() string {
 		"",
 		"Keys",
 		"",
+		"Alt+Enter      Insert newline in the goal editor.",
 		"Enter          Submit or continue.",
 		"Tab            Complete / commands and @ files.",
 		"Ctrl+U         Clear line.",
@@ -619,9 +620,16 @@ func clamp(value, min, max int) int {
 }
 
 func goalEditorHeight(text string, terminalHeight int) int {
-	contentLines := countTextLines(text)
+	contentLines := countEditorLines(text)
 	if contentLines < goalEditorMinHeight {
 		contentLines = goalEditorMinHeight
 	}
 	return clamp(contentLines, goalEditorMinHeight, goalEditorMaxHeight)
+}
+
+func countEditorLines(text string) int {
+	if text == "" {
+		return 0
+	}
+	return strings.Count(text, "\n") + 1
 }

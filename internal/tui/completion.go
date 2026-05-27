@@ -37,6 +37,7 @@ type completionCandidate struct {
 type completionState struct {
 	suppressedKey string
 	candidate     completionCandidate
+	activeIndex   int
 }
 
 func (m Model) currentCompletionCandidate() (completionCandidate, bool) {
@@ -47,22 +48,25 @@ func (m Model) currentCompletionCandidate() (completionCandidate, bool) {
 }
 
 func (m *Model) refreshCompletionCandidate() {
+	prevCandidate := m.completion.candidate
+	prevActiveIndex := m.completion.activeIndex
+
 	if m.state != stateHome {
-		m.completion.candidate = completionCandidate{}
+		m.setCompletionCandidate(completionCandidate{}, prevCandidate, prevActiveIndex)
 		return
 	}
 	input := m.goalInput.Value()
 	cursor := m.goalInputCursorByteIndex()
 
 	if candidate, ok := m.taggedCompletionCandidate(input, cursor); ok {
-		m.completion.candidate = candidate
+		m.setCompletionCandidate(candidate, prevCandidate, prevActiveIndex)
 		return
 	}
 	if candidate, ok := m.slashCompletionCandidate(input, cursor); ok {
-		m.completion.candidate = candidate
+		m.setCompletionCandidate(candidate, prevCandidate, prevActiveIndex)
 		return
 	}
-	m.completion.candidate = completionCandidate{}
+	m.setCompletionCandidate(completionCandidate{}, prevCandidate, prevActiveIndex)
 }
 
 func (m *Model) setGoalInputValue(value string) {
@@ -88,6 +92,16 @@ func (m Model) handleCompletionKey(msg string) (tea.Model, tea.Cmd, bool) {
 	case "esc":
 		m.completion.suppressedKey = candidate.key
 		return m, nil, true
+	case "up":
+		if m.completion.activeIndex > 0 {
+			m.completion.activeIndex--
+		}
+		return m, nil, true
+	case "down":
+		if max := len(candidate.suggestions) - 1; m.completion.activeIndex < max {
+			m.completion.activeIndex++
+		}
+		return m, nil, true
 	case "enter", "tab":
 		next, cmd := m.applyCompletionCandidate(candidate)
 		return next, cmd, true
@@ -101,7 +115,11 @@ func (m Model) applyCompletionCandidate(candidate completionCandidate) (tea.Mode
 		return m, nil
 	}
 
-	replacement := candidate.suggestions[0].replacement
+	activeIndex := m.completion.activeIndex
+	if activeIndex < 0 || activeIndex >= len(candidate.suggestions) {
+		activeIndex = 0
+	}
+	replacement := candidate.suggestions[activeIndex].replacement
 	input := m.goalInput.Value()
 	if candidate.start < 0 || candidate.end < candidate.start || candidate.end > len(input) {
 		return m, nil
@@ -135,6 +153,39 @@ func (m *Model) pruneCompletionSuppression() {
 	if !ok || candidate.key != m.completion.suppressedKey {
 		m.completion.suppressedKey = ""
 	}
+}
+
+func (m *Model) setCompletionCandidate(candidate, prevCandidate completionCandidate, prevActiveIndex int) {
+	m.completion.candidate = candidate
+	if candidate.kind == completionKindNone {
+		m.completion.activeIndex = 0
+		return
+	}
+	if candidate.key == prevCandidate.key {
+		if prevActiveIndex < 0 {
+			m.completion.activeIndex = 0
+			return
+		}
+		if max := len(candidate.suggestions) - 1; prevActiveIndex > max {
+			m.completion.activeIndex = max
+			return
+		}
+		m.completion.activeIndex = prevActiveIndex
+		return
+	}
+	m.completion.activeIndex = 0
+}
+
+func (m Model) completionActiveIndex(candidate completionCandidate) int {
+	if len(candidate.suggestions) == 0 {
+		return 0
+	}
+
+	activeIndex := m.completion.activeIndex
+	if activeIndex < 0 || activeIndex >= len(candidate.suggestions) {
+		return 0
+	}
+	return activeIndex
 }
 
 func (m Model) slashCompletionCandidate(input string, cursor int) (completionCandidate, bool) {

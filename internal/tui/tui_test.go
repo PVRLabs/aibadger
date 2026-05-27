@@ -1633,6 +1633,207 @@ func TestTaggedCompletionSkipsNoisyDirectories(t *testing.T) {
 	}
 }
 
+func TestCompletionNavigationUsesActiveSuggestion(t *testing.T) {
+	root := t.TempDir()
+	writeTaggedCompletionFixture(t, root, "docs/alpha.go")
+	writeTaggedCompletionFixture(t, root, "docs/beta.go")
+
+	m := NewModel(root, DefaultConfig())
+	m.goalInput.SetValue("Review @docs/")
+	m.goalInput.SetCursor(len("Review @docs/"))
+	m.refreshCompletionCandidate()
+
+	candidate, ok := m.completionVisible()
+	if !ok {
+		t.Fatal("completionVisible() = false, want tagged completion")
+	}
+	if got := m.completion.activeIndex; got != 0 {
+		t.Fatalf("activeIndex = %d, want 0", got)
+	}
+	if got := candidate.suggestions[0].replacement; got != "@docs/alpha.go" {
+		t.Fatalf("first suggestion = %q, want @docs/alpha.go", got)
+	}
+	lastIndex := len(candidate.suggestions) - 1
+	wantLastReplacement := candidate.suggestions[lastIndex].replacement
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "Review @docs/" {
+		t.Fatalf("goal input changed during navigation: %q", got.goalInput.Value())
+	}
+	if got.completion.activeIndex != 0 {
+		t.Fatalf("activeIndex after up = %d, want 0", got.completion.activeIndex)
+	}
+	if cmd != nil {
+		t.Fatal("up navigation returned unexpected command")
+	}
+
+	for i := 0; i < len(candidate.suggestions)+2; i++ {
+		next, cmd = got.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+		got, ok = next.(Model)
+		if !ok {
+			t.Fatalf("handleKey returned %T, want tui.Model", next)
+		}
+		if got.goalInput.Value() != "Review @docs/" {
+			t.Fatalf("goal input changed during clamped navigation: %q", got.goalInput.Value())
+		}
+		if cmd != nil {
+			t.Fatal("down navigation returned unexpected command")
+		}
+	}
+	if got.completion.activeIndex != lastIndex {
+		t.Fatalf("activeIndex after repeated down = %d, want %d", got.completion.activeIndex, lastIndex)
+	}
+
+	next, cmd = got.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	got, ok = next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "Review "+wantLastReplacement {
+		t.Fatalf("goal input = %q, want active suggestion to insert", got.goalInput.Value())
+	}
+	if cmd != nil {
+		t.Fatal("completion insertion returned unexpected command")
+	}
+}
+
+func TestCompletionResetsActiveSelectionWhenSuggestionsChange(t *testing.T) {
+	root := t.TempDir()
+	writeTaggedCompletionFixture(t, root, "docs/alpha.go")
+	writeTaggedCompletionFixture(t, root, "docs/beta.go")
+	writeTaggedCompletionFixture(t, root, "docs/gamma.go")
+
+	m := NewModel(root, DefaultConfig())
+	m.goalInput.SetValue("Review @docs/")
+	m.goalInput.SetCursor(len("Review @docs/"))
+	m.refreshCompletionCandidate()
+	m.completion.activeIndex = 1
+
+	m.goalInput.SetValue("Review @docs/g")
+	m.goalInput.SetCursor(len("Review @docs/g"))
+	m.refreshCompletionCandidate()
+
+	if got := m.completion.activeIndex; got != 0 {
+		t.Fatalf("activeIndex after refresh = %d, want 0", got)
+	}
+	candidate, ok := m.completionVisible()
+	if !ok {
+		t.Fatal("completionVisible() = false, want tagged completion")
+	}
+	if got := candidate.suggestions[0].replacement; got != "@docs/gamma.go" {
+		t.Fatalf("first suggestion after filtering = %q, want @docs/gamma.go", got)
+	}
+	wantLine := renderBold(fmt.Sprintf("  %-12s %s", candidate.suggestions[0].label, candidate.suggestions[0].description))
+	if view := m.viewCompletionSuggestions(); !strings.Contains(view, wantLine) {
+		t.Fatalf("completion view missing bold active suggestion after refresh:\n%s", view)
+	}
+}
+
+func TestCompletionPreservesSelectionAcrossNonKeyUpdates(t *testing.T) {
+	root := t.TempDir()
+	writeTaggedCompletionFixture(t, root, "docs/alpha.go")
+	writeTaggedCompletionFixture(t, root, "docs/beta.go")
+
+	m := NewModel(root, DefaultConfig())
+	m.goalInput.SetValue("Review @docs/")
+	m.goalInput.SetCursor(len("Review @docs/"))
+	m.refreshCompletionCandidate()
+	m.completion.activeIndex = 1
+
+	next, cmd := m.Update(struct{}{})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if got.completion.activeIndex != 1 {
+		t.Fatalf("activeIndex after non-key update = %d, want 1", got.completion.activeIndex)
+	}
+	if got.goalInput.Value() != m.goalInput.Value() {
+		t.Fatalf("goal input changed on non-key update: %q", got.goalInput.Value())
+	}
+	if cmd != nil {
+		t.Fatal("non-key update returned unexpected command")
+	}
+}
+
+func TestCompletionRendersActiveSuggestionBold(t *testing.T) {
+	t.Run("tagged", func(t *testing.T) {
+		root := t.TempDir()
+		writeTaggedCompletionFixture(t, root, "docs/alpha.go")
+		writeTaggedCompletionFixture(t, root, "docs/beta.go")
+
+		m := NewModel(root, DefaultConfig())
+		m.goalInput.SetValue("Review @docs/")
+		m.goalInput.SetCursor(len("Review @docs/"))
+		m.refreshCompletionCandidate()
+		m.completion.activeIndex = 1
+
+		candidate, ok := m.completionVisible()
+		if !ok {
+			t.Fatal("completionVisible() = false, want tagged completion")
+		}
+
+		view := m.viewCompletionSuggestions()
+		wantLine := renderBold(fmt.Sprintf("  %-12s %s", candidate.suggestions[1].label, candidate.suggestions[1].description))
+		if !strings.Contains(view, wantLine) {
+			t.Fatalf("tagged completion view missing bold active suggestion:\n%s", view)
+		}
+	})
+
+	t.Run("slash", func(t *testing.T) {
+		m := NewModel("/tmp/project", DefaultConfig())
+		m.goalInput.SetValue("/")
+		m.goalInput.SetCursor(len("/"))
+		m.refreshCompletionCandidate()
+
+		candidate, ok := m.completionVisible()
+		if !ok {
+			t.Fatal("completionVisible() = false, want slash completion")
+		}
+		if len(candidate.suggestions) < 2 {
+			t.Fatalf("slash completion suggestions = %d, want at least 2", len(candidate.suggestions))
+		}
+		m.completion.activeIndex = 1
+
+		view := m.viewSlashCommandSuggestions()
+		wantLine := renderBold(fmt.Sprintf("  %-12s %s", candidate.suggestions[1].label, candidate.suggestions[1].description))
+		if !strings.Contains(view, wantLine) {
+			t.Fatalf("slash completion view missing bold active suggestion:\n%s", view)
+		}
+	})
+}
+
+func TestSlashCompletionNavigationSelectsNonFirstSuggestion(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/")
+	m.goalInput.SetCursor(len("/"))
+	m.refreshCompletionCandidate()
+
+	candidate, ok := m.completionVisible()
+	if !ok {
+		t.Fatal("completionVisible() = false, want slash completion")
+	}
+	if len(candidate.suggestions) < 2 {
+		t.Fatalf("slash completion suggestions = %d, want at least 2", len(candidate.suggestions))
+	}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.completion.activeIndex != 1 {
+		t.Fatalf("activeIndex after down = %d, want 1", got.completion.activeIndex)
+	}
+	if cmd != nil {
+		t.Fatal("down navigation returned unexpected command")
+	}
+}
+
 func TestSlashCompletionEnterStartsReview(t *testing.T) {
 	repo := newReviewRepo(t, "println(\"updated\")")
 	m := NewModel(repo, DefaultConfig())

@@ -141,26 +141,30 @@ func (m Model) viewSlashCommandSuggestions() string {
 	if !ok || candidate.kind != completionKindSlash {
 		return ""
 	}
-
-	var lines []string
-	for _, suggestion := range candidate.suggestions {
-		lines = append(lines, fmt.Sprintf("  %-12s %s", suggestion.label, suggestion.description))
-	}
-	if len(lines) == 0 {
-		return ""
-	}
-	return strings.Join(lines, "\n")
+	return m.renderCompletionSuggestions(candidate)
 }
 
 func (m Model) viewCompletionSuggestions() string {
 	candidate, ok := m.completionVisible()
-	if !ok || len(candidate.suggestions) == 0 {
+	if !ok {
+		return ""
+	}
+	return m.renderCompletionSuggestions(candidate)
+}
+
+func (m Model) renderCompletionSuggestions(candidate completionCandidate) string {
+	if len(candidate.suggestions) == 0 {
 		return ""
 	}
 
+	activeIndex := m.completionActiveIndex(candidate)
 	var lines []string
-	for _, suggestion := range candidate.suggestions {
-		lines = append(lines, fmt.Sprintf("  %-12s %s", suggestion.label, suggestion.description))
+	for i, suggestion := range candidate.suggestions {
+		line := fmt.Sprintf("  %-12s %s", suggestion.label, suggestion.description)
+		if i == activeIndex {
+			line = renderBold(line)
+		}
+		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n")
 }

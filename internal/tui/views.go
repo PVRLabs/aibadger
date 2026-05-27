@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/brand"
-	"github.com/PVRLabs/aibadger/internal/clipboard"
+
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/workflow"
@@ -479,17 +479,6 @@ func (m Model) textResponsePreviewLineLimit() int {
 	const reservedRows = 15
 	available := m.height - reservedRows
 	return clamp(available, minTextResponsePreviewLines, maxTextResponsePreviewLines)
-}
-
-func reviewGitShowTip() string {
-	return formatReviewGitShowTip(clipboard.PipeCommand())
-}
-
-func formatReviewGitShowTip(pipeCommand string, ok bool) string {
-	if ok {
-		return fmt.Sprintf("To review the latest commit, run `git show | %s`, then paste it with your review goal.", pipeCommand)
-	}
-	return "To review the latest commit, run `git show`, copy its output, and paste it with your review goal."
 }
 
 func (m Model) viewPaste(st state) string {

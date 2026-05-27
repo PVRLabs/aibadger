@@ -1476,35 +1476,6 @@ func TestSubmitGoalDesignCommandSwitchesFocus(t *testing.T) {
 	}
 }
 
-func TestFormatReviewGitShowTip(t *testing.T) {
-	tests := []struct {
-		name        string
-		pipeCommand string
-		ok          bool
-		want        string
-	}{
-		{
-			name:        "clipboard pipe available",
-			pipeCommand: "pbcopy",
-			ok:          true,
-			want:        "To review the latest commit, run `git show | pbcopy`, then paste it with your review goal.",
-		},
-		{
-			name: "clipboard fallback",
-			want: "To review the latest commit, run `git show`, copy its output, and paste it with your review goal.",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := formatReviewGitShowTip(tt.pipeCommand, tt.ok)
-			if got != tt.want {
-				t.Fatalf("tip = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestViewShowsPersistentHeader(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	symbols := testDisplaySymbols()

@@ -277,6 +277,9 @@ func schemaATopFilePriority(file model.FileSummary) int {
 	if priority := schemaAHighSignalDocPriority(lowerPath, base); priority > 0 {
 		return priority
 	}
+	if isSchemaARootStaticSiteEntryPath(lowerPath, base) {
+		return 82
+	}
 	if isRootWebResourceName(base) {
 		return 80
 	}
@@ -305,6 +308,10 @@ func isSchemaAIdentityManifest(base string) bool {
 
 func isSchemaAOperationalConfigFile(base string) bool {
 	return filegroups.IsOperationalConfigFile(base)
+}
+
+func isSchemaARootStaticSiteEntryPath(lowerPath, base string) bool {
+	return filegroups.IsRootStaticSiteEntryPath(lowerPath, base)
 }
 
 func schemaAHighSignalDocPriority(lowerPath, base string) int {

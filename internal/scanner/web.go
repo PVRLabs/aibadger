@@ -204,10 +204,7 @@ func scanKnownRootWebResources(root string) *model.SourceRoot {
 		FileCount: len(files),
 	}
 	for _, file := range files {
-		pkg.TopFiles = addTopFile(pkg.TopFiles, file, 10)
-	}
-	if len(pkg.TopFiles) > 0 {
-		pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
+		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, 10)
 	}
 
 	return &model.SourceRoot{
@@ -228,10 +225,9 @@ func attachWebResourcesToTopology(topology *model.ProjectTopology, sourceRoots [
 	}
 	var missingRoots []model.SourceRoot
 	for _, sourceRoot := range sourceRoots {
-		if moduleHasSourceRootPath(module, sourceRoot.Path) {
-			continue
+		if sourceRoot.Path == "" || !moduleHasSourceRootPath(module, sourceRoot.Path) {
+			missingRoots = append(missingRoots, sourceRoot)
 		}
-		missingRoots = append(missingRoots, sourceRoot)
 	}
 	mergeWebSourceRoots(module, missingRoots)
 }
@@ -274,7 +270,7 @@ func mergeWebPackages(sourceRoot *model.SourceRoot, packages []model.Package) {
 				sourceRoot.Packages[idx].TopFiles = addTopFile(sourceRoot.Packages[idx].TopFiles, file, 3)
 			}
 			for _, file := range webPackage.AuxFiles {
-				sourceRoot.Packages[idx].AuxFiles = addAuxFile(sourceRoot.Packages[idx].AuxFiles, file, 3)
+				sourceRoot.Packages[idx].AuxFiles = addAuxFile(sourceRoot.Packages[idx].AuxFiles, file, 10)
 			}
 			if len(sourceRoot.Packages[idx].TopFiles) > 0 {
 				sourceRoot.Packages[idx].Heaviest = heaviestFromSummary(sourceRoot.Packages[idx].TopFiles[0])

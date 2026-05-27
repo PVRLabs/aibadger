@@ -87,6 +87,10 @@ func IsRootWebResourceName(name string) bool {
 	return containsLowerName(rootWebResourceNames, name)
 }
 
+func IsRootStaticSiteEntryPath(lowerPath, base string) bool {
+	return base == "index.html" && !strings.Contains(lowerPath, string(filepath.Separator))
+}
+
 func IsIdentityManifest(base string) bool {
 	return containsLowerName(identityManifests, base)
 }

@@ -58,6 +58,10 @@ func isRootWebResourceName(name string) bool {
 	return filegroups.IsRootWebResourceName(name)
 }
 
+func isRootStaticSiteEntryPath(lowerPath, base string) bool {
+	return filegroups.IsRootStaticSiteEntryPath(lowerPath, base)
+}
+
 func isShallowDocumentationPath(lowerPath string) bool {
 	return filegroups.IsShallowDocumentationPath(lowerPath)
 }
@@ -82,6 +86,9 @@ func topologyFilePriority(file model.FileSummary) int {
 	}
 	if priority := highSignalDocPriority(lowerPath, base); priority > 0 {
 		return priority
+	}
+	if isRootStaticSiteEntryPath(lowerPath, base) {
+		return 82
 	}
 	if isRootWebResourceName(base) {
 		return 80

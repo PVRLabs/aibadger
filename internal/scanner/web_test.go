@@ -94,8 +94,8 @@ func TestScanIncludesStandardStaticWebResources(t *testing.T) {
 		t.Fatalf("root web package FileCount = %d, want 5", rootPkg.FileCount)
 	}
 	for _, name := range []string{"sitemap.xml", "robots.txt", "site.webmanifest", "favicon.ico", "apple-touch-icon.png"} {
-		if !hasTopFile(rootPkg.TopFiles, name) {
-			t.Fatalf("root web package TopFiles = %+v, missing %s", rootPkg.TopFiles, name)
+		if !hasAuxFile(rootPkg.AuxFiles, name) {
+			t.Fatalf("root web package AuxFiles = %+v, missing %s", rootPkg.AuxFiles, name)
 		}
 	}
 }

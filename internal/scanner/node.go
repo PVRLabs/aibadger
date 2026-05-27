@@ -401,6 +401,7 @@ func (n *NodeDetector) addRootOverviewPackage(module *model.Module, projectRoot,
 	}
 
 	module.SourceRoots[0].Packages = append(module.SourceRoots[0].Packages, overview)
+	module.SourceRoots[0].FileCount += overview.FileCount
 	for _, file := range overview.TopFiles {
 		module.TopFiles = addTopFile(module.TopFiles, file, 3)
 	}
@@ -490,39 +491,41 @@ func nodeOverviewPriority(relPath string) int {
 			return 4
 		case "index.ts", "index.js":
 			return 5
-		case "app.tsx", "app.jsx", "app.ts", "app.js":
+		case "index.html":
 			return 6
+		case "app.tsx", "app.jsx", "app.ts", "app.js":
+			return 7
 		}
 	}
 
 	if strings.HasPrefix(relPath, "pages"+string(filepath.Separator)) || strings.HasPrefix(relPath, "app"+string(filepath.Separator)) {
-		return 7
+		return 8
 	}
 	if strings.HasPrefix(relPath, "components"+string(filepath.Separator)) ||
 		strings.HasPrefix(relPath, "hooks"+string(filepath.Separator)) ||
 		strings.HasPrefix(relPath, "src"+string(filepath.Separator)+"components"+string(filepath.Separator)) ||
 		strings.HasPrefix(relPath, "src"+string(filepath.Separator)+"hooks"+string(filepath.Separator)) {
-		return 8
-	}
-	if strings.HasPrefix(relPath, "server"+string(filepath.Separator)) {
 		return 9
 	}
-	if strings.HasPrefix(relPath, "apps"+string(filepath.Separator)) {
+	if strings.HasPrefix(relPath, "server"+string(filepath.Separator)) {
 		return 10
 	}
-	if strings.HasPrefix(relPath, "libs"+string(filepath.Separator)) {
+	if strings.HasPrefix(relPath, "apps"+string(filepath.Separator)) {
 		return 11
 	}
-	if strings.HasPrefix(relPath, "bin"+string(filepath.Separator)) {
+	if strings.HasPrefix(relPath, "libs"+string(filepath.Separator)) {
 		return 12
 	}
-	if strings.HasSuffix(base, ".d.ts") {
+	if strings.HasPrefix(relPath, "bin"+string(filepath.Separator)) {
 		return 13
 	}
-	if strings.HasPrefix(relPath, "src"+string(filepath.Separator)) {
+	if strings.HasSuffix(base, ".d.ts") {
 		return 14
 	}
-	return 15
+	if strings.HasPrefix(relPath, "src"+string(filepath.Separator)) {
+		return 15
+	}
+	return 16
 }
 
 func nodeRootConfigCandidates(fullModulePath string) []string {
@@ -541,6 +544,7 @@ func nodeRootEntryCandidates(fullModulePath string) []string {
 		"server.ts", "server.js",
 		"main.ts", "main.js",
 		"index.ts", "index.js",
+		"index.html",
 	} {
 		if util.FileExists(filepath.Join(fullModulePath, name)) {
 			candidates = append(candidates, name)

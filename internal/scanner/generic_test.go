@@ -277,6 +277,47 @@ func TestGenericFallbackSurfacesControlConfigPrompt1(t *testing.T) {
 	}
 }
 
+func TestGenericFallbackSurfacesRootIndexHTMLBeforeWebMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	files := map[string]string{
+		"index.html":       "<!doctype html>\n",
+		"script.js":        "console.log('ok')\n",
+		"style.css":        "body { color: black; }\n",
+		"sitemap.xml":      "<?xml version=\"1.0\"?>\n",
+		"site.webmanifest": `{"name":"test"}`,
+		"robots.txt":       "User-agent: *\n",
+		"BingSiteAuth.xml": "<users />\n",
+		"google.html":      "verification\n",
+	}
+	for relPath, contents := range files {
+		writeTestFile(t, filepath.Join(tmpDir, relPath), contents)
+	}
+
+	topology, err := NewScanner(tmpDir).Scan()
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+
+	output := protocol.NewFormatter().GenerateSchemaA(topology, "inspect static site")
+	rootLine := ""
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, "Pkg: . ") {
+			rootLine = line
+			break
+		}
+	}
+	if rootLine == "" {
+		t.Fatalf("Prompt 1 missing root package line:\n%s", output)
+	}
+	if !strings.Contains(rootLine, "index.html") {
+		t.Fatalf("root package line missing index.html:\n%s", output)
+	}
+	if strings.Index(rootLine, "sitemap.xml") != -1 && strings.Index(rootLine, "index.html") > strings.Index(rootLine, "sitemap.xml") {
+		t.Fatalf("root package line ranks sitemap.xml before index.html:\n%s", rootLine)
+	}
+}
+
 func TestGenericFallbackOmitsGeneratedDirsAndSensitiveFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	files := map[string]string{

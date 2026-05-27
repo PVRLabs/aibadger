@@ -74,7 +74,7 @@ badger
 Then type your goal:
 
 ```text
-Understand how authentication works. @internal/auth.go @docs/auth-design.md
+Help me understand how authentication works. Check @internal/auth.go
 ```
 
 For walkthroughs and more examples, see [docs/usage.md](docs/usage.md).

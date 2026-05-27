@@ -18,6 +18,9 @@ func TestCountTextLines(t *testing.T) {
 		{name: "empty", text: "", want: 0},
 		{name: "single line", text: "hello", want: 1},
 		{name: "multiple lines", text: "one\ntwo\nthree", want: 3},
+		{name: "windows newlines", text: "one\r\ntwo\r\nthree", want: 3},
+		{name: "carriage return newlines", text: "one\rtwo\rthree", want: 3},
+		{name: "trailing carriage return ignored", text: "one\rtwo\r", want: 2},
 		{name: "trailing newline ignored", text: "one\ntwo\n", want: 2},
 	}
 

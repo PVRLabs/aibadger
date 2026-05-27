@@ -240,11 +240,23 @@ func countTextLines(text string) int {
 	if text == "" {
 		return 0
 	}
-	text = strings.TrimRight(text, "\n")
+	text = strings.TrimRight(text, "\r\n")
 	if text == "" {
 		return 0
 	}
-	return strings.Count(text, "\n") + 1
+	lines := 1
+	for i := 0; i < len(text); i++ {
+		switch text[i] {
+		case '\n':
+			lines++
+		case '\r':
+			lines++
+			if i+1 < len(text) && text[i+1] == '\n' {
+				i++
+			}
+		}
+	}
+	return lines
 }
 
 func (m Model) viewGoalAttachments() string {

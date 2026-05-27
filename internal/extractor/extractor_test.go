@@ -1162,3 +1162,80 @@ func TestExtractAllowsExplicitExternalContextFile(t *testing.T) {
 		t.Fatalf("content = %q, want external file content", results[0].Content)
 	}
 }
+
+func TestExtractAllowsExplicitExternalContextNear(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "aibadger")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(external, 0755); err != nil {
+		t.Fatal(err)
+	}
+	specPath := filepath.Join(external, "spec.md")
+	content := "# Spec\n\n## sidecar-boundary\n\nKeep private planning docs out of OSS output.\n"
+	if err := os.WriteFile(specPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{
+			{
+				Path:    "../badger-sidecar/docs",
+				AbsPath: external,
+			},
+		},
+	})
+	results, err := e.Extract([]Command{
+		{Type: "NEAR", Path: "../badger-sidecar/docs/spec.md", Pattern: "sidecar-boundary"},
+	})
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	if results[0].Path != "../badger-sidecar/docs/spec.md" {
+		t.Fatalf("result path = %q, want requested external path", results[0].Path)
+	}
+	if !strings.Contains(results[0].Content, "sidecar-boundary") {
+		t.Fatalf("content = %q, want extracted external span near anchor", results[0].Content)
+	}
+}
+
+func TestExtractAllowsExternalContextNearRelativeToContextRoot(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "aibadger")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(external, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, "spec.md"), []byte("# Spec\n\nsidecar-boundary\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{
+			{
+				Path:    "../badger-sidecar/docs",
+				AbsPath: external,
+			},
+		},
+	})
+	results, err := e.Extract([]Command{
+		{Type: "NEAR", Path: "spec.md", Pattern: "sidecar-boundary"},
+	})
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	if !strings.Contains(results[0].Content, "sidecar-boundary") {
+		t.Fatalf("content = %q, want extracted external span near anchor", results[0].Content)
+	}
+}

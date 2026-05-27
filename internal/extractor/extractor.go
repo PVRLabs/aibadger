@@ -52,6 +52,12 @@ type Extractor struct {
 	ExternalContext []model.ExternalContext
 }
 
+type externalCommandResult struct {
+	content  string
+	fullFile bool
+	matched  bool
+}
+
 // NewExtractor creates a new Extractor instance.
 func NewExtractor(root string, t *model.ProjectTopology) *Extractor {
 	var external []model.ExternalContext
@@ -139,10 +145,12 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 }
 
 func (e *Extractor) processCommand(cmd Command) (string, bool, error) {
-	if cmd.Type == "FILE" {
-		if content, ok, err := e.processExternalFileCommand(cmd.Path); ok || err != nil {
-			return content, true, err
-		}
+	externalResult, err := e.processExternalCommand(cmd)
+	if err != nil {
+		return "", false, err
+	}
+	if externalResult.matched {
+		return externalResult.content, externalResult.fullFile, nil
 	}
 
 	resolvedPath := e.resolveCommandPath(cmd.Path)
@@ -187,33 +195,50 @@ func (e *Extractor) processCommand(cmd Command) (string, bool, error) {
 	return extracted, fullFile, nil
 }
 
-func (e *Extractor) processExternalFileCommand(requestPath string) (string, bool, error) {
+func (e *Extractor) processExternalCommand(cmd Command) (externalCommandResult, error) {
+	requestPath := cmd.Path
 	if len(e.ExternalContext) == 0 {
-		return "", false, nil
+		return externalCommandResult{}, nil
 	}
 	_, absolutePath, ok := externalcontext.ContainsFile(e.ProjectRoot, e.ExternalContext, requestPath)
 	if !ok {
-		return "", false, nil
+		return externalCommandResult{}, nil
 	}
+	result := externalCommandResult{matched: true}
 	if promptpolicy.IsSensitivePath(requestPath) {
-		return "", true, errPrompt2Excluded
+		return result, errPrompt2Excluded
 	}
 	kind := filekind.Classify(absolutePath)
 	if kind == model.FileKindBinary {
-		return "", true, errPrompt2Excluded
+		return result, errPrompt2Excluded
 	}
 	if kind == model.FileKindAsset {
 		info, err := os.Stat(absolutePath)
 		if err != nil {
-			return "", true, fmt.Errorf("file not found: %s", requestPath)
+			return result, fmt.Errorf("file not found: %s", requestPath)
 		}
-		return summarizeBinaryFile(requestPath, int(info.Size()), kind), true, nil
+		result.content = summarizeBinaryFile(requestPath, int(info.Size()), kind)
+		result.fullFile = cmd.Type == "FILE"
+		return result, nil
 	}
 	data, err := os.ReadFile(absolutePath)
 	if err != nil {
-		return "", true, fmt.Errorf("file not found: %s", requestPath)
+		return result, fmt.Errorf("file not found: %s", requestPath)
 	}
-	return string(data), true, nil
+	content := string(data)
+	if cmd.Type == "FILE" {
+		result.content = content
+		result.fullFile = true
+		return result, nil
+	}
+
+	extracted, fullFile, err := e.extractBlock(content, cmd.Type, cmd.Pattern)
+	if err != nil {
+		return result, err
+	}
+	result.content = extracted
+	result.fullFile = fullFile
+	return result, nil
 }
 
 func isWithinProjectRoot(root, absPath string) bool {

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/PVRLabs/aibadger/internal/defaults"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
@@ -58,10 +59,22 @@ func (d *GenericDetector) Detect(root string) ([]model.Module, error) {
 	if d.maxFilesPerDir > 0 {
 		perDirFiles = make(map[string]int)
 	}
+	totalProcessed := 0
 
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return nil
+		}
+
+		if d.maxFilesPerDir > 0 {
+			dir := filepath.Dir(path)
+			perDirFiles[dir]++
+			if perDirFiles[dir] > d.maxFilesPerDir {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 		}
 
 		if entry.IsDir() {
@@ -71,12 +84,9 @@ func (d *GenericDetector) Detect(root string) ([]model.Module, error) {
 			return nil
 		}
 
-		if d.maxFilesPerDir > 0 {
-			dir := filepath.Dir(path)
-			perDirFiles[dir]++
-			if perDirFiles[dir] > d.maxFilesPerDir {
-				return nil
-			}
+		totalProcessed++
+		if totalProcessed > defaults.MaxTotalScanFiles {
+			return filepath.SkipAll
 		}
 
 		info, infoErr := entry.Info()

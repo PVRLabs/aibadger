@@ -98,10 +98,12 @@ type Model struct {
 	promptFileKind string
 	promptFilePath string
 
-	badgeLogins    []string
-	badgeTotal     int
-	badgeGazillion bool
-	badgeErrorText string
+	badgeLogins     []string
+	badgeTotal      int
+	badgeGazillion  bool
+	badgeErrorText  string
+	badgeStarred    bool
+	badgeRefreshing bool
 
 	externalRoots       []taggedfile.ExternalRoot
 	completion          completionState
@@ -488,10 +490,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.badgeTotal = msg.total
 		m.badgeGazillion = msg.gazillion
 		m.badgeErrorText = ""
-		m.status = tuiMessage{}
+		if m.badgeRefreshing {
+			m.badgeRefreshing = false
+			m.status = successMessage("Supporter list refreshed.")
+		} else {
+			m.status = tuiMessage{}
+		}
 		m.err = nil
 		return m, nil
 	case badgeErrorMsg:
+		if m.badgeRefreshing {
+			m.badgeRefreshing = false
+			m.status = warningMessage(fmt.Sprintf("Could not refresh: %s", msg.text))
+			m.err = nil
+			return m, nil
+		}
 		m.state = stateBadgeError
 		m.badgeErrorText = msg.text
 		m.badgeLogins = nil
@@ -619,6 +632,8 @@ func (m Model) handleBadgeCommand() (tea.Model, tea.Cmd) {
 	m.badgeTotal = 0
 	m.badgeGazillion = false
 	m.badgeErrorText = ""
+	m.badgeStarred = false
+	m.badgeRefreshing = false
 	m.status = tuiMessage{}
 	m.err = nil
 	m.setGoalAttachments(nil)
@@ -840,6 +855,8 @@ func (m Model) returnHome(status tuiMessage) (tea.Model, tea.Cmd) {
 	m.badgeTotal = 0
 	m.badgeGazillion = false
 	m.badgeErrorText = ""
+	m.badgeStarred = false
+	m.badgeRefreshing = false
 	m.setGoalInputValue("")
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""

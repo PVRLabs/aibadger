@@ -111,6 +111,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if next, cmd, handled := m.handleKeyBadgeBrowser(); handled {
 			return next, cmd
 		}
+
+	case "r", "R":
+		if next, cmd, handled := m.handleKeyBadgeRefresh(); handled {
+			return next, cmd
+		}
 	}
 
 	// Forward unhandled keys to the active input widget.
@@ -453,8 +458,18 @@ func (m Model) handleKeyBadgeBrowser() (tea.Model, tea.Cmd, bool) {
 		m.status = warningMessage(fmt.Sprintf("Could not open the browser automatically.\n%s", browser.AIBadgerRepoURL))
 		return m, nil, true
 	}
+	m.badgeStarred = true
 	m.status = successMessage("Opened the repository in your browser.")
 	return m, nil, true
+}
+
+func (m Model) handleKeyBadgeRefresh() (tea.Model, tea.Cmd, bool) {
+	if m.state != stateBadgeResult || !m.badgeStarred || m.badgeRefreshing {
+		return m, nil, false
+	}
+	m.badgeRefreshing = true
+	m.status = neutralMessage("Refreshing supporter list...")
+	return m, badgeFetchCmd(), true
 }
 
 // forwardKeyToInput passes an unhandled key to whichever input widget is
@@ -556,13 +571,14 @@ func (m Model) statusLine() string {
 	mode := statusLineKeyboardHints
 	switch mode {
 	case statusLineKeyboardHints:
-		return strings.Join(append([]string{"Focus: " + workflow.FocusDisplayName(m.cfg.Focus)}, keyboardHintsForState(m.state)...), " · ")
+		hints := keyboardHintsForState(m.state, m.badgeStarred)
+		return strings.Join(append([]string{"Focus: " + workflow.FocusDisplayName(m.cfg.Focus)}, hints...), " · ")
 	default:
 		return ""
 	}
 }
 
-func keyboardHintsForState(st state) []string {
+func keyboardHintsForState(st state, badgeStarred bool) []string {
 	hints := []string{"Ctrl+C quit"}
 	switch st {
 	case stateHome:
@@ -576,7 +592,11 @@ func keyboardHintsForState(st state) []string {
 	case stateBadgeFetching:
 		hints = []string{"Ctrl+C quit"}
 	case stateBadgeResult:
-		hints = []string{"S open browser", "Enter continue", "Ctrl+C quit"}
+		if badgeStarred {
+			hints = []string{"S open browser", "R refresh", "Enter continue", "Ctrl+C quit"}
+		} else {
+			hints = []string{"S open browser", "Enter continue", "Ctrl+C quit"}
+		}
 	case stateBadgeError:
 		hints = []string{"Enter continue", "Ctrl+C quit"}
 	case stateScanning, stateWriting:

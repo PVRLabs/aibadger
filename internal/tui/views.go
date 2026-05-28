@@ -365,7 +365,7 @@ func (m Model) viewBadgeFetching() string {
 }
 
 func (m Model) viewBadgeResult() string {
-	return renderBadgeScoreboard(m.badgeLogins, m.badgeTotal, m.badgeGazillion)
+	return renderBadgeScoreboard(m.badgeLogins, m.badgeTotal, m.badgeGazillion, m.badgeStarred)
 }
 
 func (m Model) viewBadgeError() string {
@@ -410,7 +410,14 @@ func (m Model) viewHelp() string {
 	return m.renderBox(body)
 }
 
-func renderBadgeScoreboard(logins []string, total int, gazillion bool) string {
+func renderBadgeScoreboard(logins []string, total int, gazillion bool, starred bool) string {
+	var actionLine string
+	if starred {
+		actionLine = "   [S]tar the repo in browser     [R]efresh the list     [Enter] continue"
+	} else {
+		actionLine = "   [S]tar the repo in browser     [Enter] continue"
+	}
+
 	var lines []string
 	if gazillion {
 		lines = append(lines, "   🦡🦡🦡 A GAZILLION BADGERS have starred this repo!")
@@ -421,7 +428,7 @@ func renderBadgeScoreboard(logins []string, total int, gazillion bool) string {
 			lines = append(lines, "     @"+login)
 		}
 		lines = append(lines, "")
-		lines = append(lines, "   [S]tar the repo in browser     [Enter] continue")
+		lines = append(lines, actionLine)
 		return strings.Join(lines, "\n")
 	}
 
@@ -435,7 +442,7 @@ func renderBadgeScoreboard(logins []string, total int, gazillion bool) string {
 	lines = append(lines, "")
 	lines = append(lines, "   ✨ Your name not here yet?")
 	lines = append(lines, "")
-	lines = append(lines, "   [S]tar the repo in browser     [Enter] continue")
+	lines = append(lines, actionLine)
 	return strings.Join(lines, "\n")
 }
 

@@ -23,6 +23,58 @@ func TestCloneExclusions(t *testing.T) {
 	}
 }
 
+func TestDiscoverProjectMarkersHonorsDepthLimit(t *testing.T) {
+	root := t.TempDir()
+	depthFour := filepath.Join(root, "one", "two", "three", "four", "go.mod")
+	depthFive := filepath.Join(root, "one", "two", "three", "four", "five", "go.mod")
+	writeTestFile(t, depthFour, "module example.com/depth4\n")
+	writeTestFile(t, depthFive, "module example.com/depth5\n")
+
+	paths, err := discoverProjectMarkers(root, "go.mod")
+	if err != nil {
+		t.Fatalf("discoverProjectMarkers() error = %v", err)
+	}
+
+	if len(paths) != 1 {
+		t.Fatalf("len(paths) = %d, want 1: %v", len(paths), paths)
+	}
+	if paths[0] != depthFour {
+		t.Fatalf("paths[0] = %q, want depth-4 marker %q", paths[0], depthFour)
+	}
+}
+
+func TestDiscoverProjectMarkersSkipsCommonExcludedDirs(t *testing.T) {
+	root := t.TempDir()
+	found := filepath.Join(root, "apps", "web", "package.json")
+	writeTestFile(t, found, `{"name":"web"}`)
+
+	for _, dir := range []string{
+		".git",
+		"node_modules",
+		"vendor",
+		"dist",
+		"build",
+		"target",
+		".gocache",
+		".idea",
+		".vscode",
+	} {
+		writeTestFile(t, filepath.Join(root, dir, "nested", "package.json"), `{"name":"ignored"}`)
+	}
+
+	paths, err := discoverProjectMarkers(root, "package.json")
+	if err != nil {
+		t.Fatalf("discoverProjectMarkers() error = %v", err)
+	}
+
+	if len(paths) != 1 {
+		t.Fatalf("len(paths) = %d, want only unexcluded marker: %v", len(paths), paths)
+	}
+	if paths[0] != found {
+		t.Fatalf("paths[0] = %q, want %q", paths[0], found)
+	}
+}
+
 func TestRelativePathHelpers(t *testing.T) {
 	root := filepath.Join("tmp", "project")
 	file := filepath.Join(root, "src", "main.go")

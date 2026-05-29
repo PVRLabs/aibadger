@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,6 +19,16 @@ var commonIgnoredDirs = map[string]bool{
 	"build":        true,
 }
 
+const maxInitialMarkerDiscoveryDepth = 4
+
+var markerDiscoveryIgnoredDirs = cloneExclusions(commonIgnoredDirs,
+	"vendor",
+	"dist",
+	".gocache",
+	".idea",
+	".vscode",
+)
+
 func cloneExclusions(base map[string]bool, extras ...string) map[string]bool {
 	cloned := make(map[string]bool, len(base)+len(extras))
 	for name, skip := range base {
@@ -31,6 +42,65 @@ func cloneExclusions(base map[string]bool, extras ...string) map[string]bool {
 
 func shouldSkipDir(name string, exclusions map[string]bool) bool {
 	return exclusions[name]
+}
+
+func discoverProjectMarkers(root string, markerNames ...string) ([]string, error) {
+	if len(markerNames) == 0 {
+		return nil, nil
+	}
+
+	markers := make(map[string]bool, len(markerNames))
+	for _, name := range markerNames {
+		markers[name] = true
+	}
+
+	var paths []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+
+		if d.IsDir() {
+			if path != root && shouldSkipDir(d.Name(), markerDiscoveryIgnoredDirs) {
+				return filepath.SkipDir
+			}
+			depth, ok := discoveryDepth(root, path)
+			if !ok || depth > maxInitialMarkerDiscoveryDepth {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if !markers[d.Name()] {
+			return nil
+		}
+		depth, ok := discoveryDepth(root, filepath.Dir(path))
+		if !ok || depth > maxInitialMarkerDiscoveryDepth {
+			return nil
+		}
+		paths = append(paths, path)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func discoveryDepth(root, path string) (int, bool) {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return 0, false
+	}
+	if rel == "." || rel == "" {
+		return 0, true
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return 0, false
+	}
+	return strings.Count(rel, string(filepath.Separator)) + 1, true
 }
 
 func shouldSkipTopLevelOpsDir(root, path, name string) bool {

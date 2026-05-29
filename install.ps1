@@ -38,8 +38,7 @@ $archiveUrl = "$baseUrl/$archiveName"
 
 # Determine install directory
 if (-not $installDir) {
-  $homeDir = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
-  $installDir = "$homeDir\.local\bin"
+  $installDir = Join-Path $env:LOCALAPPDATA "Programs\Badger"
 }
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
@@ -62,12 +61,29 @@ try {
   Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
 }
 
-Write-Host "Installed badger to $targetPath"
+Write-Host ""
+Write-Host "Installed badger to:"
+Write-Host "  $targetPath"
+Write-Host ""
 
-# Check PATH
-$paths = $env:Path -split ";"
-if ($paths -notcontains $installDir) {
-  Write-Host "Add $installDir to your PATH to run badger from any directory."
+# Check PATH (normalize trailing backslash for comparison)
+$paths = $env:Path -split ";" | ForEach-Object { $_.TrimEnd("\") }
+$normalizedInstallDir = $installDir.TrimEnd("\")
+if ($paths -notcontains $normalizedInstallDir) {
+  Write-Host "This directory is not on PATH yet."
+  Write-Host ""
+  Write-Host "To run badger from any terminal, add this directory to your User PATH:"
+  Write-Host "  $installDir"
+  Write-Host ""
+  Write-Host "PowerShell:"
+  Write-Host "  [Environment]::SetEnvironmentVariable("
+  Write-Host "    ""Path"","
+  Write-Host "    [Environment]::GetEnvironmentVariable(""Path"", ""User"") + "";$installDir"","
+  Write-Host "    ""User"""
+  Write-Host "  )"
+  Write-Host ""
+  Write-Host "Then restart your terminal."
+  Write-Host ""
 }
 
 # Print version

@@ -40,7 +40,7 @@ curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | 
 
 ## Windows
 
-PowerShell one-liner (default install to `%USERPROFILE%\.local\bin`):
+PowerShell one-liner (default install to `%LOCALAPPDATA%\Programs\Badger`):
 
 ```powershell
 irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex

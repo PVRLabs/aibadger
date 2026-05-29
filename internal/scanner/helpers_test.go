@@ -66,6 +66,8 @@ func TestShouldOmitFile(t *testing.T) {
 		{relPath: "lib/app.jar", data: []byte("jar"), want: true},
 		{relPath: "Main.class", data: []byte("class"), want: true},
 		{relPath: "badger", data: []byte{0, 1, 2, 3}, want: true},
+		{relPath: ".gitignore", data: []byte("tmp\n"), want: true},
+		{relPath: ".dockerignore", data: []byte(".git\n"), want: true},
 		{relPath: filepath.Join("bin", "badger"), data: []byte{0, 1, 2, 3}, want: false},
 		{relPath: "Dockerfile", data: []byte("FROM scratch"), want: false},
 		{relPath: "Makefile", data: []byte("build:\n\tgo test ./..."), want: false},

@@ -99,6 +99,8 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 				limit = 5
 			case "Web Resources":
 				limit = 10
+			case "Ops/Deploy":
+				limit = maxOpsPackageFiles
 			}
 		}
 		if strings.HasSuffix(strings.ToLower(winner.summary.Name), ".md") {
@@ -123,6 +125,8 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 				limit = 5
 			case "Web Resources":
 				limit = 10
+			case "Ops/Deploy":
+				limit = maxOpsPackageFiles
 			}
 			for packageIdx := range sourceRoot.Packages {
 				pkg := &sourceRoot.Packages[packageIdx]

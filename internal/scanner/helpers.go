@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/filegroups"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
@@ -30,6 +31,13 @@ func cloneExclusions(base map[string]bool, extras ...string) map[string]bool {
 
 func shouldSkipDir(name string, exclusions map[string]bool) bool {
 	return exclusions[name]
+}
+
+func shouldSkipTopLevelOpsDir(root, path, name string) bool {
+	if filepath.Dir(path) != root {
+		return false
+	}
+	return filegroups.IsOpsTopLevelDirName(name)
 }
 
 func shouldOmitFile(root, path, name string) bool {

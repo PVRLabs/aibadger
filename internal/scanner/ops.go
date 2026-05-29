@@ -186,6 +186,56 @@ func opsPackagesToSourceRoots(packages map[string]*model.Package) []model.Source
 	return sourceRoots
 }
 
+func attachOpsResourcesToTopology(topology *model.ProjectTopology, sourceRoots []model.SourceRoot) {
+	if len(sourceRoots) == 0 || len(topology.Modules) == 0 {
+		return
+	}
+	module := docsTargetModule(topology.Modules)
+	if module == nil {
+		return
+	}
+	for _, sourceRoot := range sourceRoots {
+		mergeOpsSourceRoot(module, sourceRoot)
+	}
+}
+
+func mergeOpsSourceRoot(module *model.Module, opsRoot model.SourceRoot) {
+	if len(opsRoot.Packages) == 0 {
+		return
+	}
+	for idx := range module.SourceRoots {
+		if module.SourceRoots[idx].Path == opsRoot.Path {
+			module.SourceRoots[idx].FileCount += opsRoot.FileCount
+			mergeOpsPackages(&module.SourceRoots[idx], opsRoot.Packages)
+			return
+		}
+	}
+	module.SourceRoots = append(module.SourceRoots, opsRoot)
+}
+
+func mergeOpsPackages(sourceRoot *model.SourceRoot, packages []model.Package) {
+	for _, opsPackage := range packages {
+		merged := false
+		for idx := range sourceRoot.Packages {
+			if sourceRoot.Packages[idx].Path != opsPackage.Path {
+				continue
+			}
+			sourceRoot.Packages[idx].FileCount += opsPackage.FileCount
+			for _, file := range opsPackage.TopFiles {
+				sourceRoot.Packages[idx].TopFiles = addOpsTopFile(sourceRoot.Packages[idx].TopFiles, file, packageTopFileLimit(sourceRoot.Packages[idx].Path, maxOpsPackageFiles))
+			}
+			if len(sourceRoot.Packages[idx].TopFiles) > 0 {
+				sourceRoot.Packages[idx].Heaviest = heaviestFromSummary(sourceRoot.Packages[idx].TopFiles[0])
+			}
+			merged = true
+			break
+		}
+		if !merged {
+			sourceRoot.Packages = append(sourceRoot.Packages, opsPackage)
+		}
+	}
+}
+
 func addOpsTopFile(files []model.FileSummary, file model.FileSummary, limit int) []model.FileSummary {
 	files = append(files, file)
 	sort.Slice(files, func(i, j int) bool {

@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/PVRLabs/aibadger/internal/model"
@@ -224,6 +225,139 @@ func TestScanOpsResourcesCapsAndOrdersDeterministically(t *testing.T) {
 	}
 }
 
+func TestScanAttachesOpsResourcesToLanguageTopology(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/ops\n")
+	writeTestFile(t, filepath.Join(tmpDir, "main.go"), "package main\n\nfunc main() {}\n")
+	writeTestFile(t, filepath.Join(tmpDir, "Makefile"), "test:\n\tgo test ./...\n")
+	writeTestFile(t, filepath.Join(tmpDir, "deploy", "provision.sh"), "provision\n")
+	writeTestFile(t, filepath.Join(tmpDir, "deploy", "db", "schema.sql"), "create table x(id int);\n")
+	writeTestFile(t, filepath.Join(tmpDir, ".github", "workflows", "ci.yml"), "name: ci\n")
+
+	topology, err := NewScanner(tmpDir).Scan()
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if !reflect.DeepEqual(topology.Languages, []string{"Go"}) {
+		t.Fatalf("Languages = %v, want [Go]", topology.Languages)
+	}
+	if topology.PrimaryLanguage != "Go" {
+		t.Fatalf("PrimaryLanguage = %q, want Go", topology.PrimaryLanguage)
+	}
+	if len(topology.Modules) != 1 {
+		t.Fatalf("len(Modules) = %d, want 1", len(topology.Modules))
+	}
+
+	module := topology.Modules[0]
+	rootPkg := findPackage(module, "")
+	if rootPkg == nil {
+		t.Fatalf("root package missing from source roots: %+v", module.SourceRoots)
+	}
+	if countPackages(module, "") != 1 {
+		t.Fatalf("root package should not be duplicated: %+v", module.SourceRoots)
+	}
+	for _, path := range []string{"main.go", "Makefile"} {
+		if !hasTopFile(rootPkg.TopFiles, path) {
+			t.Fatalf("rootPkg.TopFiles = %+v, missing %s", rootPkg.TopFiles, path)
+		}
+	}
+	for _, path := range []string{
+		filepath.Join("deploy", "provision.sh"),
+		filepath.Join("deploy", "db", "schema.sql"),
+		filepath.Join(".github", "workflows", "ci.yml"),
+	} {
+		if !moduleHasPackageTopFile(module, path) {
+			t.Fatalf("module packages = %+v, missing ops file %s", module.SourceRoots, path)
+		}
+	}
+}
+
+func TestScanKeepsOpsScriptsLanguageNeutralAcrossDetectors(t *testing.T) {
+	tests := []struct {
+		name              string
+		files             map[string]string
+		expectedLanguages []string
+		expectedPrimary   string
+		expectedStack     []string
+	}{
+		{
+			name: "java",
+			files: map[string]string{
+				"pom.xml": "<project><groupId>com.example</groupId><artifactId>app</artifactId></project>",
+				filepath.Join("src", "main", "java", "App.java"): "class App {}\n",
+			},
+			expectedLanguages: []string{"Java"},
+			expectedPrimary:   "Java",
+			expectedStack:     []string{"Maven"},
+		},
+		{
+			name: "go",
+			files: map[string]string{
+				"go.mod":  "module example.com/app\n",
+				"main.go": "package main\n\nfunc main() {}\n",
+			},
+			expectedLanguages: []string{"Go"},
+			expectedPrimary:   "Go",
+			expectedStack:     []string{"Go Modules"},
+		},
+		{
+			name: "node",
+			files: map[string]string{
+				"package.json":                   `{"name":"web","main":"src/index.js"}`,
+				filepath.Join("src", "index.js"): "export const app = true\n",
+			},
+			expectedLanguages: []string{"JavaScript"},
+			expectedPrimary:   "JavaScript",
+			expectedStack:     []string{"Node.js"},
+		},
+		{
+			name: "python",
+			files: map[string]string{
+				"pyproject.toml": "[project]\nname = \"app\"\n",
+				filepath.Join("src", "app", "__init__.py"): "",
+				filepath.Join("src", "app", "main.py"):     "def main(): return True\n",
+			},
+			expectedLanguages: []string{"Python"},
+			expectedPrimary:   "Python",
+			expectedStack:     nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			for relPath, contents := range tt.files {
+				writeTestFile(t, filepath.Join(tmpDir, relPath), contents)
+			}
+			writeTestFile(t, filepath.Join(tmpDir, "deploy", "status.py"), "print('ok')\n")
+			writeTestFile(t, filepath.Join(tmpDir, "deploy", "release.ts"), "console.log('release')\n")
+			writeTestFile(t, filepath.Join(tmpDir, "deploy", "package.json"), `{"name":"deploy-tools","scripts":{"release":"node release.js"}}`)
+			writeTestFile(t, filepath.Join(tmpDir, "deploy", "release.js"), "console.log('release')\n")
+			writeTestFile(t, filepath.Join(tmpDir, "Makefile"), "deploy:\n\ttrue\n")
+
+			topology, err := NewScanner(tmpDir).Scan()
+			if err != nil {
+				t.Fatalf("Scan() error = %v", err)
+			}
+			if !reflect.DeepEqual(topology.Languages, tt.expectedLanguages) {
+				t.Fatalf("Languages = %v, want %v", topology.Languages, tt.expectedLanguages)
+			}
+			if topology.PrimaryLanguage != tt.expectedPrimary {
+				t.Fatalf("PrimaryLanguage = %q, want %s", topology.PrimaryLanguage, tt.expectedPrimary)
+			}
+			if !reflect.DeepEqual(topology.Stack, tt.expectedStack) {
+				t.Fatalf("Stack = %v, want %v", topology.Stack, tt.expectedStack)
+			}
+			if len(topology.Modules) != 1 {
+				t.Fatalf("len(Modules) = %d, want 1; modules=%+v", len(topology.Modules), topology.Modules)
+			}
+			if !moduleHasPackageTopFile(topology.Modules[0], filepath.Join("deploy", "status.py")) {
+				t.Fatalf("ops Python script missing from supplemental package: %+v", topology.Modules[0].SourceRoots)
+			}
+		})
+	}
+}
+
 func findOpsPackage(sourceRoots []model.SourceRoot, path string) *model.Package {
 	for sourceRootIdx := range sourceRoots {
 		for packageIdx := range sourceRoots[sourceRootIdx].Packages {
@@ -233,4 +367,16 @@ func findOpsPackage(sourceRoots []model.SourceRoot, path string) *model.Package 
 		}
 	}
 	return nil
+}
+
+func countPackages(module model.Module, path string) int {
+	count := 0
+	for _, sourceRoot := range module.SourceRoots {
+		for _, pkg := range sourceRoot.Packages {
+			if pkg.Path == path {
+				count++
+			}
+		}
+	}
+	return count
 }

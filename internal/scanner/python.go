@@ -51,7 +51,7 @@ func (p *PythonDetector) hasPythonEvidence(root string) (bool, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if shouldSkipDir(d.Name(), p.Exclusions) {
+			if shouldSkipDir(d.Name(), p.Exclusions) || shouldSkipTopLevelOpsDir(root, path, d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -203,7 +203,7 @@ func (p *PythonDetector) shallowPackageDirs(projectRoot string) []string {
 	var dirs []string
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.IsDir() || name == "src" || name == "tests" || shouldSkipDir(name, p.Exclusions) {
+		if !entry.IsDir() || name == "src" || name == "tests" || shouldSkipDir(name, p.Exclusions) || shouldSkipTopLevelOpsDir(projectRoot, filepath.Join(projectRoot, name), name) {
 			continue
 		}
 		if p.hasDirectPythonFile(filepath.Join(projectRoot, name)) {

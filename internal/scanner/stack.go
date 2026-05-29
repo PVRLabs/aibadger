@@ -16,7 +16,7 @@ func detectedStack(root string) []string {
 			return nil
 		}
 		if d.IsDir() {
-			if shouldSkipDir(d.Name(), commonIgnoredDirs) {
+			if shouldSkipDir(d.Name(), commonIgnoredDirs) || shouldSkipTopLevelOpsDir(root, path, d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -60,7 +60,7 @@ func detectNodeStacks(root string) map[string]bool {
 			return nil
 		}
 		if d.IsDir() {
-			if shouldSkipDir(d.Name(), commonIgnoredDirs) {
+			if shouldSkipDir(d.Name(), commonIgnoredDirs) || shouldSkipTopLevelOpsDir(root, path, d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil

@@ -37,7 +37,7 @@ func (n *NodeDetector) Detect(root string) ([]model.Module, error) {
 		}
 
 		if d.IsDir() {
-			if shouldSkipDir(d.Name(), n.Exclusions) {
+			if shouldSkipDir(d.Name(), n.Exclusions) || shouldSkipTopLevelOpsDir(root, path, d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil

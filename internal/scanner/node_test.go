@@ -50,6 +50,54 @@ func TestNodeDetectorTreatsEligiblePackageJSONAsModuleRoot(t *testing.T) {
 	}
 }
 
+func TestNodeDetectorDiscoversShallowPackageAtDepthFour(t *testing.T) {
+	tmpDir := t.TempDir()
+	modulePath := filepath.Join("one", "two", "three", "four")
+
+	writeTestFile(t, filepath.Join(tmpDir, modulePath, "package.json"), `{"name":"depth-four","scripts":{"dev":"node src/index.js"}}`)
+	writeTestFile(t, filepath.Join(tmpDir, modulePath, "src", "index.js"), "export const ok = true\n")
+
+	modules, err := NewNodeDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want 1", len(modules))
+	}
+	if modules[0].Name != "depth-four" {
+		t.Fatalf("module.Name = %q, want depth-four", modules[0].Name)
+	}
+	if modules[0].Path != modulePath {
+		t.Fatalf("module.Path = %q, want %q", modules[0].Path, modulePath)
+	}
+	if !hasSourceRoot(modules[0], filepath.Join(modulePath, "src")) {
+		t.Fatalf("module.SourceRoots = %+v, missing confirmed package source root", modules[0].SourceRoots)
+	}
+}
+
+func TestNodeDetectorIgnoresUnrelatedPackageDeeperThanDepthFour(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeTestFile(t, filepath.Join(tmpDir, "package.json"), `{"name":"root-app","main":"src/index.js"}`)
+	writeTestFile(t, filepath.Join(tmpDir, "src", "index.js"), "export const root = true\n")
+	writeTestFile(t, filepath.Join(tmpDir, "one", "two", "three", "four", "five", "package.json"), `{"name":"depth-five","main":"src/index.js"}`)
+	writeTestFile(t, filepath.Join(tmpDir, "one", "two", "three", "four", "five", "src", "index.js"), "export const deep = true\n")
+
+	modules, err := NewNodeDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want only root package: %+v", len(modules), modules)
+	}
+	if findModule(modules, "root-app") == nil {
+		t.Fatalf("modules = %+v, missing root-app", modules)
+	}
+	if findModule(modules, "depth-five") != nil {
+		t.Fatalf("modules = %+v, should not include unrelated depth-five package", modules)
+	}
+}
+
 func TestNodeDetectorSupportsExplicitWorkspacePackages(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -80,6 +128,61 @@ func TestNodeDetectorSupportsExplicitWorkspacePackages(t *testing.T) {
 	}
 }
 
+func TestNodeDetectorSupportsDeepExplicitWorkspacePackage(t *testing.T) {
+	tmpDir := t.TempDir()
+	deepPackagePath := filepath.Join("one", "two", "three", "four", "five")
+
+	writeTestFile(t, filepath.Join(tmpDir, "package.json"), `{
+  "name":"monorepo",
+  "workspaces":["`+filepath.ToSlash(deepPackagePath)+`"]
+}`)
+	writeTestFile(t, filepath.Join(tmpDir, deepPackagePath, "package.json"), `{"name":"deep-package"}`)
+	writeTestFile(t, filepath.Join(tmpDir, deepPackagePath, "src", "index.ts"), "export const deep = true\n")
+
+	modules, err := NewNodeDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 2 {
+		t.Fatalf("len(modules) = %d, want workspace root and deep package: %+v", len(modules), modules)
+	}
+	if findModule(modules, "monorepo") == nil {
+		t.Fatalf("modules = %+v, missing monorepo root", modules)
+	}
+	deepModule := findModule(modules, "deep-package")
+	if deepModule == nil {
+		t.Fatalf("modules = %+v, missing deep workspace package", modules)
+	}
+	if deepModule.Path != deepPackagePath {
+		t.Fatalf("deepModule.Path = %q, want %q", deepModule.Path, deepPackagePath)
+	}
+	if !hasSourceRoot(*deepModule, filepath.Join(deepPackagePath, "src")) {
+		t.Fatalf("deepModule.SourceRoots = %+v, missing deep source root", deepModule.SourceRoots)
+	}
+}
+
+func TestNodeDetectorDeduplicatesWorkspaceAndDiscoveredPackages(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeTestFile(t, filepath.Join(tmpDir, "package.json"), `{
+  "name":"workspace-root",
+  "workspaces":["packages/ui"]
+}`)
+	writeTestFile(t, filepath.Join(tmpDir, "packages", "ui", "package.json"), `{"name":"ui"}`)
+	writeTestFile(t, filepath.Join(tmpDir, "packages", "ui", "src", "index.ts"), "export const ui = true\n")
+
+	modules, err := NewNodeDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 2 {
+		t.Fatalf("len(modules) = %d, want deduplicated root and workspace package: %+v", len(modules), modules)
+	}
+	if findModule(modules, "workspace-root") == nil || findModule(modules, "ui") == nil {
+		t.Fatalf("modules = %+v, missing expected workspace modules", modules)
+	}
+}
+
 func TestNodeDetectorSupportsTrivialWorkspaceExpansion(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -106,6 +209,30 @@ func TestNodeDetectorSupportsTrivialWorkspaceExpansion(t *testing.T) {
 	}
 	if nested := findModule(modules, "client"); nested == nil || nested.Path != filepath.Join("apps", "nested", "client") {
 		t.Fatalf("modules = %+v, expected standalone nested client module to remain discoverable", modules)
+	}
+}
+
+func TestNodeDetectorSupportsDeepPNPMWorkspaceWithoutRootPackage(t *testing.T) {
+	tmpDir := t.TempDir()
+	deepPackagePath := filepath.Join("one", "two", "three", "four", "five")
+
+	writeTestFile(t, filepath.Join(tmpDir, "pnpm-workspace.yaml"), "packages:\n  - '"+filepath.ToSlash(deepPackagePath)+"'\n")
+	writeTestFile(t, filepath.Join(tmpDir, deepPackagePath, "package.json"), `{"name":"deep-pnpm"}`)
+	writeTestFile(t, filepath.Join(tmpDir, deepPackagePath, "src", "index.ts"), "export const deep = true\n")
+
+	modules, err := NewNodeDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want deep pnpm package: %+v", len(modules), modules)
+	}
+	module := findModule(modules, "deep-pnpm")
+	if module == nil {
+		t.Fatalf("modules = %+v, missing deep pnpm package", modules)
+	}
+	if module.Path != deepPackagePath {
+		t.Fatalf("module.Path = %q, want %q", module.Path, deepPackagePath)
 	}
 }
 

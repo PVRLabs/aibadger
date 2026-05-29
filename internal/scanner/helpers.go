@@ -110,6 +110,15 @@ func shouldSkipTopLevelOpsDir(root, path, name string) bool {
 	return filegroups.IsOpsTopLevelDirName(name)
 }
 
+func isUnderTopLevelOpsDir(root, path string) bool {
+	rel := relativePath(root, path)
+	if rel == "" {
+		return false
+	}
+	topLevel, _, _ := strings.Cut(rel, string(filepath.Separator))
+	return filegroups.IsOpsTopLevelDirName(topLevel)
+}
+
 func shouldOmitFile(root, path, name string) bool {
 	if promptpolicy.IsSensitivePath(relativePath(root, path)) {
 		return true

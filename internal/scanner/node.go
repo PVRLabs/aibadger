@@ -25,49 +25,44 @@ func NewNodeDetector() *NodeDetector {
 	}
 }
 
-// Detect scans for package.json files and creates one module per package root.
+// Detect discovers Node project markers near root and creates one module per package root.
 func (n *NodeDetector) Detect(root string) ([]model.Module, error) {
 	var modules []model.Module
 	seenModules := make(map[string]bool)
 	workspaceRoots := make(map[string]bool)
 
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-
-		if d.IsDir() {
-			if shouldSkipDir(d.Name(), n.Exclusions) || shouldSkipTopLevelOpsDir(root, path, d.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		if d.Name() != "package.json" {
-			return nil
-		}
-
-		packageJSON, ok := n.readPackageJSON(path)
-		if !ok || !packageJSON.isEligibleModuleRoot() {
-			return nil
-		}
-
-		modulePath := filepath.Dir(path)
-		relPath := relativePath(root, modulePath)
-		if seenModules[relPath] {
-			return nil
-		}
-
-		for _, workspaceRoot := range n.workspaceModuleRoots(root, modulePath, packageJSON) {
-			workspaceRoots[workspaceRoot] = true
-		}
-
-		seenModules[relPath] = true
-		modules = append(modules, n.analyzeModule(root, relPath, packageJSON))
-		return nil
-	})
+	markers, err := discoverProjectMarkers(root, "package.json", "pnpm-workspace.yaml")
 	if err != nil {
 		return nil, err
+	}
+	for _, marker := range markers {
+		modulePath := filepath.Dir(marker)
+		if isUnderTopLevelOpsDir(root, modulePath) {
+			continue
+		}
+		switch filepath.Base(marker) {
+		case "package.json":
+			packageJSON, ok := n.readPackageJSON(marker)
+			if !ok || !packageJSON.isEligibleModuleRoot() {
+				continue
+			}
+
+			relPath := relativePath(root, modulePath)
+			if seenModules[relPath] {
+				continue
+			}
+
+			for _, workspaceRoot := range n.workspaceModuleRoots(root, modulePath, packageJSON) {
+				workspaceRoots[workspaceRoot] = true
+			}
+
+			seenModules[relPath] = true
+			modules = append(modules, n.analyzeModule(root, relPath, packageJSON))
+		case "pnpm-workspace.yaml":
+			for _, workspaceRoot := range n.pnpmWorkspaceModuleRoots(root, modulePath) {
+				workspaceRoots[workspaceRoot] = true
+			}
+		}
 	}
 
 	workspacePaths := make([]string, 0, len(workspaceRoots))
@@ -142,6 +137,14 @@ func (n *NodeDetector) moduleName(projectRoot, relPath string, packageJSON nodeP
 func (n *NodeDetector) workspaceModuleRoots(projectRoot, modulePath string, packageJSON nodePackageJSON) []string {
 	patterns := packageJSON.workspacePatterns()
 	patterns = append(patterns, readPNPMWorkspacePatterns(filepath.Join(modulePath, "pnpm-workspace.yaml"))...)
+	return n.workspaceModuleRootsFromPatterns(projectRoot, modulePath, patterns)
+}
+
+func (n *NodeDetector) pnpmWorkspaceModuleRoots(projectRoot, modulePath string) []string {
+	return n.workspaceModuleRootsFromPatterns(projectRoot, modulePath, readPNPMWorkspacePatterns(filepath.Join(modulePath, "pnpm-workspace.yaml")))
+}
+
+func (n *NodeDetector) workspaceModuleRootsFromPatterns(projectRoot, modulePath string, patterns []string) []string {
 	if len(patterns) == 0 {
 		return nil
 	}

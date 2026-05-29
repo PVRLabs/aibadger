@@ -3,6 +3,7 @@ package scanner
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/model"
@@ -17,36 +18,143 @@ func NewGoDetector() *GoDetector {
 	return &GoDetector{}
 }
 
-// Detect scans all go.mod modules under root and builds Go package topology.
+// Detect discovers Go project markers near root and builds Go package topology.
 func (g *GoDetector) Detect(root string) ([]model.Module, error) {
 	var modules []model.Module
+	moduleRoots := make(map[string]bool)
 
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
+	markers, err := discoverProjectMarkers(root, "go.mod", "go.work")
+	if err != nil {
+		return nil, err
+	}
 
-		if d.IsDir() {
-			if shouldSkipDir(d.Name(), commonIgnoredDirs) {
-				return filepath.SkipDir
+	for _, marker := range markers {
+		switch filepath.Base(marker) {
+		case "go.mod":
+			moduleRoots[relativePath(root, filepath.Dir(marker))] = true
+		case "go.work":
+			for _, relPath := range g.workspaceModuleRoots(root, marker) {
+				moduleRoots[relPath] = true
 			}
-			return nil
 		}
+	}
 
-		if d.Name() != "go.mod" {
-			return nil
-		}
+	relPaths := make([]string, 0, len(moduleRoots))
+	for relPath := range moduleRoots {
+		relPaths = append(relPaths, relPath)
+	}
+	sort.Strings(relPaths)
 
-		modulePath := filepath.Dir(path)
-		relPath := relativePath(root, modulePath)
+	for _, relPath := range relPaths {
 		module := g.analyzeModule(root, relPath)
 		if module.FileCount > 0 {
 			modules = append(modules, module)
 		}
-		return nil
-	})
+	}
+	return modules, nil
+}
 
-	return modules, err
+func (g *GoDetector) workspaceModuleRoots(projectRoot, workFilePath string) []string {
+	data, err := os.ReadFile(workFilePath)
+	if err != nil {
+		return nil
+	}
+
+	workDir := filepath.Dir(workFilePath)
+	found := make(map[string]bool)
+	inUseBlock := false
+	for _, rawLine := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(stripGoWorkLineComment(rawLine))
+		if line == "" {
+			continue
+		}
+
+		if inUseBlock {
+			if line == ")" {
+				inUseBlock = false
+				continue
+			}
+			if strings.HasSuffix(line, ")") {
+				inUseBlock = false
+				line = strings.TrimSpace(strings.TrimSuffix(line, ")"))
+			}
+			if relPath, ok := goWorkModuleRelPath(projectRoot, workDir, line); ok {
+				found[relPath] = true
+			}
+			continue
+		}
+
+		if !strings.HasPrefix(line, "use") {
+			continue
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(line, "use"))
+		if rest == "(" {
+			inUseBlock = true
+			continue
+		}
+		if strings.HasPrefix(rest, "(") {
+			inUseBlock = true
+			rest = strings.TrimSpace(strings.TrimPrefix(rest, "("))
+		}
+		if strings.HasSuffix(rest, ")") {
+			inUseBlock = false
+			rest = strings.TrimSpace(strings.TrimSuffix(rest, ")"))
+		}
+		if relPath, ok := goWorkModuleRelPath(projectRoot, workDir, rest); ok {
+			found[relPath] = true
+		}
+	}
+
+	roots := make([]string, 0, len(found))
+	for relPath := range found {
+		roots = append(roots, relPath)
+	}
+	sort.Strings(roots)
+	return roots
+}
+
+func stripGoWorkLineComment(line string) string {
+	if idx := strings.Index(line, "//"); idx >= 0 {
+		return line[:idx]
+	}
+	return line
+}
+
+func goWorkModuleRelPath(projectRoot, workDir, candidate string) (string, bool) {
+	fields := strings.Fields(candidate)
+	if len(fields) == 0 {
+		return "", false
+	}
+	candidate = strings.Trim(fields[0], "\"'")
+	if candidate == "" || filepath.IsAbs(candidate) {
+		return "", false
+	}
+
+	cleaned := filepath.Clean(filepath.FromSlash(candidate))
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+
+	modulePath := filepath.Join(workDir, cleaned)
+	if !hasGoMod(modulePath) {
+		return "", false
+	}
+	relPath, err := filepath.Rel(projectRoot, modulePath)
+	if err != nil || filepath.IsAbs(relPath) {
+		return "", false
+	}
+	if relPath == "." {
+		return "", true
+	}
+	if relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return relPath, true
+}
+
+func hasGoMod(modulePath string) bool {
+	info, err := os.Stat(filepath.Join(modulePath, "go.mod"))
+	return err == nil && !info.IsDir()
 }
 
 func (g *GoDetector) analyzeModule(projectRoot, relPath string) model.Module {

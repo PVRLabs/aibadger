@@ -151,6 +151,100 @@ func TestGoDetectorDetectsRootLibraryPackage(t *testing.T) {
 	}
 }
 
+func TestGoDetectorDiscoversShallowModuleAtDepthFour(t *testing.T) {
+	tmpDir := t.TempDir()
+	modulePath := filepath.Join("one", "two", "three", "four")
+
+	writeTestFile(t, filepath.Join(tmpDir, modulePath, "go.mod"), "module example.com/depth4\n")
+	writeTestFile(t, filepath.Join(tmpDir, modulePath, "internal", "service", "service.go"), "package service\n")
+
+	modules, err := NewGoDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want 1", len(modules))
+	}
+	if modules[0].Name != "example.com/depth4" {
+		t.Fatalf("module.Name = %q, want example.com/depth4", modules[0].Name)
+	}
+	if modules[0].Path != modulePath {
+		t.Fatalf("module.Path = %q, want %q", modules[0].Path, modulePath)
+	}
+	if !hasSourceRoot(modules[0], filepath.Join(modulePath, "internal")) {
+		t.Fatalf("module.SourceRoots = %+v, missing confirmed module source root", modules[0].SourceRoots)
+	}
+}
+
+func TestGoDetectorIgnoresUnrelatedModuleDeeperThanDepthFour(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeTestFile(t, filepath.Join(tmpDir, "shallow", "go.mod"), "module example.com/shallow\n")
+	writeTestFile(t, filepath.Join(tmpDir, "shallow", "main.go"), "package main\n")
+	writeTestFile(t, filepath.Join(tmpDir, "one", "two", "three", "four", "five", "go.mod"), "module example.com/depth5\n")
+	writeTestFile(t, filepath.Join(tmpDir, "one", "two", "three", "four", "five", "main.go"), "package main\n")
+
+	modules, err := NewGoDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want only shallow module: %+v", len(modules), modules)
+	}
+	if findModule(modules, "example.com/shallow") == nil {
+		t.Fatalf("modules = %+v, missing shallow module", modules)
+	}
+	if findModule(modules, "example.com/depth5") != nil {
+		t.Fatalf("modules = %+v, should not include unrelated depth-5 module", modules)
+	}
+}
+
+func TestGoDetectorIncludesDeepGoWorkModule(t *testing.T) {
+	tmpDir := t.TempDir()
+	deepModulePath := filepath.Join("one", "two", "three", "four", "five")
+
+	writeTestFile(t, filepath.Join(tmpDir, "go.work"), "go 1.21\n\nuse (\n\t./"+filepath.ToSlash(deepModulePath)+"\n)\n")
+	writeTestFile(t, filepath.Join(tmpDir, deepModulePath, "go.mod"), "module example.com/deep-workspace\n")
+	writeTestFile(t, filepath.Join(tmpDir, deepModulePath, "main.go"), "package main\n")
+
+	modules, err := NewGoDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want deep workspace module: %+v", len(modules), modules)
+	}
+	module := findModule(modules, "example.com/deep-workspace")
+	if module == nil {
+		t.Fatalf("modules = %+v, missing deep go.work module", modules)
+	}
+	if module.Path != deepModulePath {
+		t.Fatalf("module.Path = %q, want %q", module.Path, deepModulePath)
+	}
+	if !hasTopFile(module.TopFiles, filepath.Join(deepModulePath, "main.go")) {
+		t.Fatalf("module.TopFiles = %+v, missing deep module main.go", module.TopFiles)
+	}
+}
+
+func TestGoDetectorDeduplicatesGoWorkAndDiscoveredModules(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeTestFile(t, filepath.Join(tmpDir, "go.work"), "go 1.21\n\nuse ./module\n")
+	writeTestFile(t, filepath.Join(tmpDir, "module", "go.mod"), "module example.com/module\n")
+	writeTestFile(t, filepath.Join(tmpDir, "module", "main.go"), "package main\n")
+
+	modules, err := NewGoDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want deduplicated module: %+v", len(modules), modules)
+	}
+	if modules[0].Name != "example.com/module" {
+		t.Fatalf("module.Name = %q, want example.com/module", modules[0].Name)
+	}
+}
+
 func TestScannerDetectsGoWorkspaceModules(t *testing.T) {
 	tmpDir := t.TempDir()
 

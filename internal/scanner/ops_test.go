@@ -3,9 +3,11 @@ package scanner
 import (
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/PVRLabs/aibadger/internal/model"
+	"github.com/PVRLabs/aibadger/internal/protocol"
 )
 
 func TestScanOpsResourcesIncludesRootOpsFiles(t *testing.T) {
@@ -355,6 +357,77 @@ func TestScanKeepsOpsScriptsLanguageNeutralAcrossDetectors(t *testing.T) {
 				t.Fatalf("ops Python script missing from supplemental package: %+v", topology.Modules[0].SourceRoots)
 			}
 		})
+	}
+}
+
+// TestFormatterOpsCapping verifies deterministic capping and ordering for
+// large ops directories in the formatter output.
+func TestFormatterOpsCapping(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/cap\n")
+	writeTestFile(t, filepath.Join(tmpDir, "main.go"), "package main\n\nfunc main() {}\n")
+	for _, name := range []string{
+		"manual-deploy.md",
+		"runbook.md",
+		"deploy.sh",
+		"provision.sh",
+		"status.sh",
+		"backup.sh",
+		"release.sh",
+		"app.sh",
+		"health.sh",
+		"check.sh",
+	} {
+		writeTestFile(t, filepath.Join(tmpDir, "deploy", name), "ops\n")
+	}
+
+	topology, err := NewScanner(tmpDir).Scan()
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if len(topology.Modules) != 1 {
+		t.Fatalf("len(Modules) = %d, want 1", len(topology.Modules))
+	}
+
+	module := topology.Modules[0]
+	deployPkg := findPackage(module, "deploy")
+	if deployPkg == nil {
+		t.Fatalf("deploy package missing: %+v", module.SourceRoots)
+	}
+	if len(deployPkg.TopFiles) != maxOpsPackageFiles {
+		t.Fatalf("len(deployPkg.TopFiles) = %d, want %d: %+v", len(deployPkg.TopFiles), maxOpsPackageFiles, deployPkg.TopFiles)
+	}
+	// Verify all surfaced files are from the deploy directory
+	for _, f := range deployPkg.TopFiles {
+		if filepath.Dir(f.Path) != "deploy" {
+			t.Fatalf("unexpected file path %q in deploy package: %+v", f.Path, deployPkg.TopFiles)
+		}
+	}
+	// Verify the same scan produces identical output (deterministic)
+	topology2, err := NewScanner(tmpDir).Scan()
+	if err != nil {
+		t.Fatalf("second Scan() error = %v", err)
+	}
+	module2 := topology2.Modules[0]
+	deployPkg2 := findPackage(module2, "deploy")
+	if deployPkg2 == nil {
+		t.Fatalf("deploy package missing from second scan: %+v", module2.SourceRoots)
+	}
+	if len(deployPkg2.TopFiles) != len(deployPkg.TopFiles) {
+		t.Fatalf("second scan file count = %d, want %d", len(deployPkg2.TopFiles), len(deployPkg.TopFiles))
+	}
+	for i := range deployPkg.TopFiles {
+		if deployPkg.TopFiles[i].Path != deployPkg2.TopFiles[i].Path {
+			t.Fatalf("determinism mismatch at index %d: first=%q second=%q", i, deployPkg.TopFiles[i].Path, deployPkg2.TopFiles[i].Path)
+		}
+	}
+
+	output := protocol.NewFormatter().GenerateSchemaA(topology, "summarize this repository")
+	if !strings.Contains(output, "Pkg: deploy [") {
+		t.Fatalf("formatter output missing deploy package:\n%s", output)
+	}
+	if strings.Count(output, "Pkg: deploy") > 1 {
+		t.Fatalf("deploy package appears multiple times in formatter output:\n%s", output)
 	}
 }
 

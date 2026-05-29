@@ -70,20 +70,12 @@ Write-Host ""
 $paths = $env:Path -split ";" | ForEach-Object { $_.TrimEnd("\") }
 $normalizedInstallDir = $installDir.TrimEnd("\")
 if ($paths -notcontains $normalizedInstallDir) {
-  Write-Host "This directory is not on PATH yet."
+  Write-Host "This directory is not on your PATH yet."
   Write-Host ""
-  Write-Host "To run badger from any terminal, add this directory to your User PATH:"
-  Write-Host "  $installDir"
+  Write-Host "Run the following command to add it to your User PATH,"
+  Write-Host "then restart your terminal:"
   Write-Host ""
-  Write-Host "PowerShell:"
-  Write-Host "  [Environment]::SetEnvironmentVariable("
-  Write-Host "    ""Path"","
-  Write-Host "    [Environment]::GetEnvironmentVariable(""Path"", ""User"") + "";$installDir"","
-  Write-Host "    ""User"""
-  Write-Host "  )"
-  Write-Host ""
-  Write-Host "Then restart your terminal."
-  Write-Host ""
+  Write-Host "  [Environment]::SetEnvironmentVariable(""Path"", [Environment]::GetEnvironmentVariable(""Path"", ""User"") + "";$installDir"", ""User"")"
 }
 
 # Print version

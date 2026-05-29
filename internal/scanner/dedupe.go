@@ -104,9 +104,10 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 		if strings.HasSuffix(strings.ToLower(winner.summary.Name), ".md") {
 			limit = 5
 		}
+		pkgLimit := packageTopFileLimit(pkg.Path, limit)
 
 		if winner.inTopFiles {
-			pkg.TopFiles = addTopologyTopFile(pkg.TopFiles, winner.summary, module, limit)
+			pkg.TopFiles = addTopologyPackageTopFile(pkg.TopFiles, winner.summary, module, pkgLimit)
 		} else {
 			pkg.AuxFiles = addTopologyAuxFile(pkg.AuxFiles, winner.summary, module, limit)
 		}
@@ -139,8 +140,9 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 				if len(pkg.TopFiles) > 0 {
 					pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
 				}
+				moduleLimit := moduleTopFileLimit(module.Path, pkgLimit)
 				for _, file := range pkg.TopFiles {
-					module.TopFiles = addTopologyTopFile(module.TopFiles, file, module, pkgLimit)
+					module.TopFiles = addTopologyTopFile(module.TopFiles, file, module, moduleLimit)
 				}
 				for _, file := range pkg.AuxFiles {
 					module.AuxFiles = addTopologyAuxFile(module.AuxFiles, file, module, pkgLimit)
@@ -154,6 +156,13 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 }
 
 func addTopologyTopFile(files []model.FileSummary, file model.FileSummary, module *model.Module, limit int) []model.FileSummary {
+	if module != nil && module.Language == "Generic" {
+		return addGenericTopFile(files, file, maxGenericPackageFiles)
+	}
+	return addTopFile(files, file, limit)
+}
+
+func addTopologyPackageTopFile(files []model.FileSummary, file model.FileSummary, module *model.Module, limit int) []model.FileSummary {
 	if module != nil && module.Language == "Generic" {
 		return addGenericTopFile(files, file, maxGenericPackageFiles)
 	}

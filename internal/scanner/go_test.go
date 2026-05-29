@@ -215,6 +215,25 @@ func TestGoDetectorRecordsTopFiles(t *testing.T) {
 	}
 }
 
+func TestGoDetectorUsesRootModuleTopFileBudget(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/root\n")
+	for i := 0; i < maxRootPackageTopFiles+1; i++ {
+		writeTestFile(t, filepath.Join(tmpDir, string(rune('a'+i))+".go"), "package root\n")
+	}
+
+	modules, err := NewGoDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want 1", len(modules))
+	}
+	if len(modules[0].TopFiles) != maxRootPackageTopFiles {
+		t.Fatalf("len(module.TopFiles) = %d, want %d", len(modules[0].TopFiles), maxRootPackageTopFiles)
+	}
+}
+
 func TestScannerUsesGoDetectorForGoModProject(t *testing.T) {
 	tmpDir := t.TempDir()
 

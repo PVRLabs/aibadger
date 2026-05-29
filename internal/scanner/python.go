@@ -111,9 +111,10 @@ func (p *PythonDetector) addSourceRoot(module *model.Module, sr model.SourceRoot
 	module.SourceRoots = append(module.SourceRoots, sr)
 	module.FileCount += sr.FileCount
 	module.TotalBytes += totalBytes
+	limit := moduleTopFileLimit(module.Path, maxPackageTopFiles)
 	for _, pkg := range sr.Packages {
 		for _, file := range pkg.TopFiles {
-			module.TopFiles = addPythonTopFile(module.TopFiles, file, 3)
+			module.TopFiles = addPythonTopFile(module.TopFiles, file, limit)
 		}
 	}
 }
@@ -261,12 +262,13 @@ func recordPythonFile(packageMap map[string]*model.Package, fullRootPath, projec
 	}
 
 	pkg.FileCount++
+	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles)
 	pkg.TopFiles = addPythonTopFile(pkg.TopFiles, model.FileSummary{
 		Name: name,
 		Path: relToProject,
 		Size: size,
 		Kind: model.FileKindSource,
-	}, 3)
+	}, limit)
 	if len(pkg.TopFiles) > 0 {
 		pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
 	}

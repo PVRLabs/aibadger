@@ -589,6 +589,9 @@ func TestNodeDetectorRootOverviewIsCappedAndDeterministic(t *testing.T) {
 	if len(rootPkg.TopFiles) != maxNodeRootOverviewFiles {
 		t.Fatalf("len(rootPkg.TopFiles) = %d, want %d", len(rootPkg.TopFiles), maxNodeRootOverviewFiles)
 	}
+	if len(modules[0].TopFiles) != maxRootPackageTopFiles {
+		t.Fatalf("len(module.TopFiles) = %d, want %d", len(modules[0].TopFiles), maxRootPackageTopFiles)
+	}
 
 	got := []string{}
 	for _, file := range rootPkg.TopFiles {

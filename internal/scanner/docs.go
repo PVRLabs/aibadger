@@ -80,7 +80,7 @@ func scanDocs(root string) ([]model.SourceRoot, error) {
 			FileCount: len(files),
 		}
 		for _, file := range files {
-			pkg.TopFiles = addTopFile(pkg.TopFiles, file, 5) // Increased limit for docs
+			pkg.TopFiles = addTopFile(pkg.TopFiles, file, packageTopFileLimit(sourceRootPath, 5))
 		}
 		if len(pkg.TopFiles) > 0 {
 			pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
@@ -152,7 +152,7 @@ func mergeDocsPackage(sourceRoot *model.SourceRoot, docsPackage model.Package) {
 		if sourceRoot.Packages[idx].Path == docsPackage.Path {
 			sourceRoot.Packages[idx].FileCount += docsPackage.FileCount
 			for _, file := range docsPackage.TopFiles {
-				sourceRoot.Packages[idx].TopFiles = addTopFile(sourceRoot.Packages[idx].TopFiles, file, 5)
+				sourceRoot.Packages[idx].TopFiles = addTopFile(sourceRoot.Packages[idx].TopFiles, file, packageTopFileLimit(sourceRoot.Packages[idx].Path, 5))
 			}
 			if len(sourceRoot.Packages[idx].TopFiles) > 0 {
 				sourceRoot.Packages[idx].Heaviest = heaviestFromSummary(sourceRoot.Packages[idx].TopFiles[0])

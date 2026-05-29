@@ -81,7 +81,7 @@ func (g *GoDetector) analyzeModule(projectRoot, relPath string) model.Module {
 
 	mergeWebSourceRoots(&module, scanModuleWebResources(projectRoot, fullModulePath))
 
-	module.TopFiles = g.findTopFiles(fullModulePath, projectRoot)
+	module.TopFiles = g.findTopFiles(fullModulePath, projectRoot, moduleTopFileLimit(module.Path, maxPackageTopFiles))
 	if len(module.TopFiles) > 0 {
 		module.Heaviest = heaviestFromSummary(module.TopFiles[0])
 	}
@@ -188,14 +188,14 @@ func (g *GoDetector) inferSourceRole(path string) string {
 }
 
 func (g *GoDetector) findHeaviest(modulePath, projectRoot string) model.HeaviestFile {
-	topFiles := g.findTopFiles(modulePath, projectRoot)
+	topFiles := g.findTopFiles(modulePath, projectRoot, moduleTopFileLimit(relativePath(projectRoot, modulePath), maxPackageTopFiles))
 	if len(topFiles) == 0 {
 		return model.HeaviestFile{}
 	}
 	return heaviestFromSummary(topFiles[0])
 }
 
-func (g *GoDetector) findTopFiles(modulePath, projectRoot string) []model.FileSummary {
+func (g *GoDetector) findTopFiles(modulePath, projectRoot string, limit int) []model.FileSummary {
 	var topFiles []model.FileSummary
 	filepath.WalkDir(modulePath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -224,7 +224,7 @@ func (g *GoDetector) findTopFiles(modulePath, projectRoot string) []model.FileSu
 			Name: d.Name(),
 			Path: relativePath(projectRoot, path),
 			Size: info.Size(),
-		}, 3)
+		}, limit)
 		return nil
 	})
 	return topFiles
@@ -245,11 +245,12 @@ func recordGoFile(packageMap map[string]*model.Package, fullRootPath, projectRoo
 	}
 
 	pkg.FileCount++
+	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles)
 	pkg.TopFiles = addTopFile(pkg.TopFiles, model.FileSummary{
 		Name: name,
 		Path: relToProject,
 		Size: size,
-	}, 3)
+	}, limit)
 	if len(pkg.TopFiles) > 0 {
 		pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
 	}

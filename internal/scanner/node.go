@@ -11,7 +11,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/util"
 )
 
-const maxNodeRootOverviewFiles = 6
+const maxNodeRootOverviewFiles = maxRootPackageTopFiles
 
 // NodeDetector handles Node-family projects rooted at package.json files.
 type NodeDetector struct {
@@ -113,9 +113,10 @@ func (n *NodeDetector) analyzeModule(projectRoot, relPath string, packageJSON no
 		}
 		module.SourceRoots = append(module.SourceRoots, sr)
 		module.FileCount += sr.FileCount
+		limit := moduleTopFileLimit(module.Path, maxPackageTopFiles)
 		for _, pkg := range sr.Packages {
 			for _, file := range pkg.TopFiles {
-				module.TopFiles = addTopFile(module.TopFiles, file, 3)
+				module.TopFiles = addTopFile(module.TopFiles, file, limit)
 			}
 		}
 	}
@@ -402,8 +403,9 @@ func (n *NodeDetector) addRootOverviewPackage(module *model.Module, projectRoot,
 
 	module.SourceRoots[0].Packages = append(module.SourceRoots[0].Packages, overview)
 	module.SourceRoots[0].FileCount += overview.FileCount
+	limit := moduleTopFileLimit(module.Path, maxPackageTopFiles)
 	for _, file := range overview.TopFiles {
-		module.TopFiles = addTopFile(module.TopFiles, file, 3)
+		module.TopFiles = addTopFile(module.TopFiles, file, limit)
 	}
 }
 
@@ -865,11 +867,12 @@ func recordNodeFile(packageMap map[string]*model.Package, fullRootPath, projectR
 	}
 
 	pkg.FileCount++
+	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles)
 	pkg.TopFiles = addTopFile(pkg.TopFiles, model.FileSummary{
 		Name: name,
 		Path: relToProject,
 		Size: size,
-	}, 3)
+	}, limit)
 	if len(pkg.TopFiles) > 0 {
 		pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
 	}

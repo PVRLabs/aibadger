@@ -56,6 +56,10 @@ func sortPackageFileSummaries(module *model.Module, pkg *model.Package) {
 		sortPythonFileSummaries(pkg.TopFiles)
 		return
 	}
+	if (module.Language == "JavaScript" || module.Language == "TypeScript") && pkg.Path == "" {
+		sortNodeRootFileSummaries(pkg.TopFiles)
+		return
+	}
 	sortFileSummaries(pkg.TopFiles)
 }
 
@@ -77,6 +81,20 @@ func sortPythonFileSummaries(files []model.FileSummary) {
 	sort.SliceStable(files, func(i, j int) bool {
 		if pythonFileRank(files[i].Name) != pythonFileRank(files[j].Name) {
 			return pythonFileRank(files[i].Name) < pythonFileRank(files[j].Name)
+		}
+		if files[i].Size == files[j].Size {
+			return files[i].Path < files[j].Path
+		}
+		return files[i].Size > files[j].Size
+	})
+}
+
+func sortNodeRootFileSummaries(files []model.FileSummary) {
+	sort.SliceStable(files, func(i, j int) bool {
+		pi := nodeOverviewPriority(files[i].Path)
+		pj := nodeOverviewPriority(files[j].Path)
+		if pi != pj {
+			return pi < pj
 		}
 		if files[i].Size == files[j].Size {
 			return files[i].Path < files[j].Path

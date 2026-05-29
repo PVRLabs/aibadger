@@ -111,6 +111,24 @@ func TestAddTopFileCapsAndOrdersBySize(t *testing.T) {
 	}
 }
 
+func TestPackageTopFileLimit(t *testing.T) {
+	if got := packageTopFileLimit("", maxPackageTopFiles); got != maxRootPackageTopFiles {
+		t.Fatalf("packageTopFileLimit(\"\", %d) = %d, want %d", maxPackageTopFiles, got, maxRootPackageTopFiles)
+	}
+	if got := packageTopFileLimit("src", maxPackageTopFiles); got != maxPackageTopFiles {
+		t.Fatalf("packageTopFileLimit(\"src\", %d) = %d, want %d", maxPackageTopFiles, got, maxPackageTopFiles)
+	}
+	if got := moduleTopFileLimit("", maxPackageTopFiles); got != maxRootPackageTopFiles {
+		t.Fatalf("moduleTopFileLimit(\"\", %d) = %d, want %d", maxPackageTopFiles, got, maxRootPackageTopFiles)
+	}
+	if got := moduleTopFileLimit("pkg", maxPackageTopFiles); got != maxPackageTopFiles {
+		t.Fatalf("moduleTopFileLimit(\"pkg\", %d) = %d, want %d", maxPackageTopFiles, got, maxPackageTopFiles)
+	}
+	if got := moduleTopFileLimit("pkg", 5); got != 5 {
+		t.Fatalf("moduleTopFileLimit(\"pkg\", 5) = %d, want 5", got)
+	}
+}
+
 func TestAddTopFileTieBreaksByPath(t *testing.T) {
 	var files []model.FileSummary
 	files = addTopFile(files, model.FileSummary{Name: "b.go", Path: "pkg/b.go", Size: 100}, 3)

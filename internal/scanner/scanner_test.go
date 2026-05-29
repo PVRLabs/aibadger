@@ -423,6 +423,83 @@ func TestFinalizeTopologyPrunesEmptyPackagesAndSourceRootsAfterDedup(t *testing.
 	}
 }
 
+func TestFinalizeTopologyNestedPackageDoesNotShrinkRootModuleTopFiles(t *testing.T) {
+	rootFiles := []model.FileSummary{
+		{Name: "README.md", Path: "README.md", Size: 10},
+		{Name: "AGENTS.md", Path: "AGENTS.md", Size: 9},
+		{Name: "package.json", Path: "package.json", Size: 8},
+		{Name: "tsconfig.json", Path: "tsconfig.json", Size: 7},
+		{Name: "vite.config.ts", Path: "vite.config.ts", Size: 6},
+		{Name: "Dockerfile", Path: "Dockerfile", Size: 5},
+		{Name: "Makefile", Path: "Makefile", Size: 4},
+		{Name: "LICENSE", Path: "LICENSE", Size: 3},
+		{Name: "CHANGELOG.md", Path: "CHANGELOG.md", Size: 2},
+		{Name: "index.html", Path: "index.html", Size: 1},
+		{Name: "main.ts", Path: "main.ts", Size: 1},
+	}
+	topology := &model.ProjectTopology{
+		Modules: []model.Module{
+			{
+				Name:      "app",
+				Path:      "",
+				Language:  "TypeScript",
+				FileCount: len(rootFiles) + 4,
+				SourceRoots: []model.SourceRoot{
+					{
+						Path:      "",
+						FileCount: len(rootFiles) + 4,
+						Packages: []model.Package{
+							{
+								Name:      "root",
+								Path:      "",
+								FileCount: len(rootFiles),
+								TopFiles:  rootFiles,
+							},
+							{
+								Name:      "src",
+								Path:      "src",
+								FileCount: 4,
+								TopFiles: []model.FileSummary{
+									{Name: "alpha.ts", Path: filepath.Join("src", "alpha.ts"), Size: 4},
+									{Name: "beta.ts", Path: filepath.Join("src", "beta.ts"), Size: 3},
+									{Name: "gamma.ts", Path: filepath.Join("src", "gamma.ts"), Size: 2},
+									{Name: "delta.ts", Path: filepath.Join("src", "delta.ts"), Size: 1},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	NewScanner("").finalizeTopology(topology)
+
+	module := topology.Modules[0]
+	rootPkg := findPackage(module, "")
+	if rootPkg == nil {
+		t.Fatalf("missing root package after finalization: %+v", module.SourceRoots)
+	}
+	if len(rootPkg.TopFiles) != maxRootPackageTopFiles {
+		t.Fatalf("len(rootPkg.TopFiles) = %d, want %d", len(rootPkg.TopFiles), maxRootPackageTopFiles)
+	}
+	srcPkg := findPackage(module, "src")
+	if srcPkg == nil {
+		t.Fatalf("missing src package after finalization: %+v", module.SourceRoots)
+	}
+	if len(srcPkg.TopFiles) != maxPackageTopFiles {
+		t.Fatalf("len(srcPkg.TopFiles) = %d, want %d", len(srcPkg.TopFiles), maxPackageTopFiles)
+	}
+	if len(module.TopFiles) != maxRootPackageTopFiles {
+		t.Fatalf("len(module.TopFiles) = %d, want %d; module.TopFiles = %+v", len(module.TopFiles), maxRootPackageTopFiles, module.TopFiles)
+	}
+	for _, path := range []string{"README.md", "AGENTS.md", "package.json", "tsconfig.json"} {
+		if !hasTopFile(module.TopFiles, path) {
+			t.Fatalf("module.TopFiles = %+v, missing high-signal root file %q", module.TopFiles, path)
+		}
+	}
+}
+
 func TestScanAppliesTopologyPipelineMVPPoliciesTogether(t *testing.T) {
 	tmpDir := t.TempDir()
 	writeTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/mvp\n")

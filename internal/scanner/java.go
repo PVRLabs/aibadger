@@ -97,7 +97,7 @@ func (j *JavaDetector) analyzeModule(root, relPath string) model.Module {
 
 	mergeWebSourceRoots(&module, scanModuleWebResources(root, fullModulePath))
 
-	module.TopFiles = j.findTopFiles(fullModulePath, root)
+	module.TopFiles = j.findTopFiles(fullModulePath, root, moduleTopFileLimit(module.Path, maxPackageTopFiles))
 	if len(module.TopFiles) > 0 {
 		module.Heaviest = heaviestFromSummary(module.TopFiles[0])
 	}
@@ -156,14 +156,14 @@ func (j *JavaDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string) 
 }
 
 func (j *JavaDetector) findHeaviest(modulePath, projectRoot string) model.HeaviestFile {
-	topFiles := j.findTopFiles(modulePath, projectRoot)
+	topFiles := j.findTopFiles(modulePath, projectRoot, moduleTopFileLimit(relativePath(projectRoot, modulePath), maxPackageTopFiles))
 	if len(topFiles) == 0 {
 		return model.HeaviestFile{}
 	}
 	return heaviestFromSummary(topFiles[0])
 }
 
-func (j *JavaDetector) findTopFiles(modulePath, projectRoot string) []model.FileSummary {
+func (j *JavaDetector) findTopFiles(modulePath, projectRoot string, limit int) []model.FileSummary {
 	var topFiles []model.FileSummary
 	filepath.WalkDir(modulePath, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -187,7 +187,7 @@ func (j *JavaDetector) findTopFiles(modulePath, projectRoot string) []model.File
 			Name: d.Name(),
 			Path: relativePath(projectRoot, path),
 			Size: info.Size(),
-		}, 3)
+		}, limit)
 		return nil
 	})
 	return topFiles
@@ -227,11 +227,12 @@ func recordJavaFile(packageMap map[string]*model.Package, fullRootPath, projectR
 	}
 
 	pkg.FileCount++
+	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles)
 	pkg.TopFiles = addTopFile(pkg.TopFiles, model.FileSummary{
 		Name: name,
 		Path: relToProject,
 		Size: size,
-	}, 3)
+	}, limit)
 	if len(pkg.TopFiles) > 0 {
 		pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
 	}

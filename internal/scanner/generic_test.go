@@ -86,6 +86,62 @@ func TestGenericDetectorLabelsAssetFilesAndOmitsRootBinary(t *testing.T) {
 	}
 }
 
+func TestGenericDetectorUsesFallbackTopFileBudgetForRootAndNestedPackages(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	rootFiles := map[string]string{
+		"README.md":      "# root\n",
+		"AGENTS.md":      "# agents\n",
+		"package.json":   "{\n  \"name\": \"root\"\n}\n",
+		"pyproject.toml": "[project]\nname = \"root\"\n",
+		"Dockerfile":     "FROM scratch\n",
+		"Makefile":       "test:\n\ttrue\n",
+		"LICENSE":        "MIT\n",
+		"CHANGELOG.md":   "# changelog\n",
+		"notes.txt":      "notes\n",
+		"index.html":     "<html></html>\n",
+		"app.ts":         "export const app = true\n",
+	}
+	for relPath, contents := range rootFiles {
+		writeTestFile(t, filepath.Join(tmpDir, relPath), contents)
+	}
+	writeTestFile(t, filepath.Join(tmpDir, "src", "a.py"), "print('a')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "b.py"), "print('b')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "c.py"), "print('c')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "d.py"), "print('d')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "e.py"), "print('e')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "f.py"), "print('f')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "g.py"), "print('g')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "h.py"), "print('h')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "i.py"), "print('i')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "j.py"), "print('j')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "k.py"), "print('k')\n")
+
+	modules, err := NewGenericDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want 1", len(modules))
+	}
+
+	rootPkg := findGenericPackage(modules[0], "")
+	if rootPkg == nil {
+		t.Fatal("root package not found")
+	}
+	if len(rootPkg.TopFiles) != maxRootPackageTopFiles {
+		t.Fatalf("len(rootPkg.TopFiles) = %d, want %d", len(rootPkg.TopFiles), maxRootPackageTopFiles)
+	}
+
+	srcPkg := findGenericPackage(modules[0], "src")
+	if srcPkg == nil {
+		t.Fatal("nested src package not found")
+	}
+	if len(srcPkg.TopFiles) != maxGenericPackageFiles {
+		t.Fatalf("len(srcPkg.TopFiles) = %d, want %d", len(srcPkg.TopFiles), maxGenericPackageFiles)
+	}
+}
+
 func TestGenericDetectorOmitsNoiseFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	files := map[string][]byte{

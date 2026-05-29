@@ -140,7 +140,7 @@ func recordWebResourceFile(projectRoot, fullRootPath, path, name string, size in
 	if kind == model.FileKindAsset || kind == model.FileKindBinary {
 		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, 3)
 	} else {
-		pkg.TopFiles = addTopFile(pkg.TopFiles, file, 3)
+		pkg.TopFiles = addTopFile(pkg.TopFiles, file, packageTopFileLimit(packagePath, maxPackageTopFiles))
 		if len(pkg.TopFiles) > 0 {
 			pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
 		}
@@ -267,7 +267,7 @@ func mergeWebPackages(sourceRoot *model.SourceRoot, packages []model.Package) {
 			}
 			sourceRoot.Packages[idx].FileCount += webPackage.FileCount
 			for _, file := range webPackage.TopFiles {
-				sourceRoot.Packages[idx].TopFiles = addTopFile(sourceRoot.Packages[idx].TopFiles, file, 3)
+				sourceRoot.Packages[idx].TopFiles = addTopFile(sourceRoot.Packages[idx].TopFiles, file, packageTopFileLimit(sourceRoot.Packages[idx].Path, maxPackageTopFiles))
 			}
 			for _, file := range webPackage.AuxFiles {
 				sourceRoot.Packages[idx].AuxFiles = addAuxFile(sourceRoot.Packages[idx].AuxFiles, file, 10)

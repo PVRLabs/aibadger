@@ -14,8 +14,6 @@ func isTextControlFile(name string) bool {
 		"makefile",
 		"taskfile.yml",
 		"justfile",
-		".gitignore",
-		".dockerignore",
 		"readme.md",
 		"agents.md",
 		"license":

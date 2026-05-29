@@ -44,8 +44,7 @@ func classifyByName(path string) string {
 		"vite.config.js", "vite.config.ts", "next.config.js", "next.config.ts",
 		"webpack.config.js", "tsconfig.json", "jsconfig.json", "index.html",
 		"readme", "readme.md", "agents.md", "license",
-		"makefile", "dockerfile", "taskfile.yml", "justfile",
-		".gitignore", ".dockerignore":
+		"makefile", "dockerfile", "taskfile.yml", "justfile":
 		return model.FileKindSource
 	}
 

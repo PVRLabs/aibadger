@@ -154,6 +154,8 @@ func TestGenericDetectorOmitsNoiseFiles(t *testing.T) {
 		"target/app.jar":    []byte("jar"),
 		"build/Main.class":  []byte("class"),
 		"bin/native.dylib":  []byte("binary"),
+		".gitignore":        []byte("tmp\n"),
+		".dockerignore":     []byte(".git\n"),
 		"Dockerfile":        []byte("FROM scratch"),
 		"Makefile":          []byte("test:\n\tgo test ./..."),
 		"LICENSE":           []byte("MIT"),
@@ -307,13 +309,11 @@ func TestGenericFallbackSurfacesControlConfigPrompt1(t *testing.T) {
 	output := protocol.NewFormatter().GenerateSchemaA(topology, "summarize this repository")
 	for _, want := range []string{
 		"Languages: Generic",
-		"Pkg: . [9 files] -> Top:",
+		"Pkg: . [7 files] -> Top:",
 		"Dockerfile",
 		"Makefile",
 		"Taskfile.yml",
 		"justfile",
-		".gitignore",
-		".dockerignore",
 		"README.md",
 		"AGENTS.md",
 		"LICENSE",

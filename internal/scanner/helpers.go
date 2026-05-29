@@ -45,7 +45,8 @@ func shouldOmitFile(root, path, name string) bool {
 func isOmittedNoiseName(name string) bool {
 	switch strings.ToLower(name) {
 	case ".ds_store", "thumbs.db",
-		"go.sum", "package-lock.json", "pnpm-lock.yaml", "yarn.lock":
+		"go.sum", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+		".gitignore", ".dockerignore":
 		return true
 	default:
 		return false

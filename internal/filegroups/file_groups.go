@@ -151,6 +151,9 @@ var (
 		".yaml",
 		".json",
 		".toml",
+		".tf",
+		".tfvars",
+		".hcl",
 		".ini",
 		".conf",
 		".properties",
@@ -272,9 +275,9 @@ func OpsFileRank(name string) int {
 		return 1
 	case containsLowerName(rootOpsFileNames, lowerName) || containsLowerName(opsContextFileNames, lowerName):
 		return 2
-	case hasAnyLowerSubstring(lowerName, []string{"runbook", "manual", "deploy", "deployment", "provision", "release"}):
+	case strings.HasSuffix(lowerName, ".md") && hasAnyLowerSubstring(lowerName, []string{"runbook", "manual", "deploy", "deployment", "provision", "release"}):
 		return 3
-	case hasAnyLowerSubstring(lowerName, []string{"start", "stop", "restart", "run", "diagnose", "check", "health", "status", "backup", "restore", "import", "export", "migration", "schema", "seed"}):
+	case hasAnyLowerSubstring(lowerName, []string{"deploy", "deployment", "provision", "release", "start", "stop", "restart", "run", "diagnose", "check", "health", "status", "backup", "restore", "import", "export", "migration", "schema", "seed"}):
 		return 4
 	case IsOpsContextFileName(lowerName):
 		return 5

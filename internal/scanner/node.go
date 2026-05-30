@@ -15,7 +15,8 @@ const maxNodeRootOverviewFiles = maxRootPackageTopFiles
 
 // NodeDetector handles Node-family projects rooted at package.json files.
 type NodeDetector struct {
-	Exclusions map[string]bool
+	Exclusions     map[string]bool
+	maxFilesPerDir int
 }
 
 // NewNodeDetector returns a new Node detector.
@@ -812,6 +813,7 @@ func normalizeNodeCandidatePath(relPath, fullModulePath string) (string, bool) {
 func (n *NodeDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string) {
 	fullRootPath := filepath.Join(projectRoot, sr.Path)
 	packageMap := make(map[string]*model.Package)
+	perDirFiles := make(map[string]int)
 
 	filepath.WalkDir(fullRootPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -827,6 +829,14 @@ func (n *NodeDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string) 
 
 		if !isNodeSourceFile(d.Name()) {
 			return nil
+		}
+
+		if n.maxFilesPerDir > 0 {
+			dir := filepath.Dir(path)
+			perDirFiles[dir]++
+			if perDirFiles[dir] > n.maxFilesPerDir {
+				return nil
+			}
 		}
 
 		info, infoErr := d.Info()

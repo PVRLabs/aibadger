@@ -38,10 +38,13 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
+	nodeDetector := NewNodeDetector()
+	nodeDetector.maxFilesPerDir = s.MaxFilesPerDirectory
+
 	detectors := []func(string) ([]model.Module, error){
 		NewGoDetector().Detect,
 		NewJavaDetector().Detect,
-		NewNodeDetector().Detect,
+		nodeDetector.Detect,
 		NewPythonDetector().Detect,
 	}
 	for _, detect := range detectors {

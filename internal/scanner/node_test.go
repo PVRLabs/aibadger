@@ -396,6 +396,41 @@ func TestNodeDetectorRecognizesCommonSourceRoots(t *testing.T) {
 	}
 }
 
+func TestScannerAppliesMaxFilesPerDirectoryToNodeSourceRoots(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeTestFile(t, filepath.Join(tmpDir, "package.json"), `{"name":"web-app","main":"src/a.js"}`)
+	writeTestFile(t, filepath.Join(tmpDir, "src", "a.js"), "export const a = true\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "b.js"), "export const b = true\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "c.js"), "export const c = true\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "nested", "d.js"), "export const d = true\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "nested", "e.js"), "export const e = true\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "nested", "f.js"), "export const f = true\n")
+
+	scanner := NewScanner(tmpDir)
+	scanner.MaxFilesPerDirectory = 2
+	topology, err := scanner.Scan()
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if len(topology.Modules) != 1 {
+		t.Fatalf("len(topology.Modules) = %d, want 1", len(topology.Modules))
+	}
+
+	module := topology.Modules[0]
+	if module.FileCount != 4 {
+		t.Fatalf("module.FileCount = %d, want 4 files capped to 2 per directory", module.FileCount)
+	}
+	srcPkg := findPackage(module, "src")
+	if srcPkg == nil || srcPkg.FileCount != 2 {
+		t.Fatalf("src package = %+v, want 2 files", srcPkg)
+	}
+	nestedPkg := findPackage(module, filepath.Join("src", "nested"))
+	if nestedPkg == nil || nestedPkg.FileCount != 2 {
+		t.Fatalf("nested package = %+v, want 2 files", nestedPkg)
+	}
+}
+
 func TestNodeDetectorIncludesConservativeTestRoots(t *testing.T) {
 	tmpDir := t.TempDir()
 

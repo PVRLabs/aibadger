@@ -16,6 +16,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/github"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/startup"
 	"github.com/PVRLabs/aibadger/internal/version"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
@@ -180,15 +181,19 @@ func TestNewModelSkipsOnboardingWhenCompleted(t *testing.T) {
 func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SettingsPath = filepath.Join(t.TempDir(), ".badger", "settings.json")
-	cfg.StartupGoal = "Review this change for concrete bugs."
-	cfg.StartupAttachmentType = "git diff"
-	cfg.StartupAttachmentSource = "git diff"
-	cfg.StartupAttachmentText = "diff --git a/app.go b/app.go\n"
-	cfg.StartupAttachmentFilesChanged = 1
-	cfg.StartupAttachmentAdditions = 1
-	cfg.StartupAttachmentDeletions = 0
-	cfg.StartupStatus = "Loaded review prompt from the current git diff. Edit it before submitting."
-	cfg.StartupStatusSeverity = "success"
+	cfg.Startup.Goal = "Review this change for concrete bugs."
+	cfg.Startup.Attachments = []startup.Attachment{{
+		Type:         "git diff",
+		Source:       "git diff",
+		Text:         "diff --git a/app.go b/app.go\n",
+		FilesChanged: 1,
+		Additions:    1,
+		Deletions:    0,
+	}}
+	cfg.Startup.Status = startup.Status{
+		Text:     "Loaded review prompt from the current git diff. Edit it before submitting.",
+		Severity: "success",
+	}
 	cfg.SkipOnboarding = true
 
 	m := NewModel("/tmp/project", cfg)
@@ -199,8 +204,8 @@ func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
 	if !m.goalInput.Focused() {
 		t.Fatal("goal input is not focused for startup review mode")
 	}
-	if got := m.goalInput.Value(); got != cfg.StartupGoal {
-		t.Fatalf("goal input = %q, want %q", got, cfg.StartupGoal)
+	if got := m.goalInput.Value(); got != cfg.Startup.Goal {
+		t.Fatalf("goal input = %q, want %q", got, cfg.Startup.Goal)
 	}
 	if len(m.goalAttachments) != 1 {
 		t.Fatalf("goalAttachments length = %d, want 1", len(m.goalAttachments))
@@ -208,13 +213,13 @@ func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
 	if m.goalAttachments[0].Type != goalAttachmentGitDiff {
 		t.Fatalf("attachment type = %q, want %q", m.goalAttachments[0].Type, goalAttachmentGitDiff)
 	}
-	if m.goalAttachments[0].Text != cfg.StartupAttachmentText {
-		t.Fatalf("attachment text = %q, want %q", m.goalAttachments[0].Text, cfg.StartupAttachmentText)
+	if m.goalAttachments[0].Text != cfg.Startup.Attachments[0].Text {
+		t.Fatalf("attachment text = %q, want %q", m.goalAttachments[0].Text, cfg.Startup.Attachments[0].Text)
 	}
 	if m.status.severity != messageSuccess {
 		t.Fatalf("status severity = %v, want %v", m.status.severity, messageSuccess)
 	}
-	if !strings.Contains(m.View(), cfg.StartupStatus) {
+	if !strings.Contains(m.View(), cfg.Startup.Status.Text) {
 		t.Fatalf("view missing startup status:\n%s", m.View())
 	}
 	if strings.Contains(m.View(), "First run") {
@@ -225,9 +230,11 @@ func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
 func TestNewModelAppliesStartupDesignGoalWithEnoughHeight(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SettingsPath = filepath.Join(t.TempDir(), ".badger", "settings.json")
-	cfg.StartupGoal = protocol.DefaultDesignPrompt
-	cfg.StartupStatus = "Focus set to Design. Edit the goal before submitting."
-	cfg.StartupStatusSeverity = "success"
+	cfg.Startup.Goal = protocol.DefaultDesignPrompt
+	cfg.Startup.Status = startup.Status{
+		Text:     "Focus set to Design. Edit the goal before submitting.",
+		Severity: "success",
+	}
 	cfg.SkipOnboarding = true
 
 	m := NewModel("/tmp/project", cfg)
@@ -235,8 +242,8 @@ func TestNewModelAppliesStartupDesignGoalWithEnoughHeight(t *testing.T) {
 	if m.state != stateHome {
 		t.Fatalf("state = %v, want %v", m.state, stateHome)
 	}
-	if got := m.goalInput.Value(); got != cfg.StartupGoal {
-		t.Fatalf("goal input = %q, want %q", got, cfg.StartupGoal)
+	if got := m.goalInput.Value(); got != cfg.Startup.Goal {
+		t.Fatalf("goal input = %q, want %q", got, cfg.Startup.Goal)
 	}
 	if got := m.goalInput.Height(); got != 4 {
 		t.Fatalf("goal input height = %d, want 4", got)
@@ -246,7 +253,7 @@ func TestNewModelAppliesStartupDesignGoalWithEnoughHeight(t *testing.T) {
 func TestNewModelAppliesBadgeStartupPrompt(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SettingsPath = filepath.Join(t.TempDir(), ".badger", "settings.json")
-	cfg.StartupGoal = "/badge"
+	cfg.Startup.Goal = "/badge"
 	cfg.SkipOnboarding = true
 
 	m := NewModel("/tmp/project", cfg)
@@ -267,9 +274,11 @@ func TestNewModelAppliesBadgeStartupPrompt(t *testing.T) {
 
 func TestNewModelAppliesFallbackReviewGoalAndWarningStatus(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.StartupGoal = "Review the following change before committing."
-	cfg.StartupStatus = "No git diff was detected. The prompt is editable."
-	cfg.StartupStatusSeverity = "warning"
+	cfg.Startup.Goal = "Review the following change before committing."
+	cfg.Startup.Status = startup.Status{
+		Text:     "No git diff was detected. The prompt is editable.",
+		Severity: "warning",
+	}
 	cfg.SkipOnboarding = true
 
 	m := NewModel("/tmp/project", cfg)
@@ -277,13 +286,13 @@ func TestNewModelAppliesFallbackReviewGoalAndWarningStatus(t *testing.T) {
 	if m.status.severity != messageWarning {
 		t.Fatalf("status severity = %v, want %v", m.status.severity, messageWarning)
 	}
-	if got := m.goalInput.Value(); got != cfg.StartupGoal {
-		t.Fatalf("goal input = %q, want %q", got, cfg.StartupGoal)
+	if got := m.goalInput.Value(); got != cfg.Startup.Goal {
+		t.Fatalf("goal input = %q, want %q", got, cfg.Startup.Goal)
 	}
 	if len(m.goalAttachments) != 0 {
 		t.Fatalf("goalAttachments length = %d, want 0", len(m.goalAttachments))
 	}
-	if !strings.Contains(m.View(), cfg.StartupStatus) {
+	if !strings.Contains(m.View(), cfg.Startup.Status.Text) {
 		t.Fatalf("view missing warning status:\n%s", m.View())
 	}
 }

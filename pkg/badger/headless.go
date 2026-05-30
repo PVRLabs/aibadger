@@ -20,8 +20,8 @@ type HeadlessOptions struct {
 	Step      string
 	InputPath string
 	Focus     protocol.Focus
-	// Goal is optional. Empty preserves the historical headless output used by
-	// certification fixtures; non-empty is threaded into Prompt 2 generation.
+	// Goal is optional. If empty, RunHeadless uses cfg.Startup.Goal. Empty
+	// preserves the historical headless output used by certification fixtures.
 	Goal             string
 	TruncateTopology bool
 	Stdin            io.Reader
@@ -49,6 +49,9 @@ func RunHeadless(cfg Config, opts HeadlessOptions) error {
 	stdout := opts.Stdout
 	if stdout == nil {
 		stdout = os.Stdout
+	}
+	if opts.Goal == "" {
+		opts.Goal = cfg.Startup.Goal
 	}
 
 	if err := engine.CheckDisabledAndExit(cfg.Root, stdout); err != nil {

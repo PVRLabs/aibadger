@@ -221,10 +221,10 @@ func NewModel(root string, cfg Config) Model {
 		m.session.WhitespaceMode = cfg.WhitespaceMode
 	}
 	m.onboardingCompletionSaved = onboardingCompleted
-	if m.cfg.StartupGoal != "" {
+	if m.cfg.Startup.Goal != "" {
 		m.applyStartupGoal()
 	}
-	if showOnboarding && !m.cfg.SkipOnboarding && m.cfg.StartupGoal == "" {
+	if showOnboarding && !m.cfg.SkipOnboarding && m.cfg.Startup.Goal == "" {
 		m.state = stateOnboarding
 		m.goalInput.Blur()
 	}
@@ -232,7 +232,7 @@ func NewModel(root string, cfg Config) Model {
 }
 
 func (m *Model) applyStartupGoal() {
-	if strings.TrimSpace(m.cfg.StartupGoal) == badgeCommand {
+	if strings.TrimSpace(m.cfg.Startup.Goal) == badgeCommand {
 		m.state = stateBadgePermissionPrompt
 		m.status = tuiMessage{}
 		m.err = nil
@@ -245,9 +245,9 @@ func (m *Model) applyStartupGoal() {
 		return
 	}
 	m.state = stateHome
-	m.status = startupMessage(m.cfg.StartupStatusSeverity, m.cfg.StartupStatus)
+	m.status = startupMessage(m.cfg.Startup.Status.Severity, m.cfg.Startup.Status.Text)
 	m.err = nil
-	m.setGoalInputValue(m.cfg.StartupGoal)
+	m.setGoalInputValue(m.cfg.Startup.Goal)
 	m.setGoalAttachments(startupGoalAttachments(m.cfg))
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
@@ -279,17 +279,20 @@ func (m *Model) appendGoalAttachment(attachment goalAttachment) {
 }
 
 func startupGoalAttachments(cfg Config) []goalAttachment {
-	text := strings.TrimSpace(cfg.StartupAttachmentText)
-	if text == "" {
-		return nil
+	attachments := make([]goalAttachment, 0, len(cfg.Startup.Attachments))
+	for _, attachment := range cfg.Startup.Attachments {
+		if strings.TrimSpace(attachment.Text) == "" {
+			continue
+		}
+		kind := goalAttachmentType(strings.TrimSpace(attachment.Type))
+		source := strings.TrimSpace(attachment.Source)
+		if kind == goalAttachmentText {
+			attachments = append(attachments, newGoalTextAttachment(source, attachment.Text))
+			continue
+		}
+		attachments = append(attachments, newGoalGitDiffAttachmentWithStats(source, attachment.Text, attachment.FilesChanged, attachment.Additions, attachment.Deletions))
 	}
-
-	kind := goalAttachmentType(strings.TrimSpace(cfg.StartupAttachmentType))
-	source := strings.TrimSpace(cfg.StartupAttachmentSource)
-	if kind == goalAttachmentText {
-		return []goalAttachment{newGoalTextAttachment(source, cfg.StartupAttachmentText)}
-	}
-	return []goalAttachment{newGoalGitDiffAttachmentWithStats(source, cfg.StartupAttachmentText, cfg.StartupAttachmentFilesChanged, cfg.StartupAttachmentAdditions, cfg.StartupAttachmentDeletions)}
+	return attachments
 }
 
 func startupMessage(severity, text string) tuiMessage {

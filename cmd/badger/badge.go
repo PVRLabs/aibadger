@@ -21,7 +21,7 @@ func applyBadgeStartup(app *appConfig, badgerCfg *badger.Config) error {
 	}
 
 	badgerCfg.SkipOnboarding = true
-	badgerCfg.StartupGoal = badgeStartupGoal
+	badgerCfg.Startup = badger.StartupContext{Goal: badgeStartupGoal}
 	return nil
 }
 

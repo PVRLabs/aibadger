@@ -90,17 +90,14 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	var headlessReviewGoal string
 	if cfg.focus == protocol.FocusReview {
-		var err error
-		headlessReviewGoal, err = applyReviewStartup(&badgerCfg, cfg)
-		if err != nil {
+		if err := applyReviewStartup(&badgerCfg, cfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	}
 	if cfg.focus == protocol.FocusDesign {
-		headlessReviewGoal = applyDesignStartup(&badgerCfg, cfg)
+		applyDesignStartup(&badgerCfg, cfg)
 	}
 	if !cfg.headless {
 		if err := badger.Run(badgerCfg); err != nil {
@@ -112,7 +109,6 @@ func main() {
 	if err := badger.RunHeadless(badgerCfg, badger.HeadlessOptions{
 		Step:             cfg.stepFlag,
 		InputPath:        cfg.inputFlag,
-		Goal:             headlessReviewGoal,
 		TruncateTopology: cfg.truncateTopology,
 	}); err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -302,55 +298,39 @@ func validateReviewOptions(mode reviewtask.Mode, ref string) error {
 	return nil
 }
 
-func applyDesignStartup(cfg *badger.Config, app appConfig) string {
-	if app.headless {
-		return protocol.DefaultDesignPrompt
-	}
+func applyDesignStartup(cfg *badger.Config, app appConfig) {
 	cfg.SkipOnboarding = true
-	cfg.StartupGoal = protocol.DefaultDesignPrompt
-	cfg.StartupStatus = "Focus set to Design. Edit the goal before submitting."
-	cfg.StartupStatusSeverity = "success"
-	return ""
+	cfg.Startup = badger.StartupContext{
+		Goal: protocol.DefaultDesignPrompt,
+		Status: badger.StartupStatus{
+			Text:     "Focus set to Design. Edit the goal before submitting.",
+			Severity: "success",
+		},
+	}
 }
 
-func applyReviewStartup(cfg *badger.Config, app appConfig) (string, error) {
+func applyReviewStartup(cfg *badger.Config, app appConfig) error {
 	reviewTask, err := reviewtask.Build(cfg.Root, reviewtask.Options{
 		Mode:       app.reviewMode,
 		Ref:        app.reviewRef,
 		ExtraFocus: app.reviewExtraFocus,
 	})
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if app.headless {
-		return reviewTask.HeadlessGoal()
+		goal, err := reviewTask.HeadlessGoal()
+		if err != nil {
+			return err
+		}
+		cfg.Startup = badger.StartupContext{Goal: goal}
+		return nil
 	}
 
 	cfg.SkipOnboarding = true
-	cfg.StartupStatus, cfg.StartupStatusSeverity = reviewTask.StartupStatus()
-	if reviewTask.FailureClassification == reviewtask.FailureNone {
-		cfg.StartupGoal = reviewTask.Instruction
-		cfg.StartupAttachmentType = "git diff"
-		cfg.StartupAttachmentSource = "git diff"
-		cfg.StartupAttachmentText = reviewTask.Diff
-		cfg.StartupAttachmentSizeBytes = int64(len(reviewTask.Diff))
-		cfg.StartupAttachmentLines = strings.Count(strings.TrimRight(reviewTask.Diff, "\n"), "\n") + 1
-		cfg.StartupAttachmentFilesChanged = reviewTask.FilesChanged
-		cfg.StartupAttachmentAdditions = reviewTask.Additions
-		cfg.StartupAttachmentDeletions = reviewTask.Deletions
-	} else {
-		cfg.StartupGoal = reviewTask.StartupPrompt()
-		cfg.StartupAttachmentType = ""
-		cfg.StartupAttachmentSource = ""
-		cfg.StartupAttachmentText = ""
-		cfg.StartupAttachmentSizeBytes = 0
-		cfg.StartupAttachmentLines = 0
-		cfg.StartupAttachmentFilesChanged = 0
-		cfg.StartupAttachmentAdditions = 0
-		cfg.StartupAttachmentDeletions = 0
-	}
-	return "", nil
+	cfg.Startup = reviewTask.StartupContext()
+	return nil
 }
 
 func usedDevOnlyFlags(args []string) []string {

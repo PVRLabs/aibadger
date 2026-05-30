@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/PVRLabs/aibadger/internal/startup"
 )
 
 // Mode selects how the review diff should be resolved.
@@ -94,6 +96,33 @@ func (t Task) StartupStatus() (text, severity string) {
 	default:
 		return "Loaded review prompt. Edit it before submitting.", "neutral"
 	}
+}
+
+// StartupContext returns the interactive startup payload for the task.
+func (t Task) StartupContext() startup.Context {
+	text, severity := t.StartupStatus()
+	ctx := startup.Context{
+		Goal: t.StartupPrompt(),
+		Status: startup.Status{
+			Text:     text,
+			Severity: severity,
+		},
+	}
+	if t.FailureClassification != FailureNone {
+		return ctx
+	}
+	ctx.Goal = t.Instruction
+	ctx.Attachments = []startup.Attachment{{
+		Type:         "git diff",
+		Source:       "git diff",
+		Text:         t.Diff,
+		SizeBytes:    int64(len(t.Diff)),
+		Lines:        strings.Count(strings.TrimRight(t.Diff, "\n"), "\n") + 1,
+		FilesChanged: t.FilesChanged,
+		Additions:    t.Additions,
+		Deletions:    t.Deletions,
+	}}
+	return ctx
 }
 
 // HeadlessGoal returns the generated prompt that should seed headless review

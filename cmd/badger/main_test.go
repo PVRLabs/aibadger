@@ -139,24 +139,21 @@ func TestApplyDesignStartupInteractive(t *testing.T) {
 		focus: protocol.FocusDesign,
 	}
 
-	goal := applyDesignStartup(&cfg, app)
-	if goal != "" {
-		t.Fatalf("design goal = %q, want empty for interactive startup", goal)
-	}
+	applyDesignStartup(&cfg, app)
 	if !cfg.SkipOnboarding {
 		t.Fatal("SkipOnboarding = false, want true")
 	}
-	if cfg.StartupGoal != protocol.DefaultDesignPrompt {
-		t.Fatalf("StartupGoal = %q, want %q", cfg.StartupGoal, protocol.DefaultDesignPrompt)
+	if cfg.Startup.Goal != protocol.DefaultDesignPrompt {
+		t.Fatalf("Startup.Goal = %q, want %q", cfg.Startup.Goal, protocol.DefaultDesignPrompt)
 	}
-	if cfg.StartupStatusSeverity != "success" {
-		t.Fatalf("StartupStatusSeverity = %q, want %q", cfg.StartupStatusSeverity, "success")
+	if cfg.Startup.Status.Severity != "success" {
+		t.Fatalf("Startup.Status.Severity = %q, want %q", cfg.Startup.Status.Severity, "success")
 	}
-	if cfg.StartupStatus == "" {
-		t.Fatal("StartupStatus is empty")
+	if cfg.Startup.Status.Text == "" {
+		t.Fatal("Startup.Status.Text is empty")
 	}
-	if !strings.Contains(cfg.StartupStatus, "Design") {
-		t.Fatalf("StartupStatus = %q, want message mentioning Design", cfg.StartupStatus)
+	if !strings.Contains(cfg.Startup.Status.Text, "Design") {
+		t.Fatalf("Startup.Status.Text = %q, want message mentioning Design", cfg.Startup.Status.Text)
 	}
 }
 
@@ -168,15 +165,12 @@ func TestApplyDesignStartupHeadless(t *testing.T) {
 		headless: true,
 	}
 
-	goal := applyDesignStartup(&cfg, app)
-	if goal == "" {
-		t.Fatal("headless design goal is empty")
+	applyDesignStartup(&cfg, app)
+	if cfg.Startup.Goal == "" {
+		t.Fatal("headless design startup goal is empty")
 	}
-	if !strings.Contains(goal, "Design") {
-		t.Fatalf("headless design goal missing design template:\n%s", goal)
-	}
-	if cfg.StartupGoal != "" {
-		t.Fatalf("StartupGoal = %q, want empty for headless startup", cfg.StartupGoal)
+	if !strings.Contains(cfg.Startup.Goal, "Design") {
+		t.Fatalf("headless design startup goal missing design template:\n%s", cfg.Startup.Goal)
 	}
 }
 
@@ -191,31 +185,32 @@ func TestApplyReviewStartupUsesReviewPrompt(t *testing.T) {
 		reviewExtraFocus: "Check edge cases.",
 	}
 
-	if goal, err := applyReviewStartup(&cfg, app); err != nil {
+	if err := applyReviewStartup(&cfg, app); err != nil {
 		t.Fatalf("applyReviewStartup() error = %v", err)
-	} else if goal != "" {
-		t.Fatalf("headless review goal = %q, want empty for interactive startup", goal)
 	}
-	if cfg.StartupGoal == "" {
-		t.Fatal("StartupGoal is empty")
+	if cfg.Startup.Goal == "" {
+		t.Fatal("Startup.Goal is empty")
 	}
-	if strings.Contains(cfg.StartupGoal, "Diff:") {
-		t.Fatalf("StartupGoal unexpectedly contains raw diff text:\n%s", cfg.StartupGoal)
+	if strings.Contains(cfg.Startup.Goal, "Diff:") {
+		t.Fatalf("Startup.Goal unexpectedly contains raw diff text:\n%s", cfg.Startup.Goal)
 	}
-	if cfg.StartupAttachmentType != "git diff" {
-		t.Fatalf("StartupAttachmentType = %q, want git diff", cfg.StartupAttachmentType)
+	if len(cfg.Startup.Attachments) != 1 {
+		t.Fatalf("Startup.Attachments length = %d, want 1", len(cfg.Startup.Attachments))
 	}
-	if cfg.StartupAttachmentText == "" {
-		t.Fatal("StartupAttachmentText is empty")
+	if cfg.Startup.Attachments[0].Type != "git diff" {
+		t.Fatalf("Startup.Attachments[0].Type = %q, want git diff", cfg.Startup.Attachments[0].Type)
 	}
-	if cfg.StartupAttachmentFilesChanged == 0 {
-		t.Fatal("StartupAttachmentFilesChanged is zero")
+	if cfg.Startup.Attachments[0].Text == "" {
+		t.Fatal("Startup.Attachments[0].Text is empty")
 	}
-	if cfg.StartupStatusSeverity != "success" {
-		t.Fatalf("StartupStatusSeverity = %q, want %q", cfg.StartupStatusSeverity, "success")
+	if cfg.Startup.Attachments[0].FilesChanged == 0 {
+		t.Fatal("Startup.Attachments[0].FilesChanged is zero")
 	}
-	if cfg.StartupStatus == "" {
-		t.Fatal("StartupStatus is empty")
+	if cfg.Startup.Status.Severity != "success" {
+		t.Fatalf("Startup.Status.Severity = %q, want %q", cfg.Startup.Status.Severity, "success")
+	}
+	if cfg.Startup.Status.Text == "" {
+		t.Fatal("Startup.Status.Text is empty")
 	}
 }
 
@@ -230,18 +225,14 @@ func TestApplyReviewStartupHeadlessUsesPreparedPrompt(t *testing.T) {
 		reviewMode: reviewtask.ModeDefault,
 	}
 
-	goal, err := applyReviewStartup(&cfg, app)
-	if err != nil {
+	if err := applyReviewStartup(&cfg, app); err != nil {
 		t.Fatalf("applyReviewStartup() error = %v", err)
 	}
-	if goal == "" {
-		t.Fatal("headless review goal is empty")
+	if cfg.Startup.Goal == "" {
+		t.Fatal("headless review startup goal is empty")
 	}
-	if !strings.Contains(goal, "Diff:") {
-		t.Fatalf("headless review goal missing diff prompt:\n%s", goal)
-	}
-	if cfg.StartupGoal != "" {
-		t.Fatalf("StartupGoal = %q, want empty for headless startup", cfg.StartupGoal)
+	if !strings.Contains(cfg.Startup.Goal, "Diff:") {
+		t.Fatalf("headless review startup goal missing diff prompt:\n%s", cfg.Startup.Goal)
 	}
 }
 
@@ -255,12 +246,12 @@ func TestApplyReviewStartupHeadlessRejectsNoDiff(t *testing.T) {
 		reviewMode: reviewtask.ModeDefault,
 	}
 
-	goal, err := applyReviewStartup(&cfg, app)
+	err := applyReviewStartup(&cfg, app)
 	if err == nil {
 		t.Fatal("applyReviewStartup() error = nil, want no-diff failure")
 	}
-	if goal != "" {
-		t.Fatalf("headless review goal = %q, want empty on failure", goal)
+	if cfg.Startup.Goal != "" {
+		t.Fatalf("headless review startup goal = %q, want empty on failure", cfg.Startup.Goal)
 	}
 	if !strings.Contains(err.Error(), "no git diff was detected") {
 		t.Fatalf("error = %v, want no-diff failure", err)
@@ -277,12 +268,12 @@ func TestApplyReviewStartupHeadlessRejectsNonGit(t *testing.T) {
 		reviewMode: reviewtask.ModeDefault,
 	}
 
-	goal, err := applyReviewStartup(&cfg, app)
+	err := applyReviewStartup(&cfg, app)
 	if err == nil {
 		t.Fatal("applyReviewStartup() error = nil, want non-git failure")
 	}
-	if goal != "" {
-		t.Fatalf("headless review goal = %q, want empty on failure", goal)
+	if cfg.Startup.Goal != "" {
+		t.Fatalf("headless review startup goal = %q, want empty on failure", cfg.Startup.Goal)
 	}
 	if !strings.Contains(err.Error(), "not a git repository") {
 		t.Fatalf("error = %v, want non-git failure", err)
@@ -295,26 +286,23 @@ func TestApplyReviewStartupUsesFallbackPromptWhenNoDiff(t *testing.T) {
 	cfg.Root = repo
 	app := appConfig{focus: protocol.FocusReview}
 
-	if _, err := applyReviewStartup(&cfg, app); err != nil {
+	if err := applyReviewStartup(&cfg, app); err != nil {
 		t.Fatalf("applyReviewStartup() error = %v", err)
 	}
 	if !cfg.SkipOnboarding {
 		t.Fatal("SkipOnboarding = false, want true")
 	}
-	if cfg.StartupStatusSeverity != "warning" {
-		t.Fatalf("StartupStatusSeverity = %q, want %q", cfg.StartupStatusSeverity, "warning")
+	if cfg.Startup.Status.Severity != "warning" {
+		t.Fatalf("Startup.Status.Severity = %q, want %q", cfg.Startup.Status.Severity, "warning")
 	}
-	if cfg.StartupGoal == "" {
-		t.Fatal("StartupGoal is empty")
+	if cfg.Startup.Goal == "" {
+		t.Fatal("Startup.Goal is empty")
 	}
-	if strings.Contains(cfg.StartupGoal, "Diff:") {
-		t.Fatalf("StartupGoal unexpectedly contains raw diff text:\n%s", cfg.StartupGoal)
+	if strings.Contains(cfg.Startup.Goal, "Diff:") {
+		t.Fatalf("Startup.Goal unexpectedly contains raw diff text:\n%s", cfg.Startup.Goal)
 	}
-	if cfg.StartupAttachmentText != "" {
-		t.Fatalf("StartupAttachmentText = %q, want empty for fallback prompt", cfg.StartupAttachmentText)
-	}
-	if cfg.StartupAttachmentType != "" {
-		t.Fatalf("StartupAttachmentType = %q, want empty for fallback prompt", cfg.StartupAttachmentType)
+	if len(cfg.Startup.Attachments) != 0 {
+		t.Fatalf("Startup.Attachments length = %d, want 0", len(cfg.Startup.Attachments))
 	}
 }
 
@@ -400,11 +388,11 @@ func TestApplyBadgeStartupInteractive(t *testing.T) {
 	if !cfg.SkipOnboarding {
 		t.Fatal("SkipOnboarding = false, want true")
 	}
-	if cfg.StartupGoal != badgeStartupGoal {
-		t.Fatalf("StartupGoal = %q, want %q", cfg.StartupGoal, badgeStartupGoal)
+	if cfg.Startup.Goal != badgeStartupGoal {
+		t.Fatalf("Startup.Goal = %q, want %q", cfg.Startup.Goal, badgeStartupGoal)
 	}
-	if cfg.StartupStatus != "" {
-		t.Fatalf("StartupStatus = %q, want empty", cfg.StartupStatus)
+	if cfg.Startup.Status.Text != "" {
+		t.Fatalf("Startup.Status.Text = %q, want empty", cfg.Startup.Status.Text)
 	}
 }
 

@@ -25,8 +25,13 @@ Copy **Prompt 1 (Map)** and paste it into an AI chat.
 The AI reads the topology and replies with selectors for the files it needs:
 
 - `FILE:path` — extracts the entire file.
-- `PREFIX:path#symbol` — extracts a declaration starting with that prefix.
-- `NEAR:path#keyword` — extracts the code block around the first matching line.
+- `PREFIX:path#literal prefix` — finds the first line whose trimmed content starts with the prefix, then extracts a logical code block.
+- `NEAR:path#literal string` — finds the first line containing the literal string, then extracts a logical code block.
+
+Extraction attempts to include relevant comments preceding the matched line.
+Badger searches for structural blocks (balanced braces, indentation, or
+declarations) within a lookahead limit; if structural detection fails, it
+falls back to a 10-line window (3 before, 6 after the match).
 
 ```text
 FILE:internal/scanner/scanner.go

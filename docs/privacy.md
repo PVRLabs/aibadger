@@ -12,7 +12,14 @@ Badger is local-first.
 
 ## Exclusions
 
-Secret and credential locations such as `.env` and `.git` are excluded from scanning.
+Badger automatically excludes obvious secret-bearing and sensitive paths from scanning and extraction, including:
+
+- **Credentials & Secrets**: `.env` (and `.env.*`), `.npmrc`, `.pypirc`, `.netrc`.
+- **Keys & Certificates**: `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa`, `id_dsa`, and other common private key formats.
+- **Cloud Configs**: `.aws/credentials`, `.aws/config`, `.gcp/credentials.json`, `.azure/` directories.
+- **System & Internal**: `.git`, `.kubeconfig`, and binary artifacts.
+
+These exclusions are hard-coded in the engine to ensure that even if you submit a broad goal, sensitive local data remains local.
 
 ## Consent Model
 

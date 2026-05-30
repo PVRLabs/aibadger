@@ -149,11 +149,13 @@ badger review   # Review focus — prompt is prefilled from the current git diff
 When you paste a git diff, error output, or other supporting text into
 Badger, it is preserved as a **removable attachment** so the goal input
 stays clean and focused. The `badger review` command automatically
-attaches the current git diff.
+attaches the current git diff. Text pastes exceeding 16KB or 40 lines are
+automatically converted into attachments.
 
-Use the **arrow keys** to cycle through attachments — the focused
-attachment's details are shown inline, and you can remove it before
-submitting.
+Press **Tab** to switch focus between the goal editor and the attachment
+list, then use the **arrow keys** to cycle through attachments — the focused
+attachment's details are shown inline, and you can remove it with
+**Backspace** or **Delete** before submitting.
 
 ## External Context
 

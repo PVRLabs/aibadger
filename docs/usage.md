@@ -133,15 +133,17 @@ Keep the change small and include any tests that should change.
 - `/help`: show the interactive command reference.
 - `/review`: seed an editable review prompt from the current git diff. It reuses the same review flow as `badger review`.
 - `/design`: switch the active focus to Design. The active focus appears in the status bar as `Focus: Design` and the prompt seeds a short, conversational brainstorm.
+- `/followup`: switch the active focus to Follow-up. The active focus appears in the status bar as `Focus: Follow-up` and the prompt seeds a short follow-up framing.
 - `/exit`: quit Badger.
 
 To start in a specific focus from the command line, pass the focus name as the
 first argument:
 
 ```bash
-badger          # Code focus (default)
-badger design   # Design focus — prompt seeds a short, conversational brainstorm
-badger review   # Review focus — prompt is prefilled from the current git diff
+badger            # Code focus (default)
+badger design     # Design focus — prompt seeds a short, conversational brainstorm
+badger review     # Review focus — prompt is prefilled from the current git diff
+badger followup   # Follow-up focus — prompt seeds a short follow-up framing
 ```
 
 ## Attachments

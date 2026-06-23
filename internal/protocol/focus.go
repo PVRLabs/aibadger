@@ -4,15 +4,16 @@ package protocol
 type Focus string
 
 const (
-	FocusCode   Focus = "code"
-	FocusReview Focus = "review"
-	FocusDesign Focus = "design"
+	FocusCode     Focus = "code"
+	FocusReview   Focus = "review"
+	FocusDesign   Focus = "design"
+	FocusFollowup Focus = "followup"
 )
 
 // NormalizeFocus maps unknown or empty values back to the default focus.
 func NormalizeFocus(focus Focus) Focus {
 	switch focus {
-	case FocusReview, FocusDesign:
+	case FocusReview, FocusDesign, FocusFollowup:
 		return focus
 	default:
 		return FocusCode

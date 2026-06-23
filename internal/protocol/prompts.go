@@ -22,6 +22,11 @@ func InstructionsForFocus(focus Focus) PromptInstructions {
 			SchemaAConstraint: designSchemaAConstraint,
 			SchemaBConstraint: designSchemaBConstraint,
 		}
+	case FocusFollowup:
+		return PromptInstructions{
+			SchemaAConstraint: followupSchemaAConstraint,
+			SchemaBConstraint: followupSchemaBConstraint,
+		}
 	default:
 		return PromptInstructions{
 			SchemaAConstraint: codeSchemaAConstraint,
@@ -54,6 +59,13 @@ const designSchemaAConstraint = "[TASK]\n%s\n\n[CONSTRAINT]\n" +
 	"PREFIX:<path>#<literal prefix from the start of the target line>\n" +
 	"NEAR:<path>#<literal string from a nearby unique line or comment>\n"
 
+const followupSchemaAConstraint = "[TASK]\n%s\n\n[CONSTRAINT]\n" +
+	"This is a follow-up to an existing AI chat. Do not restart the discussion. Output ONLY a machine-readable list using the exact operators below. Output zero other text, explanations, or markdown formatting.\n" +
+	"Target the smallest additional context set needed to continue the existing conversation. Prefer directly relevant files or spans. Do not request broad overview files unless they are specifically needed for the follow-up.\n" +
+	"FILE:<path>\n" +
+	"PREFIX:<path>#<literal prefix from the start of the target line>\n" +
+	"NEAR:<path>#<literal string from a nearby unique line or comment>\n"
+
 const codeSchemaBConstraint = "\n[TASK]\n%s\n\n[OUTPUT CONSTRAINT]\n" +
 	"This is the final-answer step. Source context has already been extracted.\n" +
 	"Based ONLY on the provided [CONTEXT] and [PROJECT TOPOLOGY], fulfill the [TASK].\n" +
@@ -80,6 +92,8 @@ const reviewSchemaBConstraint = "\n[TASK]\n%s\n\n[OUTPUT CONSTRAINT]\n" +
 
 const DefaultDesignPrompt = "Design: brainstorm options, tradeoffs, and open questions conversationally.\n\nDescription: "
 
+const DefaultFollowupPrompt = "Follow-up for an existing AI chat.\n\nDescription: "
+
 const designSchemaBConstraint = "\n[TASK]\n%s\n\n[OUTPUT CONSTRAINT]\n" +
 	"This is the final-answer step for a design task.\n" +
 	"Based ONLY on the provided [CONTEXT] and [PROJECT TOPOLOGY], explain the recommended approach, tradeoffs, or open decisions.\n" +
@@ -88,4 +102,13 @@ const designSchemaBConstraint = "\n[TASK]\n%s\n\n[OUTPUT CONSTRAINT]\n" +
 	"Output format rules:\n" +
 	"1. State the recommended design first.\n" +
 	"2. Call out important tradeoffs or follow-up decisions only when they materially affect the design.\n" +
+	"3. For non-code responses: Just write the text normally.\n"
+
+const followupSchemaBConstraint = "\n[TASK]\n%s\n\n[OUTPUT CONSTRAINT]\n" +
+	"This is follow-up context for an existing conversation. Based ONLY on the provided context and topology, continue the user's current thread. Do not restate the full design, review, or implementation from scratch unless needed.\n" +
+	"Do NOT respond with FILE:, PREFIX:, or NEAR: lines; those selector operators are only for Prompt 1 responses.\n" +
+	"\n" +
+	"Output format rules:\n" +
+	"1. Continue the existing conversation directly from the provided follow-up context.\n" +
+	"2. Do not invent patches, findings, or a full design unless the user's follow-up specifically asks for them.\n" +
 	"3. For non-code responses: Just write the text normally.\n"

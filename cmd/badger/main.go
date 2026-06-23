@@ -99,6 +99,9 @@ func main() {
 	if cfg.focus == protocol.FocusDesign {
 		applyDesignStartup(&badgerCfg, cfg)
 	}
+	if cfg.focus == protocol.FocusFollowup {
+		applyFollowupStartup(&badgerCfg, cfg)
+	}
 	if !cfg.headless {
 		if err := badger.Run(badgerCfg); err != nil {
 			fmt.Printf("TUI error: %v\n", err)
@@ -132,7 +135,7 @@ func stripFocusCommand(args []string, cfg *appConfig) []string {
 			continue
 		}
 		switch arg {
-		case string(protocol.FocusCode), string(protocol.FocusReview), string(protocol.FocusDesign):
+		case string(protocol.FocusCode), string(protocol.FocusReview), string(protocol.FocusDesign), string(protocol.FocusFollowup):
 			cfg.focus = protocol.Focus(arg)
 			return append(append([]string(nil), args[:i]...), args[i+1:]...)
 		case "badge":
@@ -309,6 +312,17 @@ func applyDesignStartup(cfg *badger.Config, app appConfig) {
 	}
 }
 
+func applyFollowupStartup(cfg *badger.Config, app appConfig) {
+	cfg.SkipOnboarding = true
+	cfg.Startup = badger.StartupContext{
+		Goal: protocol.DefaultFollowupPrompt,
+		Status: badger.StartupStatus{
+			Text:     "Focus set to Follow-up. Edit the goal before submitting.",
+			Severity: "success",
+		},
+	}
+}
+
 func applyReviewStartup(cfg *badger.Config, app appConfig) error {
 	reviewTask, err := reviewtask.Build(cfg.Root, reviewtask.Options{
 		Mode:       app.reviewMode,
@@ -368,7 +382,7 @@ func hasHeadlessOnlyFlagsWithoutHeadless(cfg appConfig) bool {
 }
 
 func printUsage(cfg appConfig) {
-	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design] [--help]\n  badger [code|review|design] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nStandard runs start the interactive BYOL workflow for the current directory.\nThe default focus is Code; use badger review or badger design to start in a different focus.\n`badger review` preloads an editable review prompt from the current git diff. Use `--staged`, `--branch <ref>`, or `--commit <sha>` to change the diff source. If no diff is available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
+	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design|followup] [--help]\n  badger [code|review|design|followup] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nStandard runs start the interactive BYOL workflow for the current directory.\nThe default focus is Code; use badger review, badger design, or badger followup to start in a different focus.\n`badger review` preloads an editable review prompt from the current git diff. Use `--staged`, `--branch <ref>`, or `--commit <sha>` to change the diff source. If no diff is available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
 
 	// Show note about dev flags in release builds
 	if releaseBuild {

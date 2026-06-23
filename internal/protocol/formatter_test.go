@@ -158,6 +158,25 @@ func TestGenerateSchemaAUsesFocusSpecificConstraints(t *testing.T) {
 				"clear no-issues result",
 			},
 		},
+		{
+			name:  "followup",
+			focus: FocusFollowup,
+			wantA: []string{
+				"This is a follow-up to an existing AI chat. Do not restart the discussion.",
+				"Target the smallest additional context set needed to continue the existing conversation.",
+				"Prefer directly relevant files or spans.",
+			},
+			wantB: []string{
+				"This is follow-up context for an existing conversation.",
+				"continue the user's current thread",
+				"Do not restate the full design, review, or implementation from scratch unless needed.",
+			},
+			unwantedB: []string{
+				"full updated file contents",
+				"clear no-issues result",
+				"State the recommended design first.",
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -188,6 +207,39 @@ func TestGenerateSchemaAUsesFocusSpecificConstraints(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNormalizeFocus(t *testing.T) {
+	cases := []struct {
+		name  string
+		focus Focus
+		want  Focus
+	}{
+		{name: "empty", focus: "", want: FocusCode},
+		{name: "unknown", focus: "unknown", want: FocusCode},
+		{name: "code", focus: FocusCode, want: FocusCode},
+		{name: "review", focus: FocusReview, want: FocusReview},
+		{name: "design", focus: FocusDesign, want: FocusDesign},
+		{name: "followup", focus: FocusFollowup, want: FocusFollowup},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := NormalizeFocus(tc.focus); got != tc.want {
+				t.Fatalf("NormalizeFocus(%q) = %q, want %q", tc.focus, got, tc.want)
+			}
+			if got := tc.focus.String(); got != string(tc.want) {
+				t.Fatalf("Focus(%q).String() = %q, want %q", tc.focus, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDefaultFollowupPrompt(t *testing.T) {
+	const want = "Follow-up for an existing AI chat.\n\nDescription: "
+	if DefaultFollowupPrompt != want {
+		t.Fatalf("DefaultFollowupPrompt = %q, want %q", DefaultFollowupPrompt, want)
 	}
 }
 

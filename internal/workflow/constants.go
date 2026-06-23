@@ -38,6 +38,8 @@ func FocusDisplayName(focus protocol.Focus) string {
 		return "Review"
 	case protocol.FocusDesign:
 		return "Design"
+	case protocol.FocusFollowup:
+		return "Follow-up"
 	default:
 		return "Code"
 	}

@@ -73,6 +73,7 @@ func TestLoadConfigFocusCommand(t *testing.T) {
 	}{
 		{name: "design", args: []string{"design"}, focus: protocol.FocusDesign},
 		{name: "review", args: []string{"review", "--headless"}, focus: protocol.FocusReview},
+		{name: "followup", args: []string{"followup"}, focus: protocol.FocusFollowup},
 	}
 
 	for _, tt := range tests {
@@ -171,6 +172,48 @@ func TestApplyDesignStartupHeadless(t *testing.T) {
 	}
 	if !strings.Contains(cfg.Startup.Goal, "Design") {
 		t.Fatalf("headless design startup goal missing design template:\n%s", cfg.Startup.Goal)
+	}
+}
+
+func TestApplyFollowupStartupInteractive(t *testing.T) {
+	cfg := badger.DefaultConfig()
+	cfg.Root = t.TempDir()
+	app := appConfig{
+		focus: protocol.FocusFollowup,
+	}
+
+	applyFollowupStartup(&cfg, app)
+	if !cfg.SkipOnboarding {
+		t.Fatal("SkipOnboarding = false, want true")
+	}
+	if cfg.Startup.Goal != protocol.DefaultFollowupPrompt {
+		t.Fatalf("Startup.Goal = %q, want %q", cfg.Startup.Goal, protocol.DefaultFollowupPrompt)
+	}
+	if cfg.Startup.Status.Severity != "success" {
+		t.Fatalf("Startup.Status.Severity = %q, want %q", cfg.Startup.Status.Severity, "success")
+	}
+	if cfg.Startup.Status.Text == "" {
+		t.Fatal("Startup.Status.Text is empty")
+	}
+	if !strings.Contains(cfg.Startup.Status.Text, "Follow-up") {
+		t.Fatalf("Startup.Status.Text = %q, want message mentioning Follow-up", cfg.Startup.Status.Text)
+	}
+}
+
+func TestApplyFollowupStartupHeadless(t *testing.T) {
+	cfg := badger.DefaultConfig()
+	cfg.Root = t.TempDir()
+	app := appConfig{
+		focus:    protocol.FocusFollowup,
+		headless: true,
+	}
+
+	applyFollowupStartup(&cfg, app)
+	if cfg.Startup.Goal == "" {
+		t.Fatal("headless follow-up startup goal is empty")
+	}
+	if !strings.Contains(cfg.Startup.Goal, "Follow-up") {
+		t.Fatalf("headless follow-up startup goal missing follow-up template:\n%s", cfg.Startup.Goal)
 	}
 }
 

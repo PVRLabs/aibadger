@@ -792,8 +792,8 @@ func TestHomeViewRendersLargePastedGoalCompactly(t *testing.T) {
 		}
 	}
 	for _, unwanted := range []string{
-		"Type a goal, paste a diff, or use /review, /design, or /badge, then press Enter.",
-		"Commands: /help, /review, /design, /badge, /exit",
+		"Type a goal, paste a diff, or use /review, /design, /followup, or /badge, then press Enter.",
+		"Commands: /help, /review, /design, /followup, /badge, /exit",
 		"Tag files with @path/to/file, then press Tab.",
 		"Preview:",
 	} {
@@ -1094,6 +1094,7 @@ func TestSubmitGoalHelpCommandShowsHelp(t *testing.T) {
 		"Tab            Complete / commands and @ files.",
 		"@path/to/file",
 		"/review   - Start review mode",
+		"/followup - Start follow-up mode",
 		"/badge    - Show GitHub stargazer scoreboard",
 	} {
 		if !strings.Contains(view, want) {
@@ -1485,6 +1486,39 @@ func TestSubmitGoalDesignCommandSwitchesFocus(t *testing.T) {
 	}
 }
 
+func TestSubmitGoalFollowupCommandSwitchesFocus(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.setGoalAttachments([]goalAttachment{newGoalTextAttachment("pasted text", "extra context")})
+	m.goalInput.SetValue("/followup")
+
+	next, cmd := m.submitGoal()
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("submitGoal returned %T, want tui.Model", next)
+	}
+	if got.cfg.Focus != protocol.FocusFollowup {
+		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusFollowup)
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if got.goalInput.Value() != protocol.DefaultFollowupPrompt {
+		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), protocol.DefaultFollowupPrompt)
+	}
+	if len(got.goalAttachments) != 0 {
+		t.Fatalf("goalAttachments length = %d, want 0", len(got.goalAttachments))
+	}
+	if !got.goalInput.Focused() {
+		t.Fatal("goal input is not focused")
+	}
+	if !strings.Contains(got.status.text, "Focus set to Follow-up.") {
+		t.Fatalf("status = %q, want focus confirmation", got.status.text)
+	}
+	if cmd == nil {
+		t.Fatal("follow-up command returned unexpected nil command")
+	}
+}
+
 func TestViewShowsPersistentHeader(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	symbols := testDisplaySymbols()
@@ -1513,10 +1547,10 @@ func TestHomeViewSurfacesReviewUseCase(t *testing.T) {
 
 	view := m.View()
 
-	if !strings.Contains(view, "Type a goal, paste a diff, or use /review, /design, or /badge, then press Enter.") {
+	if !strings.Contains(view, "Type a goal, paste a diff, or use /review, /design, /followup, or /badge, then press Enter.") {
 		t.Fatalf("home view missing review goal guidance:\n%s", view)
 	}
-	if !strings.Contains(view, "Commands: /help, /review, /design, /badge, /exit") {
+	if !strings.Contains(view, "Commands: /help, /review, /design, /followup, /badge, /exit") {
 		t.Fatalf("home view missing review command:\n%s", view)
 	}
 	for _, want := range []string{
@@ -1543,6 +1577,8 @@ func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 		"Seed an editable review prompt from the current git diff.",
 		"/design",
 		"Switch the active focus to Design.",
+		"/followup",
+		"Switch the active focus to Follow-up.",
 		"/badge",
 		"Show GitHub stargazer scoreboard",
 		"/exit",
@@ -1565,6 +1601,23 @@ func TestSlashCommandSuggestionsFilterByPrefix(t *testing.T) {
 		t.Fatalf("filtered suggestions missing /review:\n%s", suggestions)
 	}
 	for _, unwanted := range []string{"/help", "/exit"} {
+		if strings.Contains(suggestions, unwanted) {
+			t.Fatalf("filtered suggestions unexpectedly included %q:\n%s", unwanted, suggestions)
+		}
+	}
+}
+
+func TestSlashCommandSuggestionsFilterFollowupByPrefix(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/f")
+	m.refreshCompletionCandidate()
+
+	suggestions := m.viewSlashCommandSuggestions()
+
+	if !strings.Contains(suggestions, "/followup") {
+		t.Fatalf("filtered suggestions missing /followup:\n%s", suggestions)
+	}
+	for _, unwanted := range []string{"/help", "/review", "/exit"} {
 		if strings.Contains(suggestions, unwanted) {
 			t.Fatalf("filtered suggestions unexpectedly included %q:\n%s", unwanted, suggestions)
 		}
@@ -1665,6 +1718,31 @@ func TestDesignCompletionEnterThenEnterSwitchesFocus(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("design action returned unexpected nil command")
+	}
+}
+
+func TestFollowupCompletionTabThenEnterSwitchesFocus(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+
+	m.goalInput.SetValue("/fol")
+	m.refreshCompletionCandidate()
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if got.cfg.Focus != protocol.FocusFollowup {
+		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusFollowup)
+	}
+	if !strings.Contains(got.status.text, "Focus set to Follow-up.") {
+		t.Fatalf("status = %q, want focus confirmation", got.status.text)
+	}
+	if got.goalInput.Value() != protocol.DefaultFollowupPrompt {
+		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), protocol.DefaultFollowupPrompt)
+	}
+	if cmd == nil {
+		t.Fatal("follow-up action returned unexpected nil command")
 	}
 }
 
@@ -1807,6 +1885,37 @@ func TestDesignFocusShowsFocusDesignAndApplyPipeline(t *testing.T) {
 	symbols := testDisplaySymbols()
 	if !strings.Contains(view, "Focus: Design") {
 		t.Fatalf("scan flow view missing Focus: Design:\n%s", view)
+	}
+	if !strings.Contains(view, "Pipeline: [Map]"+symbols.pipelineSep+"Extract"+symbols.pipelineSep+"Apply") {
+		t.Fatalf("scan flow view missing Apply pipeline label:\n%s", view)
+	}
+}
+
+func TestFollowupFocusShowsFocusFollowupAndApplyPipeline(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusFollowup
+	m := NewModel("/tmp/project", cfg)
+	m.goalInput.SetValue("add context to existing chat")
+
+	next, _ := m.submitGoal()
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("submitGoal returned %T, want tui.Model", next)
+	}
+
+	scanned := engine.FromTopology("/tmp/project", &model.ProjectTopology{Name: "project"})
+	next, _ = got.Update(scanDoneMsg{eng: scanned})
+	afterScan, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if afterScan.cfg.Focus != protocol.FocusFollowup {
+		t.Fatalf("Focus = %q, want %q", afterScan.cfg.Focus, protocol.FocusFollowup)
+	}
+	view := afterScan.View()
+	symbols := testDisplaySymbols()
+	if !strings.Contains(view, "Focus: Follow-up") {
+		t.Fatalf("scan flow view missing Focus: Follow-up:\n%s", view)
 	}
 	if !strings.Contains(view, "Pipeline: [Map]"+symbols.pipelineSep+"Extract"+symbols.pipelineSep+"Apply") {
 		t.Fatalf("scan flow view missing Apply pipeline label:\n%s", view)

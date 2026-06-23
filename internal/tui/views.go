@@ -111,8 +111,8 @@ func (m Model) viewHome() string {
 	}
 
 	var lines []string
-	lines = append(lines, "Type a goal, paste a diff, or use /review, /design, or /badge, then press Enter.")
-	lines = append(lines, "Commands: /help, /review, /design, /badge, /exit")
+	lines = append(lines, "Type a goal, paste a diff, or use /review, /design, /followup, or /badge, then press Enter.")
+	lines = append(lines, "Commands: /help, /review, /design, /followup, /badge, /exit")
 	lines = append(lines, "Tag files with @path/to/file, then press Tab.")
 	lines = append(lines, "")
 	lines = append(lines, m.viewGoalInputSection())
@@ -192,6 +192,7 @@ func (m Model) slashCommandSuggestions() []slashCommandSuggestion {
 		{command: helpCommand, description: "Show commands and keyboard shortcuts."},
 		{command: reviewCommand, description: "Seed an editable review prompt from the current git diff."},
 		{command: designCommand, description: "Switch the active focus to Design."},
+		{command: followupCommand, description: "Switch the active focus to Follow-up."},
 		{command: badgeCommand, description: "Show GitHub stargazer scoreboard"},
 	}
 	if m.cfg.ExitCommand != "" {
@@ -382,6 +383,7 @@ func (m Model) viewHelp() string {
 		"/help     - Show this help",
 		"/review   - Start review mode",
 		"/design   - Start design mode",
+		"/followup - Start follow-up mode",
 		"/badge    - Show GitHub stargazer scoreboard",
 		"/exit     - Exit the application",
 		"",
@@ -517,6 +519,11 @@ func pasteSpecForState(st state, focus protocol.Focus) pasteSpec {
 		case protocol.FocusDesign:
 			return pasteSpec{
 				title:       "Continue the design discussion in your AI chat.\nPaste the AI response here only if you want Badger to display or inspect it.",
+				placeholder: "Optional: paste the AI response here.",
+			}
+		case protocol.FocusFollowup:
+			return pasteSpec{
+				title:       "Continue the existing conversation in your AI chat.\nPaste the AI response here only if you want Badger to display or inspect it.",
 				placeholder: "Optional: paste the AI response here.",
 			}
 		default:

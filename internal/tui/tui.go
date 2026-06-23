@@ -53,6 +53,7 @@ const (
 	helpCommand           = "/help"
 	reviewCommand         = "/review"
 	designCommand         = "/design"
+	followupCommand       = "/followup"
 	badgeCommand          = "/badge"
 )
 
@@ -604,6 +605,9 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 	if instruction == designCommand {
 		return m.handleDesignCommand()
 	}
+	if instruction == followupCommand {
+		return m.handleFollowupCommand()
+	}
 	if instruction == badgeCommand {
 		return m.handleBadgeCommand()
 	}
@@ -622,6 +626,18 @@ func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
 	m.status = successMessage("Focus set to Design.")
 	m.err = nil
 	m.setGoalInputValue(protocol.DefaultDesignPrompt)
+	m.setGoalAttachments(nil)
+	m.resizeGoalEditor()
+	m.completion.suppressedKey = ""
+	m.focusGoalEditor()
+	return m, textarea.Blink
+}
+
+func (m Model) handleFollowupCommand() (tea.Model, tea.Cmd) {
+	m.cfg.Focus = protocol.FocusFollowup
+	m.status = successMessage("Focus set to Follow-up.")
+	m.err = nil
+	m.setGoalInputValue(protocol.DefaultFollowupPrompt)
 	m.setGoalAttachments(nil)
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""

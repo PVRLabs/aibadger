@@ -53,9 +53,10 @@ type Extractor struct {
 }
 
 type externalCommandResult struct {
-	content  string
-	fullFile bool
-	matched  bool
+	content     string
+	fullFile    bool
+	matched     bool
+	displayPath string
 }
 
 // NewExtractor creates a new Extractor instance.
@@ -84,13 +85,13 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 		go func(idx int, c Command) {
 			defer wg.Done()
 
-			content, fullFile, err := e.processCommand(c)
+			path, content, fullFile, err := e.processCommand(c)
 			if err != nil {
 				errs[idx] = err
 				return
 			}
 			results[idx] = protocol.ExtractionResult{
-				Path:     c.Path,
+				Path:     path,
 				Content:  content,
 				FullFile: fullFile,
 			}
@@ -144,21 +145,22 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 	return extracted, nil
 }
 
-func (e *Extractor) processCommand(cmd Command) (string, bool, error) {
+func (e *Extractor) processCommand(cmd Command) (string, string, bool, error) {
 	resolvedPath := e.resolveCommandPath(cmd.Path)
 	if resolvedPath != "" {
-		return e.processLocalCommand(cmd, resolvedPath)
+		content, fullFile, err := e.processLocalCommand(cmd, resolvedPath)
+		return cmd.Path, content, fullFile, err
 	}
 
 	externalResult, err := e.processExternalCommand(cmd)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	if externalResult.matched {
-		return externalResult.content, externalResult.fullFile, nil
+		return externalResult.displayPath, externalResult.content, externalResult.fullFile, nil
 	}
 
-	return "", false, fmt.Errorf("file not found: %s", cmd.Path)
+	return "", "", false, fmt.Errorf("file not found: %s", cmd.Path)
 }
 
 func (e *Extractor) processLocalCommand(cmd Command, resolvedPath string) (string, bool, error) {
@@ -213,7 +215,7 @@ func (e *Extractor) processExternalCommand(cmd Command) (externalCommandResult, 
 		return externalCommandResult{}, nil
 	}
 	match := matches[0]
-	result := externalCommandResult{matched: true}
+	result := externalCommandResult{matched: true, displayPath: match.DisplayPath}
 	if promptpolicy.IsSensitivePath(requestPath) || promptpolicy.IsSensitivePath(match.RelPath) {
 		return result, errPrompt2Excluded
 	}
@@ -227,7 +229,7 @@ func (e *Extractor) processExternalCommand(cmd Command) (externalCommandResult, 
 		if err != nil {
 			return result, fmt.Errorf("file not found: %s", requestPath)
 		}
-		result.content = summarizeBinaryFile(requestPath, int(info.Size()), kind)
+		result.content = summarizeBinaryFile(match.DisplayPath, int(info.Size()), kind)
 		result.fullFile = cmd.Type == "FILE"
 		return result, nil
 	}

@@ -1944,6 +1944,24 @@ func TestDesignFocusPrompt2CodeContextInContextReadyDialog(t *testing.T) {
 	}
 }
 
+func TestContextReadyDialogUsesResolvedExternalDisplayPath(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.state = stateContextReady
+	m.schemaB = "external context payload"
+	m.metadata = []protocol.ExtractionMetadata{
+		{Path: "../badger-sidecar/docs/spec.md"},
+	}
+
+	view := m.viewContextReady()
+
+	if !strings.Contains(view, "  - ../badger-sidecar/docs/spec.md") {
+		t.Fatalf("context-ready view missing resolved external display path:\n%s", view)
+	}
+	if strings.Contains(view, "  - spec.md") {
+		t.Fatalf("context-ready view used shorthand external selector:\n%s", view)
+	}
+}
+
 func TestDesignFocusPrompt2CodeContextInCopySuccess(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Focus = protocol.FocusDesign

@@ -469,10 +469,10 @@ func TestExtractExternalContextBinaryAndAssetSafety(t *testing.T) {
 	if results[0].Path != "present.md" || results[0].Content != "present\n" {
 		t.Fatalf("first result = %+v, want present.md content", results[0])
 	}
-	if results[1].Path != "hero.png" {
-		t.Fatalf("second result path = %q, want hero.png", results[1].Path)
+	if results[1].Path != "../badger-sidecar/docs/hero.png" {
+		t.Fatalf("second result path = %q, want resolved external display path", results[1].Path)
 	}
-	if !strings.Contains(results[1].Content, "Binary file: hero.png (21B, kind: asset)") {
+	if !strings.Contains(results[1].Content, "Binary file: ../badger-sidecar/docs/hero.png (21B, kind: asset)") {
 		t.Fatalf("asset summary = %q, want binary summary", results[1].Content)
 	}
 }
@@ -1180,7 +1180,7 @@ func TestProcessCommandExcludesBinaryFileFromPrompt2(t *testing.T) {
 	}
 
 	e := NewExtractor(tempDir, nil)
-	content, fullFile, err := e.processCommand(Command{Type: "FILE", Path: "badger"})
+	_, content, fullFile, err := e.processCommand(Command{Type: "FILE", Path: "badger"})
 	if !errors.Is(err, errPrompt2Excluded) {
 		t.Fatalf("processCommand() error = %v, want errPrompt2Excluded", err)
 	}
@@ -1200,7 +1200,7 @@ func TestProcessCommandSummarizesAssetForPrefixAndNear(t *testing.T) {
 
 	e := NewExtractor(tempDir, nil)
 	for _, cmdType := range []string{"PREFIX", "NEAR"} {
-		content, fullFile, err := e.processCommand(Command{Type: cmdType, Path: "hero.png", Pattern: "source"})
+		_, content, fullFile, err := e.processCommand(Command{Type: cmdType, Path: "hero.png", Pattern: "source"})
 		if err != nil {
 			t.Fatalf("processCommand(%s) error = %v", cmdType, err)
 		}
@@ -1327,7 +1327,7 @@ func TestProcessCommandRejectsParentTraversal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			content, fullFile, err := e.processCommand(tt.cmd)
+			_, content, fullFile, err := e.processCommand(tt.cmd)
 			if err == nil {
 				t.Fatalf("processCommand() error = nil, want error")
 			}
@@ -1351,7 +1351,7 @@ func TestProcessCommandAllowsLegitPath(t *testing.T) {
 	}
 
 	e := NewExtractor(tempDir, nil)
-	content, fullFile, err := e.processCommand(Command{Type: "FILE", Path: "legit.go"})
+	_, content, fullFile, err := e.processCommand(Command{Type: "FILE", Path: "legit.go"})
 	if err != nil {
 		t.Fatalf("processCommand() error = %v, want nil", err)
 	}
@@ -1441,6 +1441,45 @@ func TestExtractAllowsExplicitExternalContextFile(t *testing.T) {
 	}
 	if results[0].Path != "../badger-sidecar/docs/spec.md" {
 		t.Fatalf("result path = %q, want requested external path", results[0].Path)
+	}
+	if results[0].Content != "# Spec\n" {
+		t.Fatalf("content = %q, want external file content", results[0].Content)
+	}
+}
+
+func TestExtractUsesResolvedExternalDisplayPathForShorthandFile(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "aibadger")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(external, "plans"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, "plans", "spec.md"), []byte("# Spec\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{
+			{
+				Path:    "../badger-sidecar/docs",
+				AbsPath: external,
+			},
+		},
+	})
+	results, err := e.Extract([]Command{
+		{Type: "FILE", Path: "plans/spec.md"},
+	})
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	if results[0].Path != "../badger-sidecar/docs/plans/spec.md" {
+		t.Fatalf("result path = %q, want resolved external display path", results[0].Path)
 	}
 	if results[0].Content != "# Spec\n" {
 		t.Fatalf("content = %q, want external file content", results[0].Content)

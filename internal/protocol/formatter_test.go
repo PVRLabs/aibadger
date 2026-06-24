@@ -928,6 +928,33 @@ func TestGenerateSchemaBTrimming(t *testing.T) {
 	// If it was in the middle of a rune, trimContent should handle it.
 }
 
+func TestGenerateSchemaBUsesExtractionResultPathForExternalLabels(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.MaxContextFileBytes = 0
+	formatter.MaxTotalContextBytes = 0
+
+	output, metadata := formatter.GenerateSchemaB(&model.ProjectTopology{}, []ExtractionResult{
+		{
+			Path:     "../badger-sidecar/docs/spec.md",
+			Content:  "# Spec\n",
+			FullFile: true,
+		},
+	}, "review external spec")
+
+	if len(metadata) != 1 {
+		t.Fatalf("metadata = %d entries, want 1", len(metadata))
+	}
+	if metadata[0].Path != "../badger-sidecar/docs/spec.md" {
+		t.Fatalf("metadata path = %q, want resolved external display path", metadata[0].Path)
+	}
+	if !strings.Contains(output, "--- File: ../badger-sidecar/docs/spec.md (Full File) ---") {
+		t.Fatalf("Prompt 2 missing resolved external file header:\n%s", output)
+	}
+	if strings.Contains(output, "--- File: spec.md (Full File) ---") {
+		t.Fatalf("Prompt 2 used shorthand external selector in file header:\n%s", output)
+	}
+}
+
 func TestNewFormatterUsesDefaultContextLimits(t *testing.T) {
 	formatter := NewFormatter()
 

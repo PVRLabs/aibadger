@@ -154,14 +154,14 @@ func TestContainsFileRejectsCommonExcludedExternalPaths(t *testing.T) {
 
 	contexts := []model.ExternalContext{{Path: "../docs", AbsPath: external}}
 	for _, path := range []string{
-		filepath.Join(external, ".DS_Store"),
-		filepath.Join(external, ".git", "config"),
+		".DS_Store",
+		".git/config",
 	} {
 		if _, _, ok := ContainsFile(root, contexts, path); ok {
 			t.Fatalf("ContainsFile(%q) = true, want false for excluded external context path", path)
 		}
 	}
-	if _, _, ok := ContainsFile(root, contexts, filepath.Join(external, "spec.md")); !ok {
+	if _, _, ok := ContainsFile(root, contexts, "spec.md"); !ok {
 		t.Fatal("ContainsFile(spec.md) = false, want true for allowed external context file")
 	}
 }
@@ -186,7 +186,6 @@ func TestResolveFileMatchesExactAndRootRelativeExternalPaths(t *testing.T) {
 	for _, request := range []string{
 		"../badger-sidecar/docs/mvp-roadmap.md",
 		"mvp-roadmap.md",
-		filepath.ToSlash(target),
 	} {
 		t.Run(request, func(t *testing.T) {
 			resolution := ResolveFile(root, contexts, request)
@@ -204,6 +203,28 @@ func TestResolveFileMatchesExactAndRootRelativeExternalPaths(t *testing.T) {
 				t.Fatalf("match display path = %q", match.DisplayPath)
 			}
 		})
+	}
+}
+
+func TestResolveFileRejectsAbsoluteExternalPathRequest(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(external, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(external, "mvp-roadmap.md")
+	if err := os.WriteFile(target, []byte("# Roadmap\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	target = realTestPath(t, target)
+	contexts := []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}}
+
+	if resolution := ResolveFile(root, contexts, filepath.ToSlash(target)); len(resolution.Matches) != 0 {
+		t.Fatalf("ResolveFile(absolute external path) matches = %+v, want none", resolution.Matches)
 	}
 }
 
@@ -242,6 +263,26 @@ func TestResolveFileMatchesSuffixAndUniqueBasename(t *testing.T) {
 				t.Fatalf("match display path = %q", match.DisplayPath)
 			}
 		})
+	}
+}
+
+func TestResolveFileSuffixRequiresPathComponentBoundary(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(external, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, "mvp-roadmap.md"), []byte("# Roadmap\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	contexts := []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}}
+
+	if resolution := ResolveFile(root, contexts, "ar/docs/mvp-roadmap.md"); len(resolution.Matches) != 0 {
+		t.Fatalf("ResolveFile(partial component suffix) matches = %+v, want none", resolution.Matches)
 	}
 }
 

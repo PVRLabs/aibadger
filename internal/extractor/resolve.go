@@ -20,7 +20,7 @@ func (e *Extractor) resolveCommandPath(path string) string {
 		return ""
 	}
 
-	if strings.HasPrefix(path, "..") {
+	if filepath.IsAbs(filepath.FromSlash(path)) || strings.HasPrefix(path, "..") {
 		return ""
 	}
 

@@ -247,20 +247,14 @@ func ResolveFile(projectRoot string, contexts []model.ExternalContext, requestPa
 	requestPath = normalizeRequestPath(requestPath)
 	collector := fileMatchCollector{seen: make(map[string]bool)}
 
-	// Strategy 1: Resolve from project root. This handles absolute paths and
-	// project-relative paths containing ".." such as ../sidecar/docs/spec.md.
-	if absPath, ok := cleanProjectRequestPath(projectRoot, requestPath); ok {
-		for _, ctx := range contexts {
-			collector.add(ctx, absPath)
-		}
-	}
-
-	// Strategy 2: Resolve relative to each external root.
+	// Strategy 1: Resolve relative to each external root.
 	for _, ctx := range contexts {
 		collector.add(ctx, filepath.Join(ctx.AbsPath, filepath.FromSlash(requestPath)))
 	}
 
-	// Strategy 3: Walk configured roots for suffix and basename matches.
+	// Strategy 2: Walk configured roots for display-path, suffix, and basename
+	// matches. Absolute host paths are intentionally not supported as external
+	// FILE requests; callers should use the displayed configured path.
 	// External context roots are explicit and read-only; omitted dirs are
 	// pruned using the same policy as summaries and direct external reads.
 	for _, ctx := range contexts {
@@ -335,18 +329,6 @@ func normalizeRequestPath(path string) string {
 	return filepath.ToSlash(filepath.Clean(filepath.FromSlash(strings.TrimSpace(path))))
 }
 
-func cleanProjectRequestPath(projectRoot, requestPath string) (string, bool) {
-	absPath := filepath.FromSlash(requestPath)
-	if !filepath.IsAbs(absPath) {
-		absPath = filepath.Join(projectRoot, absPath)
-	}
-	absPath, err := filepath.Abs(absPath)
-	if err != nil {
-		return "", false
-	}
-	return absPath, true
-}
-
 func cleanExternalRoot(ctx model.ExternalContext) string {
 	root := ctx.AbsPath
 	if resolved, err := filepath.EvalSymlinks(root); err == nil {
@@ -377,7 +359,7 @@ func isExternalSuffixMatch(requestPath, relPath, displayPath string) bool {
 	if !strings.Contains(requestPath, "/") {
 		return filepath.Base(relPath) == requestPath
 	}
-	return strings.HasSuffix(displayPath, requestPath)
+	return strings.HasSuffix(displayPath, "/"+requestPath)
 }
 
 func walkExternalContextFiles(ctx model.ExternalContext, visit func(absPath, relPath string)) {

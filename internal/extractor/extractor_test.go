@@ -356,6 +356,42 @@ func TestExtractFileRejectsExternalContextEscapes(t *testing.T) {
 	}
 }
 
+func TestExtractFileRejectsAbsoluteExternalPathWithoutFuzzyLocalFallback(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(filepath.Join(root, "src"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(external, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "src", "architecture.md"), []byte("local architecture\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	externalPath := filepath.Join(external, "architecture.md")
+	if err := os.WriteFile(externalPath, []byte("external architecture\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(root, &model.ProjectTopology{
+		Modules: []model.Module{{
+			SourceRoots: []model.SourceRoot{{Path: "src"}},
+		}},
+		ExternalContext: []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}},
+	})
+	_, err := e.Extract([]Command{{Type: "FILE", Path: filepath.ToSlash(externalPath)}})
+	if err == nil {
+		t.Fatal("Extract() error = nil, want unsupported absolute external path")
+	}
+	if !strings.Contains(err.Error(), "file not found: "+filepath.ToSlash(externalPath)) {
+		t.Fatalf("Extract() error = %q, want file-not-found absolute path", err.Error())
+	}
+	if strings.Contains(err.Error(), "local architecture") || strings.Contains(err.Error(), "external architecture") {
+		t.Fatalf("Extract() error leaks file content: %v", err)
+	}
+}
+
 func TestExtractFileRejectsExternalContextSymlinkEscape(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "project")

@@ -4,6 +4,7 @@ package extractor
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/util"
@@ -16,6 +17,10 @@ func (e *Extractor) resolveCommandPath(path string) string {
 	}
 
 	if e.Topology == nil {
+		return ""
+	}
+
+	if strings.HasPrefix(path, "..") {
 		return ""
 	}
 

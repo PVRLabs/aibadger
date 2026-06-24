@@ -82,17 +82,26 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
 
+      - name: Generate release notes
+        id: notes
+        run: |
+          bash scripts/generate-release-notes.sh "${{ github.ref_name }}" > release-notes.md
+          echo "notes_file=release-notes.md" >> "$GITHUB_OUTPUT"
+
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: ${{ steps.notes.outputs.notes_file }}
           files: |
             release-assets/*.tar.gz
             release-assets/*.tar.gz.sha256

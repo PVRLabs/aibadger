@@ -10,7 +10,8 @@ import (
 )
 
 func (e *Extractor) resolveCommandPath(path string) string {
-	if util.FileExists(filepath.Join(e.ProjectRoot, path)) {
+	candidate := filepath.Join(e.ProjectRoot, path)
+	if util.FileExists(candidate) && isWithinProjectRoot(e.ProjectRoot, candidate) {
 		return path
 	}
 

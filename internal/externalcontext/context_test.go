@@ -166,6 +166,168 @@ func TestContainsFileRejectsCommonExcludedExternalPaths(t *testing.T) {
 	}
 }
 
+func TestResolveFileMatchesExactAndRootRelativeExternalPaths(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(external, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(external, "mvp-roadmap.md")
+	if err := os.WriteFile(target, []byte("# Roadmap\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	target = realTestPath(t, target)
+	contexts := []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}}
+
+	for _, request := range []string{
+		"../badger-sidecar/docs/mvp-roadmap.md",
+		"mvp-roadmap.md",
+		filepath.ToSlash(target),
+	} {
+		t.Run(request, func(t *testing.T) {
+			resolution := ResolveFile(root, contexts, request)
+			match, ok := resolution.Match()
+			if !ok {
+				t.Fatalf("ResolveFile(%q) did not return one match: %+v", request, resolution.Matches)
+			}
+			if match.AbsPath != target {
+				t.Fatalf("match abs path = %q, want %q", match.AbsPath, target)
+			}
+			if match.RelPath != "mvp-roadmap.md" {
+				t.Fatalf("match rel path = %q, want mvp-roadmap.md", match.RelPath)
+			}
+			if match.DisplayPath != "../badger-sidecar/docs/mvp-roadmap.md" {
+				t.Fatalf("match display path = %q", match.DisplayPath)
+			}
+		})
+	}
+}
+
+func TestResolveFileMatchesSuffixAndUniqueBasename(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(filepath.Join(external, "plans"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(external, "plans", "mvp-roadmap.md")
+	if err := os.WriteFile(target, []byte("# Roadmap\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	target = realTestPath(t, target)
+	contexts := []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}}
+
+	for _, request := range []string{
+		"docs/plans/mvp-roadmap.md",
+		"plans/mvp-roadmap.md",
+		"mvp-roadmap.md",
+	} {
+		t.Run(request, func(t *testing.T) {
+			resolution := ResolveFile(root, contexts, request)
+			match, ok := resolution.Match()
+			if !ok {
+				t.Fatalf("ResolveFile(%q) did not return one match: %+v", request, resolution.Matches)
+			}
+			if match.AbsPath != target {
+				t.Fatalf("match abs path = %q, want %q", match.AbsPath, target)
+			}
+			if match.DisplayPath != "../badger-sidecar/docs/plans/mvp-roadmap.md" {
+				t.Fatalf("match display path = %q", match.DisplayPath)
+			}
+		})
+	}
+}
+
+func TestResolveFileReportsAmbiguousExternalMatches(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	ctxA := filepath.Join(parent, "badger-sidecar", "docs")
+	ctxB := filepath.Join(parent, "other-context", "docs")
+	for _, dir := range []string{root, ctxA, ctxB} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(ctxA, "mvp-roadmap.md"), []byte("a\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ctxB, "mvp-roadmap.md"), []byte("b\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	contexts := []model.ExternalContext{
+		{Path: "../badger-sidecar/docs", AbsPath: ctxA},
+		{Path: "../other-context/docs", AbsPath: ctxB},
+	}
+
+	resolution := ResolveFile(root, contexts, "mvp-roadmap.md")
+	if !resolution.Ambiguous() {
+		t.Fatalf("ResolveFile() ambiguous = false, matches = %+v", resolution.Matches)
+	}
+	got := []string{resolution.Matches[0].DisplayPath, resolution.Matches[1].DisplayPath}
+	want := []string{
+		"../badger-sidecar/docs/mvp-roadmap.md",
+		"../other-context/docs/mvp-roadmap.md",
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("matches = %v, want %v", got, want)
+		}
+	}
+	if _, _, ok := ContainsFile(root, contexts, "mvp-roadmap.md"); ok {
+		t.Fatal("ContainsFile() = true for ambiguous match, want false")
+	}
+}
+
+func TestResolveFileRejectsOmittedAndEscapingExternalPaths(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	outside := filepath.Join(parent, "outside")
+	if err := os.MkdirAll(filepath.Join(external, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, ".DS_Store"), []byte("noise\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, ".git", "config"), []byte("config\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "secret.md"), []byte("secret\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	contexts := []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}}
+	if err := os.Symlink(filepath.Join(outside, "secret.md"), filepath.Join(external, "linked-secret.md")); err != nil {
+		t.Logf("skipping symlink escape assertion: %v", err)
+	} else {
+		if resolution := ResolveFile(root, contexts, "linked-secret.md"); len(resolution.Matches) != 0 {
+			t.Fatalf("ResolveFile(linked-secret.md) matches = %+v, want none", resolution.Matches)
+		}
+	}
+
+	for _, request := range []string{
+		".DS_Store",
+		".git/config",
+		"../outside/secret.md",
+	} {
+		if resolution := ResolveFile(root, contexts, request); len(resolution.Matches) != 0 {
+			t.Fatalf("ResolveFile(%q) matches = %+v, want none", request, resolution.Matches)
+		}
+	}
+}
+
 func topNames(items []model.ExternalContextItem) []string {
 	names := make([]string, 0, len(items))
 	for _, item := range items {
@@ -176,4 +338,13 @@ func topNames(items []model.ExternalContextItem) []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+func realTestPath(t *testing.T, path string) string {
+	t.Helper()
+	realPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return realPath
 }

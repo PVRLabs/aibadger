@@ -145,6 +145,11 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 }
 
 func (e *Extractor) processCommand(cmd Command) (string, bool, error) {
+	resolvedPath := e.resolveCommandPath(cmd.Path)
+	if resolvedPath != "" {
+		return e.processLocalCommand(cmd, resolvedPath)
+	}
+
 	externalResult, err := e.processExternalCommand(cmd)
 	if err != nil {
 		return "", false, err
@@ -153,11 +158,10 @@ func (e *Extractor) processCommand(cmd Command) (string, bool, error) {
 		return externalResult.content, externalResult.fullFile, nil
 	}
 
-	resolvedPath := e.resolveCommandPath(cmd.Path)
-	if resolvedPath == "" {
-		return "", false, fmt.Errorf("file not found: %s", cmd.Path)
-	}
+	return "", false, fmt.Errorf("file not found: %s", cmd.Path)
+}
 
+func (e *Extractor) processLocalCommand(cmd Command, resolvedPath string) (string, bool, error) {
 	if promptpolicy.IsSensitivePath(resolvedPath) {
 		return "", false, errPrompt2Excluded
 	}
@@ -200,14 +204,20 @@ func (e *Extractor) processExternalCommand(cmd Command) (externalCommandResult, 
 	if len(e.ExternalContext) == 0 {
 		return externalCommandResult{}, nil
 	}
-	_, absolutePath, ok := externalcontext.ContainsFile(e.ProjectRoot, e.ExternalContext, requestPath)
-	if !ok {
+	resolution := externalcontext.ResolveFile(e.ProjectRoot, e.ExternalContext, requestPath)
+	matches := filterExternalMatchesForCommand(cmd, resolution.Matches)
+	if len(matches) > 1 {
+		return externalCommandResult{matched: true}, ambiguousExternalFileError(requestPath, matches)
+	}
+	if len(matches) == 0 {
 		return externalCommandResult{}, nil
 	}
+	match := matches[0]
 	result := externalCommandResult{matched: true}
-	if promptpolicy.IsSensitivePath(requestPath) {
+	if promptpolicy.IsSensitivePath(requestPath) || promptpolicy.IsSensitivePath(match.RelPath) {
 		return result, errPrompt2Excluded
 	}
+	absolutePath := match.AbsPath
 	kind := filekind.Classify(absolutePath)
 	if kind == model.FileKindBinary {
 		return result, errPrompt2Excluded
@@ -239,6 +249,33 @@ func (e *Extractor) processExternalCommand(cmd Command) (externalCommandResult, 
 	result.content = extracted
 	result.fullFile = fullFile
 	return result, nil
+}
+
+func filterExternalMatchesForCommand(cmd Command, matches []externalcontext.FileMatch) []externalcontext.FileMatch {
+	if cmd.Type == "FILE" {
+		return matches
+	}
+	requestPath := filepath.ToSlash(filepath.Clean(filepath.FromSlash(strings.TrimSpace(cmd.Path))))
+	filtered := make([]externalcontext.FileMatch, 0, len(matches))
+	for _, match := range matches {
+		if requestPath == match.RelPath || requestPath == match.DisplayPath || requestPath == filepath.ToSlash(match.AbsPath) {
+			filtered = append(filtered, match)
+		}
+	}
+	return filtered
+}
+
+func ambiguousExternalFileError(requestPath string, matches []externalcontext.FileMatch) error {
+	var sb strings.Builder
+	sb.WriteString("Ambiguous file reference: ")
+	sb.WriteString(requestPath)
+	sb.WriteString("\n\nMatches:")
+	for _, match := range matches {
+		sb.WriteString("\n- ")
+		sb.WriteString(match.DisplayPath)
+	}
+	sb.WriteString("\n\nUse a more specific path to disambiguate.")
+	return errors.New(sb.String())
 }
 
 func isWithinProjectRoot(root, absPath string) bool {

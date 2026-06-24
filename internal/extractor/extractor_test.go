@@ -193,6 +193,254 @@ func TestExtractReturnsErrorForMissingRequestedFile(t *testing.T) {
 	}
 }
 
+func TestExtractFilePrefersLocalFileOverExternalContext(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(external, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "usage.md"), []byte("local usage\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, "usage.md"), []byte("external usage\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}},
+	})
+	results, err := e.Extract([]Command{{Type: "FILE", Path: "docs/usage.md"}})
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want one extraction", len(results))
+	}
+	if results[0].Content != "local usage\n" {
+		t.Fatalf("content = %q, want local file content", results[0].Content)
+	}
+}
+
+func TestExtractFileFallsBackToTolerantExternalContextMatches(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(external, "plans"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, "mvp-roadmap.md"), []byte("root roadmap\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, "plans", "release-plan.md"), []byte("nested plan\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	e := NewExtractor(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}},
+	})
+
+	for _, tt := range []struct {
+		name    string
+		path    string
+		content string
+	}{
+		{name: "root display suffix", path: "docs/mvp-roadmap.md", content: "root roadmap\n"},
+		{name: "unique basename", path: "release-plan.md", content: "nested plan\n"},
+		{name: "nested suffix", path: "docs/plans/release-plan.md", content: "nested plan\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := e.Extract([]Command{{Type: "FILE", Path: tt.path}})
+			if err != nil {
+				t.Fatalf("Extract() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("results = %d, want one extraction", len(results))
+			}
+			if results[0].Content != tt.content {
+				t.Fatalf("content = %q, want %q", results[0].Content, tt.content)
+			}
+			if !results[0].FullFile {
+				t.Fatal("expected external FILE extraction to be marked fullFile")
+			}
+		})
+	}
+}
+
+func TestExtractFileReportsAmbiguousExternalContextMatchWithPartialSuccess(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	ctxA := filepath.Join(parent, "badger-sidecar", "docs")
+	ctxB := filepath.Join(parent, "other-context", "docs")
+	for _, dir := range []string{root, ctxA, ctxB} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "present.md"), []byte("present\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ctxA, "mvp-roadmap.md"), []byte("a\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ctxB, "mvp-roadmap.md"), []byte("b\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{
+			{Path: "../badger-sidecar/docs", AbsPath: ctxA},
+			{Path: "../other-context/docs", AbsPath: ctxB},
+		},
+	})
+	results, err := e.Extract([]Command{
+		{Type: "FILE", Path: "present.md"},
+		{Type: "FILE", Path: "mvp-roadmap.md"},
+	})
+	if err == nil {
+		t.Fatal("Extract() error = nil, want ambiguity warning")
+	}
+	var extractionErr *ExtractionError
+	if !errors.As(err, &extractionErr) {
+		t.Fatalf("Extract() error = %T, want *ExtractionError", err)
+	}
+	if !extractionErr.CanProceed {
+		t.Fatal("ambiguous external match with usable result should allow proceeding")
+	}
+	for _, want := range []string{
+		"Ambiguous file reference: mvp-roadmap.md",
+		"../badger-sidecar/docs/mvp-roadmap.md",
+		"../other-context/docs/mvp-roadmap.md",
+		"Use a more specific path to disambiguate.",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error missing %q:\n%v", want, err)
+		}
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want one successful extraction", len(results))
+	}
+	if results[0].Path != "present.md" || results[0].Content != "present\n" {
+		t.Fatalf("result = %+v, want present.md content", results[0])
+	}
+}
+
+func TestExtractFileRejectsExternalContextEscapes(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	outside := filepath.Join(parent, "outside")
+	for _, dir := range []string{root, external, outside} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(outside, "secret.md"), []byte("secret\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}},
+	})
+	_, err := e.Extract([]Command{{Type: "FILE", Path: "../outside/secret.md"}})
+	if err == nil {
+		t.Fatal("Extract() error = nil, want unresolved escape")
+	}
+	if !strings.Contains(err.Error(), "file not found: ../outside/secret.md") {
+		t.Fatalf("Extract() error = %q, want file-not-found escape", err.Error())
+	}
+}
+
+func TestExtractFileRejectsExternalContextSymlinkEscape(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	outside := filepath.Join(parent, "outside")
+	for _, dir := range []string{root, external, outside} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	outsideFile := filepath.Join(outside, "secret.md")
+	if err := os.WriteFile(outsideFile, []byte("secret\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(external, "linked-secret.md")
+	if err := os.Symlink(outsideFile, linkPath); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+
+	e := NewExtractor(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}},
+	})
+	_, err := e.Extract([]Command{{Type: "FILE", Path: "linked-secret.md"}})
+	if err == nil {
+		t.Fatal("Extract() error = nil, want unresolved symlink escape")
+	}
+	if !strings.Contains(err.Error(), "file not found: linked-secret.md") {
+		t.Fatalf("Extract() error = %q, want file-not-found symlink escape", err.Error())
+	}
+}
+
+func TestExtractExternalContextBinaryAndAssetSafety(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "badger-sidecar", "docs")
+	for _, dir := range []string{root, external} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "present.md"), []byte("present\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, "payload.bin"), []byte{0x00, 0x01, 0x02}, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, "hero.png"), []byte("not decoded as source"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExtractor(root, &model.ProjectTopology{
+		ExternalContext: []model.ExternalContext{{Path: "../badger-sidecar/docs", AbsPath: external}},
+	})
+	results, err := e.Extract([]Command{
+		{Type: "FILE", Path: "present.md"},
+		{Type: "FILE", Path: "payload.bin"},
+		{Type: "FILE", Path: "hero.png"},
+	})
+	if err == nil {
+		t.Fatal("Extract() error = nil, want binary exclusion warning")
+	}
+	var extractionErr *ExtractionError
+	if !errors.As(err, &extractionErr) {
+		t.Fatalf("Extract() error = %T, want *ExtractionError", err)
+	}
+	if !extractionErr.CanProceed {
+		t.Fatal("binary exclusion with usable results should allow proceeding")
+	}
+	if len(extractionErr.Excluded) != 1 || !strings.Contains(extractionErr.Excluded[0], "payload.bin") {
+		t.Fatalf("Excluded = %v, want payload.bin exclusion", extractionErr.Excluded)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %d, want present file and asset summary", len(results))
+	}
+	if results[0].Path != "present.md" || results[0].Content != "present\n" {
+		t.Fatalf("first result = %+v, want present.md content", results[0])
+	}
+	if results[1].Path != "hero.png" {
+		t.Fatalf("second result path = %q, want hero.png", results[1].Path)
+	}
+	if !strings.Contains(results[1].Content, "Binary file: hero.png (21B, kind: asset)") {
+		t.Fatalf("asset summary = %q, want binary summary", results[1].Content)
+	}
+}
+
 func TestExtractPreservesCommandOrder(t *testing.T) {
 	tempDir := t.TempDir()
 	files := map[string]string{

@@ -15,6 +15,35 @@ import (
 
 const ConfigFileName = ".badger-context"
 
+// FileMatch is a resolved file under a configured external context root.
+type FileMatch struct {
+	Context     model.ExternalContext
+	AbsPath     string
+	RelPath     string
+	DisplayPath string
+}
+
+// FileResolution describes the result of resolving an external context file.
+// Exactly one match is a usable resolution; multiple matches are ambiguous.
+type FileResolution struct {
+	Matches []FileMatch
+}
+
+func (r FileResolution) Found() bool {
+	return len(r.Matches) == 1
+}
+
+func (r FileResolution) Ambiguous() bool {
+	return len(r.Matches) > 1
+}
+
+func (r FileResolution) Match() (FileMatch, bool) {
+	if !r.Found() {
+		return FileMatch{}, false
+	}
+	return r.Matches[0], true
+}
+
 // Load reads .badger-context from projectRoot and returns explicitly listed
 // read-only context directories. Missing or empty files preserve current
 // behavior by returning an empty slice.
@@ -199,58 +228,193 @@ func isRootExtensionlessBinary(root, path, name string) bool {
 // ContainsFile reports whether requestPath resolves to an existing regular
 // file under one of the configured external context directories.
 func ContainsFile(projectRoot string, contexts []model.ExternalContext, requestPath string) (model.ExternalContext, string, bool) {
-	if strings.TrimSpace(requestPath) == "" {
+	resolution := ResolveFile(projectRoot, contexts, requestPath)
+	match, ok := resolution.Match()
+	if !ok {
 		return model.ExternalContext{}, "", false
 	}
+	return match.Context, match.AbsPath, true
+}
 
-	// Strategy 1: Resolve from project root (handles absolute paths and relative paths with ..)
-	absPath := requestPath
+// ResolveFile resolves requestPath to files under configured external context
+// directories. It returns all matching candidates so callers can reject
+// ambiguous references instead of silently choosing one.
+func ResolveFile(projectRoot string, contexts []model.ExternalContext, requestPath string) FileResolution {
+	if strings.TrimSpace(requestPath) == "" {
+		return FileResolution{}
+	}
+
+	requestPath = normalizeRequestPath(requestPath)
+	collector := fileMatchCollector{seen: make(map[string]bool)}
+
+	// Strategy 1: Resolve from project root. This handles absolute paths and
+	// project-relative paths containing ".." such as ../sidecar/docs/spec.md.
+	if absPath, ok := cleanProjectRequestPath(projectRoot, requestPath); ok {
+		for _, ctx := range contexts {
+			collector.add(ctx, absPath)
+		}
+	}
+
+	// Strategy 2: Resolve relative to each external root.
+	for _, ctx := range contexts {
+		collector.add(ctx, filepath.Join(ctx.AbsPath, filepath.FromSlash(requestPath)))
+	}
+
+	// Strategy 3: Walk configured roots for suffix and basename matches.
+	// External context roots are explicit and read-only; omitted dirs are
+	// pruned using the same policy as summaries and direct external reads.
+	for _, ctx := range contexts {
+		walkExternalContextFiles(ctx, func(absPath, relPath string) {
+			relSlash := filepath.ToSlash(relPath)
+			displayPath := externalDisplayPath(ctx, relSlash)
+			if isExternalSuffixMatch(requestPath, relSlash, displayPath) {
+				collector.add(ctx, absPath)
+			}
+		})
+	}
+
+	return FileResolution{Matches: collector.sortedMatches()}
+}
+
+type fileMatchCollector struct {
+	matches []FileMatch
+	seen    map[string]bool
+}
+
+func (c *fileMatchCollector) add(ctx model.ExternalContext, candidatePath string) {
+	root := cleanExternalRoot(ctx)
+	if root == "" {
+		return
+	}
+	absPath, err := filepath.Abs(candidatePath)
+	if err != nil {
+		return
+	}
+	realPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return
+	}
+	info, err := os.Stat(realPath)
+	if err != nil || info.IsDir() {
+		return
+	}
+	rel, ok := containedRelPath(root, realPath)
+	if !ok || shouldOmitExternalContextPath(root, realPath, rel) {
+		return
+	}
+	relSlash := filepath.ToSlash(rel)
+	c.addResolved(ctx, realPath, relSlash, externalDisplayPath(ctx, relSlash))
+}
+
+func (c *fileMatchCollector) addResolved(ctx model.ExternalContext, absPath, relPath, displayPath string) {
+	absPath = filepath.Clean(absPath)
+	if c.seen[absPath] {
+		return
+	}
+	c.seen[absPath] = true
+	c.matches = append(c.matches, FileMatch{
+		Context:     ctx,
+		AbsPath:     absPath,
+		RelPath:     relPath,
+		DisplayPath: displayPath,
+	})
+}
+
+func (c *fileMatchCollector) sortedMatches() []FileMatch {
+	matches := append([]FileMatch(nil), c.matches...)
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].DisplayPath != matches[j].DisplayPath {
+			return matches[i].DisplayPath < matches[j].DisplayPath
+		}
+		return matches[i].AbsPath < matches[j].AbsPath
+	})
+	return matches
+}
+
+func normalizeRequestPath(path string) string {
+	return filepath.ToSlash(filepath.Clean(filepath.FromSlash(strings.TrimSpace(path))))
+}
+
+func cleanProjectRequestPath(projectRoot, requestPath string) (string, bool) {
+	absPath := filepath.FromSlash(requestPath)
 	if !filepath.IsAbs(absPath) {
-		absPath = filepath.Join(projectRoot, filepath.FromSlash(requestPath))
+		absPath = filepath.Join(projectRoot, absPath)
 	}
 	absPath, err := filepath.Abs(absPath)
-	if err == nil {
-		if realPath, err := filepath.EvalSymlinks(absPath); err == nil {
-			if info, err := os.Stat(realPath); err == nil && !info.IsDir() {
-				for _, ctx := range contexts {
-					root := ctx.AbsPath
-					if resolved, err := filepath.EvalSymlinks(root); err == nil {
-						root = resolved
-					}
-					root = filepath.Clean(root)
-					rel, err := filepath.Rel(root, realPath)
-					if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-						if !shouldOmitExternalContextPath(root, realPath, rel) {
-							return ctx, realPath, true
-						}
-					}
-				}
-			}
-		}
+	if err != nil {
+		return "", false
 	}
+	return absPath, true
+}
 
-	// Strategy 2: Resolve relative to each external root (handles bare filenames)
-	for _, ctx := range contexts {
-		root := ctx.AbsPath
-		fullPath := filepath.Join(root, filepath.FromSlash(requestPath))
-		if realPath, err := filepath.EvalSymlinks(fullPath); err == nil {
-			if info, err := os.Stat(realPath); err == nil && !info.IsDir() {
-				// Re-verify containment in case of symlink trickery
-				if resolvedRoot, err := filepath.EvalSymlinks(root); err == nil {
-					root = resolvedRoot
-				}
-				root = filepath.Clean(root)
-				rel, err := filepath.Rel(root, realPath)
-				if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-					if !shouldOmitExternalContextPath(root, realPath, rel) {
-						return ctx, realPath, true
-					}
-				}
-			}
-		}
+func cleanExternalRoot(ctx model.ExternalContext) string {
+	root := ctx.AbsPath
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
 	}
+	return filepath.Clean(root)
+}
 
-	return model.ExternalContext{}, "", false
+func containedRelPath(root, path string) (string, bool) {
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
+	if err != nil {
+		return "", false
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return rel, true
+}
+
+func externalDisplayPath(ctx model.ExternalContext, relPath string) string {
+	return filepath.ToSlash(filepath.Join(ctx.Path, filepath.FromSlash(relPath)))
+}
+
+func isExternalSuffixMatch(requestPath, relPath, displayPath string) bool {
+	if requestPath == relPath || requestPath == displayPath {
+		return true
+	}
+	if !strings.Contains(requestPath, "/") {
+		return filepath.Base(relPath) == requestPath
+	}
+	return strings.HasSuffix(displayPath, requestPath)
+}
+
+func walkExternalContextFiles(ctx model.ExternalContext, visit func(absPath, relPath string)) {
+	root := cleanExternalRoot(ctx)
+	if root == "" {
+		return
+	}
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			if entry != nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if path == root {
+			return nil
+		}
+		rel, ok := containedRelPath(root, path)
+		if !ok {
+			return nil
+		}
+		if entry.IsDir() {
+			if shouldSkipExternalSummaryDir(entry.Name()) || promptpolicy.IsSensitivePath(filepath.ToSlash(rel)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if shouldOmitExternalContextPath(root, path, rel) {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		visit(filepath.Clean(path), rel)
+		return nil
+	})
 }
 
 // IsOmittedPath reports whether a path within an external context root should

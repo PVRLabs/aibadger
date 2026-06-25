@@ -416,7 +416,7 @@ func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []Extr
 	// 3. Total truncation (Drop Last File)
 	if f.MaxTotalContextBytes > 0 {
 		for {
-			body := f.buildSchemaBBody(t, processed, constraint)
+			body := f.buildSchemaBBody(t, processed, metadata, constraint)
 			if len(body) <= f.MaxTotalContextBytes || len(processed) == 0 {
 				break
 			}
@@ -426,22 +426,25 @@ func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []Extr
 		}
 	}
 
-	body := f.buildSchemaBBody(t, processed, constraint)
+	body := f.buildSchemaBBody(t, processed, metadata, constraint)
 	return body, metadata
 }
 
-func (f *Formatter) buildSchemaBBody(t *model.ProjectTopology, extractions []ExtractionResult, constraint string) string {
+func (f *Formatter) buildSchemaBBody(t *model.ProjectTopology, extractions []ExtractionResult, metadata []ExtractionMetadata, constraint string) string {
 	var sb strings.Builder
 	f.writeTopologySection(&sb, t, len(extractions))
 
 	sb.WriteString(constraint)
 	sb.WriteString("\n[CONTEXT]\n")
-	for _, e := range extractions {
+	for i, e := range extractions {
 		label := "Extracted Span"
 		if strings.HasPrefix(e.Content, "Binary file: ") {
 			label = "Binary Summary"
 		} else if e.FullFile {
 			label = "Full File"
+		}
+		if i < len(metadata) && metadata[i].Truncated {
+			label += ", Truncated"
 		}
 		sb.WriteString(fmt.Sprintf("--- File: %s (%s) ---\n", e.Path, label))
 		sb.WriteString(e.Content)

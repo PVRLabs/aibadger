@@ -117,6 +117,43 @@ func TestRunHeadlessContextStepIncludesExplicitGoal(t *testing.T) {
 	}
 }
 
+func TestRunHeadlessContextStepMarksTruncatedPrompt2Header(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module example.com/context\n"), 0644); err != nil {
+		t.Fatalf("WriteFile(go.mod) error = %v", err)
+	}
+	content := "package main\n\n" + strings.Repeat("func generated() {}\n", 8)
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(content), 0644); err != nil {
+		t.Fatalf("WriteFile(main.go) error = %v", err)
+	}
+
+	inputFile := writeTempInput(t, "FILE:main.go\n")
+	cfg := DefaultConfig()
+	cfg.Root = tmpDir
+	cfg.MaxContextFileBytes = 40
+	cfg.MaxTotalContextBytes = -1
+
+	var output bytes.Buffer
+	if err := RunHeadless(cfg, HeadlessOptions{
+		Step:      "context",
+		InputPath: inputFile,
+		Goal:      "inspect truncation",
+		Stdout:    &output,
+	}); err != nil {
+		t.Fatalf("RunHeadless() error = %v", err)
+	}
+
+	for _, want := range []string{
+		"[!] main.go (TRUNCATED)",
+		"--- File: main.go (Full File, Truncated) ---",
+		"... [Truncated",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("RunHeadless() truncated context output missing %q:\n%s", want, output.String())
+		}
+	}
+}
+
 func TestHandleFinalResponseUsesGenericHeadlessCopyInstruction(t *testing.T) {
 	eng := engine.FromTopology("", nil)
 	session := workflow.NewSession(eng, writer.DefaultWhitespaceMode)

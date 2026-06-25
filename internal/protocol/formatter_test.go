@@ -916,6 +916,9 @@ func TestGenerateSchemaBTrimming(t *testing.T) {
 	if !meta[0].Truncated {
 		t.Error("Expected truncation for 19 bytes with limit 10")
 	}
+	if !strings.Contains(out, "--- File: f1 (Extracted Span, Truncated) ---") {
+		t.Fatalf("expected truncated Prompt 2 header, got:\n%s", out)
+	}
 	if !strings.Contains(out, "[Truncated") {
 		t.Error("Expected truncation marker")
 	}
@@ -926,6 +929,48 @@ func TestGenerateSchemaBTrimming(t *testing.T) {
 	// Check UTF-8 boundary safety: "hello " (6 bytes), the next 3 bytes are "世"
 	// 10 / 2 = 5 bytes. content[:5] is "hello".
 	// If it was in the middle of a rune, trimContent should handle it.
+}
+
+func TestGenerateSchemaBPreservesNonTruncatedHeaders(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.MaxContextFileBytes = 0
+	formatter.MaxTotalContextBytes = 0
+
+	out, _ := formatter.GenerateSchemaB(&model.ProjectTopology{}, []ExtractionResult{
+		{Path: "full.go", Content: "package full", FullFile: true},
+		{Path: "span.go", Content: "func span() {}"},
+		{Path: "asset.bin", Content: "Binary file: asset.bin (12B, kind: binary)"},
+	}, "query")
+
+	for _, want := range []string{
+		"--- File: full.go (Full File) ---",
+		"--- File: span.go (Extracted Span) ---",
+		"--- File: asset.bin (Binary Summary) ---",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected Prompt 2 header %q, got:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, ", Truncated") {
+		t.Fatalf("non-truncated Prompt 2 headers must not include truncation marker:\n%s", out)
+	}
+}
+
+func TestGenerateSchemaBMarksTruncatedFullFileHeader(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.MaxContextFileBytes = 10
+	formatter.MaxTotalContextBytes = 0
+
+	out, meta := formatter.GenerateSchemaB(&model.ProjectTopology{}, []ExtractionResult{
+		{Path: "full.go", Content: "package full file content", FullFile: true},
+	}, "query")
+
+	if !meta[0].Truncated {
+		t.Fatal("expected full file metadata to be marked truncated")
+	}
+	if !strings.Contains(out, "--- File: full.go (Full File, Truncated) ---") {
+		t.Fatalf("expected truncated full-file Prompt 2 header, got:\n%s", out)
+	}
 }
 
 func TestGenerateSchemaBUsesExtractionResultPathForExternalLabels(t *testing.T) {

@@ -147,6 +147,7 @@ func TestRunHeadlessContextStepMarksTruncatedPrompt2Header(t *testing.T) {
 		"[!] main.go (TRUNCATED)",
 		"--- File: main.go (Full File, Truncated) ---",
 		"... [Truncated",
+		"--- End File (TRUNCATED) ---",
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("RunHeadless() truncated context output missing %q:\n%s", want, output.String())

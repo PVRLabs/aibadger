@@ -443,12 +443,17 @@ func (f *Formatter) buildSchemaBBody(t *model.ProjectTopology, extractions []Ext
 		} else if e.FullFile {
 			label = "Full File"
 		}
-		if i < len(metadata) && metadata[i].Truncated {
+		truncated := i < len(metadata) && metadata[i].Truncated
+		if truncated {
 			label += ", Truncated"
 		}
 		sb.WriteString(fmt.Sprintf("--- File: %s (%s) ---\n", e.Path, label))
 		sb.WriteString(e.Content)
-		sb.WriteString("\n--- End File ---\n")
+		if truncated {
+			sb.WriteString("\n--- End File (TRUNCATED) ---\n")
+		} else {
+			sb.WriteString("\n--- End File ---\n")
+		}
 	}
 
 	return sb.String()

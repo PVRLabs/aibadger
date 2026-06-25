@@ -919,6 +919,9 @@ func TestGenerateSchemaBTrimming(t *testing.T) {
 	if !strings.Contains(out, "--- File: f1 (Extracted Span, Truncated) ---") {
 		t.Fatalf("expected truncated Prompt 2 header, got:\n%s", out)
 	}
+	if !strings.Contains(out, "--- End File (TRUNCATED) ---") {
+		t.Fatalf("expected truncated Prompt 2 footer, got:\n%s", out)
+	}
 	if !strings.Contains(out, "[Truncated") {
 		t.Error("Expected truncation marker")
 	}
@@ -954,6 +957,9 @@ func TestGenerateSchemaBPreservesNonTruncatedHeaders(t *testing.T) {
 	if strings.Contains(out, ", Truncated") {
 		t.Fatalf("non-truncated Prompt 2 headers must not include truncation marker:\n%s", out)
 	}
+	if strings.Contains(out, "--- End File (TRUNCATED) ---") {
+		t.Fatalf("non-truncated Prompt 2 blocks must not include truncated footer:\n%s", out)
+	}
 }
 
 func TestGenerateSchemaBMarksTruncatedFullFileHeader(t *testing.T) {
@@ -970,6 +976,9 @@ func TestGenerateSchemaBMarksTruncatedFullFileHeader(t *testing.T) {
 	}
 	if !strings.Contains(out, "--- File: full.go (Full File, Truncated) ---") {
 		t.Fatalf("expected truncated full-file Prompt 2 header, got:\n%s", out)
+	}
+	if !strings.Contains(out, "--- End File (TRUNCATED) ---") {
+		t.Fatalf("expected truncated full-file Prompt 2 footer, got:\n%s", out)
 	}
 }
 

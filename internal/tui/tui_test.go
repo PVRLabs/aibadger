@@ -1120,6 +1120,9 @@ func TestSubmitGoalBadgeCommandShowsFlow(t *testing.T) {
 		t.Fatal("badge permission prompt returned nil command")
 	}
 	view := got.View()
+	if !strings.Contains(view, "Show support for Badger and help others discover it.") {
+		t.Fatalf("badge permission view missing motivation line:\n%s", view)
+	}
 	if !strings.Contains(view, "Fetch supporter scoreboard from GitHub? (y/N)") {
 		t.Fatalf("badge permission view missing prompt:\n%s", view)
 	}

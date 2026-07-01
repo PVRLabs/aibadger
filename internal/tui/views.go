@@ -358,7 +358,7 @@ func (m Model) viewManualCopy() string {
 }
 
 func (m Model) viewBadgePermissionPrompt() string {
-	return "   📡 Fetch supporter scoreboard from GitHub? (y/N)"
+	return "   Show support for Badger and help others discover it.\n\n   📡 Fetch supporter scoreboard from GitHub? (y/N)"
 }
 
 func (m Model) viewBadgeFetching() string {

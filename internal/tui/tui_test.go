@@ -20,6 +20,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/version"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
+	"github.com/charmbracelet/bubbles/cursor"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -1975,8 +1976,14 @@ func TestDesignFocusPrompt2CodeContextInCopySuccess(t *testing.T) {
 	if !ok {
 		t.Fatalf("Update returned %T, want tui.Model", next)
 	}
-	if cmd == nil {
-		t.Fatal("copy completion did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("copy completion returned unexpected command")
+	}
+	if !got.paste.Focused() {
+		t.Fatal("paste input was not focused after copy")
+	}
+	if got.paste.Cursor.Mode() != cursor.CursorStatic {
+		t.Fatalf("paste cursor mode = %v, want static", got.paste.Cursor.Mode())
 	}
 	if got.status.severity != messageSuccess {
 		t.Fatalf("status severity = %v, want success", got.status.severity)
@@ -2004,8 +2011,8 @@ func TestDesignFocusPrompt2CodeContextInCancel(t *testing.T) {
 	if got.status.text != "Prompt 2: Code Context was not copied." {
 		t.Fatalf("status = %q, want Prompt 2: Code Context cancel message", got.status.text)
 	}
-	if cmd == nil {
-		t.Fatal("cancel did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("cancel returned unexpected command")
 	}
 }
 
@@ -3393,8 +3400,8 @@ func TestLargePromptCancelAdvancesWorkflow(t *testing.T) {
 	if !got.paste.Focused() {
 		t.Fatal("paste input was not focused after cancel")
 	}
-	if cmd == nil {
-		t.Fatal("cancel did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("cancel returned unexpected command")
 	}
 }
 
@@ -3424,8 +3431,8 @@ func TestPartialExtractionWarningEnterReturnsToExtractionInput(t *testing.T) {
 	if !got.paste.Focused() {
 		t.Fatal("paste input was not focused after returning to extraction input")
 	}
-	if cmd == nil {
-		t.Fatal("warning dismissal did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("warning dismissal returned unexpected command")
 	}
 }
 
@@ -3482,8 +3489,8 @@ func TestPrompt2TempFileCompletionPersistsOnboardingCompletion(t *testing.T) {
 		!strings.Contains(got.status.text, "Attach this file to your AI chat") {
 		t.Fatalf("status missing saved file guidance: %#v", got.status)
 	}
-	if cmd == nil {
-		t.Fatal("temp file completion did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("temp file completion returned unexpected command")
 	}
 
 	settings, err := LoadSettings(settingsPath)
@@ -3564,8 +3571,8 @@ func TestPromptFileRevealNoSkipsOpenerAndAdvances(t *testing.T) {
 	if !strings.Contains(got.status.text, "Attach this file to your AI chat") {
 		t.Fatalf("status missing attach guidance: %#v", got.status)
 	}
-	if cmd == nil {
-		t.Fatal("skip reveal did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("skip reveal returned unexpected command")
 	}
 }
 
@@ -3599,8 +3606,8 @@ func TestPromptFileRevealSuccessAdvances(t *testing.T) {
 	if !strings.Contains(got.status.text, path) || !strings.Contains(got.status.text, "Attach this file to your AI chat") {
 		t.Fatalf("status missing saved path or attach guidance: %#v", got.status)
 	}
-	if cmd == nil {
-		t.Fatal("reveal success did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("reveal success returned unexpected command")
 	}
 }
 
@@ -3627,8 +3634,8 @@ func TestPromptFileRevealFailureKeepsPathVisibleAndAdvances(t *testing.T) {
 		!strings.Contains(got.status.text, path) {
 		t.Fatalf("status missing failure guidance or path: %#v", got.status)
 	}
-	if cmd == nil {
-		t.Fatal("reveal failure did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("reveal failure returned unexpected command")
 	}
 }
 
@@ -3649,8 +3656,8 @@ func TestPrompt2RevealDecisionPersistsOnboardingCompletion(t *testing.T) {
 	if got.state != stateWaitingForCode {
 		t.Fatalf("state = %v, want %v", got.state, stateWaitingForCode)
 	}
-	if cmd == nil {
-		t.Fatal("Prompt 2 reveal skip did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("Prompt 2 reveal skip returned unexpected command")
 	}
 
 	settings, err := LoadSettings(settingsPath)
@@ -3809,8 +3816,8 @@ func TestPrompt2ClipboardFailureTempFileFallbackPersistsOnboardingCompletion(t *
 		!strings.Contains(got.status.text, path) {
 		t.Fatalf("status missing clipboard fallback guidance: %#v", got.status)
 	}
-	if cmd == nil {
-		t.Fatal("Prompt 2 fallback completion did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("Prompt 2 fallback completion returned unexpected command")
 	}
 
 	settings, err := LoadSettings(settingsPath)
@@ -3927,8 +3934,8 @@ func TestPrompt2CopyPersistsOnboardingCompletion(t *testing.T) {
 	if !ok {
 		t.Fatalf("Update returned %T, want tui.Model", next)
 	}
-	if cmd == nil {
-		t.Fatal("Prompt 2 copy completion did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("Prompt 2 copy completion returned unexpected command")
 	}
 	if got.state != stateWaitingForCode {
 		t.Fatalf("state = %v, want %v", got.state, stateWaitingForCode)
@@ -3957,8 +3964,8 @@ func TestPrompt2ManualCopyPersistsOnboardingCompletion(t *testing.T) {
 	if !ok {
 		t.Fatalf("handleKey returned %T, want tui.Model", next)
 	}
-	if cmd == nil {
-		t.Fatal("manual Prompt 2 completion did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("manual Prompt 2 completion returned unexpected command")
 	}
 	if got.state != stateWaitingForCode {
 		t.Fatalf("state = %v, want %v", got.state, stateWaitingForCode)
@@ -4000,8 +4007,8 @@ func TestPrompt2PersistenceFailureIsSilent(t *testing.T) {
 	if got.status.severity != messageSuccess {
 		t.Fatalf("status severity = %v, want success", got.status.severity)
 	}
-	if cmd == nil {
-		t.Fatal("Prompt 2 copy completion did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("Prompt 2 copy completion returned unexpected command")
 	}
 }
 
@@ -4031,8 +4038,8 @@ func TestManualCopyEnterAdvancesToExtractionInput(t *testing.T) {
 	if !got.paste.Focused() {
 		t.Fatal("paste input was not focused")
 	}
-	if cmd == nil {
-		t.Fatal("manual copy advance did not return textarea blink command")
+	if cmd != nil {
+		t.Fatal("manual copy advance returned unexpected command")
 	}
 }
 

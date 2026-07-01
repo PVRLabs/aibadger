@@ -19,6 +19,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/taggedfile"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/term"
@@ -50,11 +51,14 @@ const (
 const (
 	topologyPromptKind    = workflow.TopologyPromptKind
 	codeContextPromptKind = workflow.CodeContextPromptKind
-	helpCommand           = "/help"
-	reviewCommand         = "/review"
-	designCommand         = "/design"
-	followupCommand       = "/followup"
-	badgeCommand          = "/badge"
+	// Bubble Tea's default renderer wakes at 60 FPS even while the view is
+	// unchanged; 10 FPS keeps scan animation responsive without burning idle CPU.
+	tuiRendererFPS  = 10
+	helpCommand     = "/help"
+	reviewCommand   = "/review"
+	designCommand   = "/design"
+	followupCommand = "/followup"
+	badgeCommand    = "/badge"
 )
 
 type Model struct {
@@ -181,7 +185,7 @@ func RunWithConfig(root string, cfg Config) error {
 	if err := engine.CheckDisabledAndExit(root, os.Stdout); err != nil {
 		return nil
 	}
-	_, err := tea.NewProgram(NewModel(root, cfg), tea.WithAltScreen()).Run()
+	_, err := tea.NewProgram(NewModel(root, cfg), tea.WithAltScreen(), tea.WithFPS(tuiRendererFPS)).Run()
 	return err
 }
 
@@ -201,6 +205,7 @@ func NewModel(root string, cfg Config) Model {
 	paste.CharLimit = 0
 	paste.SetWidth(initialEditorWidth())
 	paste.SetHeight(12)
+	paste.Cursor.SetMode(cursor.CursorStatic)
 	paste.Blur()
 
 	m := Model{
@@ -732,7 +737,7 @@ func (m Model) advanceAfterCopy(kind string, manual bool) (tea.Model, tea.Cmd) {
 			m.status = successMessage(statusText)
 		}
 	}
-	return m, textarea.Blink
+	return m, nil
 }
 
 func (m Model) advanceAfterTempFile(kind, path string) (tea.Model, tea.Cmd) {
@@ -755,7 +760,7 @@ func (m Model) advanceAfterTempFileWithStatus(kind, path string, status tuiMessa
 		m.state = stateWaitingForCode
 		m.resetPaste(pasteSpecForState(m.state, m.cfg.Focus).placeholder)
 	}
-	return m, textarea.Blink
+	return m, nil
 }
 
 func (m Model) cancelPromptDelivery(kind string) (tea.Model, tea.Cmd) {
@@ -770,7 +775,7 @@ func (m Model) cancelPromptDelivery(kind string) (tea.Model, tea.Cmd) {
 		m.state = stateWaitingForCode
 		m.resetPaste(pasteSpecForState(m.state, m.cfg.Focus).placeholder)
 	}
-	return m, textarea.Blink
+	return m, nil
 }
 
 func (m Model) submitExtractions() (tea.Model, tea.Cmd) {
@@ -815,7 +820,7 @@ func (m Model) rejectPartialExtractionWarning() (tea.Model, tea.Cmd) {
 	m.err = nil
 	m.paste.Focus()
 	m.goalInput.Blur()
-	return m, textarea.Blink
+	return m, nil
 }
 
 func (m Model) submitFinalResponse() (tea.Model, tea.Cmd) {

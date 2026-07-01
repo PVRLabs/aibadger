@@ -73,6 +73,8 @@ func matchesSensitiveBase(base string) bool {
 		"credentials", "credentials.json", "secret.json", "secrets.json",
 		"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519":
 		return true
+	case ".env.example", ".env.template", ".env.sample":
+		return false
 	}
 
 	if strings.HasPrefix(base, ".env.") {

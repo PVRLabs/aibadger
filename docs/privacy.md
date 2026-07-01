@@ -14,7 +14,7 @@ Badger is local-first.
 
 Badger automatically excludes obvious secret-bearing and sensitive paths from scanning and extraction, including:
 
-- **Credentials & Secrets**: `.env` (and `.env.*`), `.npmrc`, `.pypirc`, `.netrc`.
+- **Credentials & Secrets**: `.env` and most `.env.*` files, `.npmrc`, `.pypirc`, `.netrc`. Common environment template files such as `.env.example`, `.env.template`, and `.env.sample` may be extracted.
 - **Keys & Certificates**: `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa`, `id_dsa`, and other common private key formats.
 - **Cloud Configs**: `.aws/credentials`, `.aws/config`, `.gcp/credentials.json`, `.azure/` directories.
 - **System & Internal**: `.git`, `.kubeconfig`, and binary artifacts.

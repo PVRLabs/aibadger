@@ -8,7 +8,14 @@ func TestIsSensitivePath(t *testing.T) {
 		want bool
 	}{
 		{path: ".env", want: true},
+		{path: ".env.example", want: false},
+		{path: ".env.template", want: false},
+		{path: ".env.sample", want: false},
+		{path: ".ENV.EXAMPLE", want: false},
 		{path: ".env.local", want: true},
+		{path: ".env.production", want: true},
+		{path: ".env.foo", want: true},
+
 		{path: "keys/id_rsa", want: true},
 		{path: ".aws/credentials", want: true},
 		{path: ".gcp/credentials.json", want: true},

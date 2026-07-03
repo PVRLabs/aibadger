@@ -73,13 +73,18 @@ func TestHandleExtractionCommandsDevStepReadsInputFile(t *testing.T) {
 		t.Fatalf("handleExtractionCommands() goal = %q, want %q", goal, "keep this goal")
 	}
 	for _, want := range []string{
-		"[✓] Parsed 2 commands.",
-		"cmd: FILE cmd/badger/main.go",
-		"cmd: PREFIX cmd/badger/main_test.go",
+		"[EXTRACTION PLAN]",
+		"commands=2",
+		"FILE path=cmd/badger/main.go",
+		"PREFIX path=cmd/badger/main_test.go#func TestConfirm",
+		"plaintext_input_bytes=71",
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("handleExtractionCommands() output missing %q:\n%s", want, output.String())
 		}
+	}
+	if strings.Contains(output.String(), "cmd:") {
+		t.Fatalf("handleExtractionCommands() output contains legacy cmd line:\n%s", output.String())
 	}
 }
 
@@ -522,6 +527,30 @@ func TestPrintHeadlessResponsePlanWithUpdates(t *testing.T) {
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("printHeadlessResponsePlan() output missing %q:\n%s", want, output.String())
+		}
+	}
+}
+
+func TestPrintHeadlessExtractionPlan(t *testing.T) {
+	commands := []extractor.Command{
+		{Type: "FILE", Path: "cmd/badger/main.go"},
+		{Type: "NEAR", Path: "internal/tui/tui.go", Pattern: "stateHome"},
+		{Type: "PREFIX", Path: "pkg/badger/headless.go", Pattern: "func RunHeadless"},
+	}
+
+	var output bytes.Buffer
+	printHeadlessExtractionPlan(&output, "FILE:cmd/badger/main.go\nNEAR:internal/tui/tui.go#stateHome\n", commands)
+
+	for _, want := range []string{
+		"[EXTRACTION PLAN]",
+		"commands=3",
+		"FILE path=cmd/badger/main.go",
+		"NEAR path=internal/tui/tui.go#stateHome",
+		"PREFIX path=pkg/badger/headless.go#func RunHeadless",
+		"plaintext_input_bytes=58",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("printHeadlessExtractionPlan() output missing %q:\n%s", want, output.String())
 		}
 	}
 }

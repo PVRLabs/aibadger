@@ -92,15 +92,12 @@ func handleExtractionCommands(w io.Writer, goal string, session *workflow.Sessio
 	pasteInput := readInput(w, opts)
 
 	result := session.ParseExtractionInput(pasteInput)
-	fmt.Fprintf(w, "\n[✓] Parsed %d commands.\n", result.Count)
-
 	if opts.Step == "extraction" {
-		for _, c := range result.Commands {
-			fmt.Fprintf(w, "  cmd: %s %s\n", c.Type, c.Path)
-		}
+		printHeadlessExtractionPlan(w, pasteInput, result.Commands)
 		return nil, goal, true
 	}
 
+	fmt.Fprintf(w, "\n[✓] Parsed %d commands.\n", result.Count)
 	return result.Commands, goal, false
 }
 
@@ -143,4 +140,20 @@ func printHeadlessResponsePlan(w io.Writer, response string, result writer.Parse
 	for _, err := range result.Errors {
 		fmt.Fprintf(w, "parse_error=%v\n", err)
 	}
+}
+
+func printHeadlessExtractionPlan(w io.Writer, input string, commands []extractor.Command) {
+	fmt.Fprintln(w, "[EXTRACTION PLAN]")
+	fmt.Fprintf(w, "commands=%d\n", len(commands))
+	for _, command := range commands {
+		fmt.Fprintf(w, "%s path=%s\n", command.Type, extractionCommandReference(command))
+	}
+	fmt.Fprintf(w, "plaintext_input_bytes=%d\n", len(strings.TrimSpace(input)))
+}
+
+func extractionCommandReference(command extractor.Command) string {
+	if command.Pattern == "" {
+		return command.Path
+	}
+	return command.Path + "#" + command.Pattern
 }

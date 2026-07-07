@@ -1,7 +1,23 @@
 ![AI Badger](assets/hero.png)
-# AI Badger
 
-Badger is a lightweight local bridge between your codebase and any AI chat (Claude, ChatGPT, DeepSeek, Grok, etc.).
+# AI Badger — Local AI Coding Context Tool
+
+**Local-first codebase context extraction for any AI chat (Claude, ChatGPT, Grok, DeepSeek, etc.).**
+
+Get **precise, token-efficient context** on demand without uploading your entire repo or wasting tokens on irrelevant files.
+
+[![GitHub stars](https://img.shields.io/github/stars/PVRLabs/aibadger.svg)](https://github.com/PVRLabs/aibadger/stargazers)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](go.mod)
+[![Homebrew](https://img.shields.io/badge/Homebrew-available-brightgreen)](https://github.com/PVRLabs/aibadger)
+
+**No cloud • No API keys • No telemetry • Fully local**
+
+[▶ Try Interactive Demo](https://pvrlabs.xyz/aibadger/demo.html) • [Install](#install)
+
+[![AI Badger Interactive Demo](assets/demo.gif)](https://pvrlabs.xyz/aibadger/demo.html)
+
+**Map → Extract → Apply:** Smart local context bridge that prepares focused codebase snippets for any LLM chat.
 
 ## How it works
 
@@ -20,69 +36,58 @@ Badger fetches those files, builds a second prompt.
 ✓ Fully local — nothing leaves your machine until you copy it  
 ✓ You control every paste and every write
 
-[▶ Watch the interactive demo](https://pvrlabs.xyz/aibadger/demo.html)
-
-![AI Badger demo](assets/demo.gif)
-
-_Map → Extract → Apply: prepare focused code context for any AI chat._
+Perfect for **Claude token saving**, local LLM workflows, code reviews, design sessions, and debugging.
 
 ## Why AI Badger?
 
-- **Works with any AI chat** — Prepares clean, local code context for manual paste into any chat interface.
-- **Local-first by design** — No API keys, no cloud service, no telemetry, and no network required.
-- **Precise context extraction** — AI requests only the files or spans it needs using `FILE:`, `PREFIX:`, or `NEAR:` selectors.
+- **Universal compatibility** — Works with any AI chat interface or local model
+- **Local-first codebase context tool** — Complete privacy, no uploads
+- **Token efficient** — Stop burning agent tokens on reviews, explanations, or brainstorming
+- **Precise & lightweight** — Built in Go, fast, minimal overhead
+- **Specialized modes** — `review` and `design` for common workflows
 
 ## Install
 
-Install from the public Homebrew tap:
-
+### Homebrew (Recommended)
 ```bash
 brew tap pvrlabs/aibadger
 brew install pvrlabs/aibadger/badger
 ```
 
-Or install the latest release with curl:
-
+### Quick Curl Install
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | sh
 ```
 
-For source builds, release builds, version checks, and Windows install instructions, see [docs/install.md](docs/install.md).
+See [docs/install.md](docs/install.md) for Windows, source builds, and more.
 
 ## Quick Start
 
 1. Run `badger` in your project root.
 2. Type your goal (or paste a git diff).
-3. Copy **Prompt 1 (Map)** and paste into your AI chat.
-4. When the AI asks for files, copy its response and paste back into Badger.
-5. Copy **Prompt 2 (Code Context)** back to the AI.
-6. Paste the AI’s final response into Badger to review and apply changes.
+3. Copy **Prompt 1** → paste into your AI chat.
+4. When the AI asks for files, copy its response → paste back into Badger.
+5. Copy **Prompt 2** → paste back to the AI.
+6. Paste the AI’s response into Badger → review and apply changes.
 
 ### Specialized Modes
+- `badger review` — Git diff pre-loaded for code reviews
+- `badger design` — Architecture and planning focus
 
-- `badger review` — Starts directly in review mode with the current git diff pre-loaded.
-- `badger design` — Starts in design mode, focused on architecture, tradeoffs, and planning.
+Full usage: [docs/usage.md](docs/usage.md)
 
-For more commands, flags, and advanced usage, see [docs/usage.md](docs/usage.md).
+## Learn More
 
-### Example
+- [Usage Examples & Walkthrough](docs/usage.md)
+- [Protocol Reference](docs/protocol.md)
+- [Limitations & Supported Projects](docs/limitations.md)
+- [Privacy & Safety](docs/privacy.md)
+- [Contributing](docs/development.md)
 
-```bash
-badger
-```
+---
 
-Then type your goal:
+**Star if this local AI coding context tool solves a real pain for you ⭐**
 
-```text
-Help me understand how authentication works. Check @internal/auth.go
-```
+Built with ❤️ by [PVR Labs](https://pvrlabs.xyz) — privacy-first developer tools.
 
-For walkthroughs and more examples, see [docs/usage.md](docs/usage.md).
-
-## Learn more
-
-- [Usage walkthrough and examples](docs/usage.md)
-- [Protocol reference](docs/protocol.md)
-- [Supported project model and limitations](docs/limitations.md)
-- [Privacy and safety](docs/privacy.md)
-- [Contributor guide](docs/development.md)
+[Website](https://pvrlabs.xyz/aibadger) • [X @kupolov](https://x.com/kupolov)

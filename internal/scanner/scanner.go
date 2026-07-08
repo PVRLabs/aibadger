@@ -97,6 +97,12 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 	}
 	attachOpsResourcesToTopology(topology, opsResources)
 
+	resources, resErr := scanGenericResources(s.ProjectRoot)
+	if resErr != nil {
+		resources = nil
+	}
+	attachGenericResourcesToTopology(topology, resources)
+
 	// Finalize topology
 	topology.ScanTime = time.Since(start)
 	s.finalizeTopology(topology)

@@ -565,6 +565,142 @@ func TestScanAppliesTopologyPipelineMVPPoliciesTogether(t *testing.T) {
 	}
 }
 
+func TestScanGenericResourcesFindsRootAndNestedSchemaFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "schema.sql"), "create table orders (id integer primary key);\n")
+	writeTestFile(t, filepath.Join(tmpDir, "schemas", "orders.proto"), "syntax = \"proto3\";\n")
+	writeTestFile(t, filepath.Join(tmpDir, "api", "schema.graphql"), "type Query { orders: [Order!]! }\n")
+
+	sourceRoots, err := scanGenericResources(tmpDir)
+	if err != nil {
+		t.Fatalf("scanGenericResources() error = %v", err)
+	}
+	if len(sourceRoots) != 3 {
+		t.Fatalf("len(sourceRoots) = %d, want root, schemas, and api resources: %+v", len(sourceRoots), sourceRoots)
+	}
+	for _, sourceRoot := range sourceRoots {
+		if sourceRoot.Role != "Resources" {
+			t.Fatalf("sourceRoot %s Role = %q, want Resources", sourceRoot.Path, sourceRoot.Role)
+		}
+	}
+	if !resourceRootsHaveTopFile(sourceRoots, "schema.sql") {
+		t.Fatalf("sourceRoots = %+v, missing root schema.sql", sourceRoots)
+	}
+	if !resourceRootsHaveTopFile(sourceRoots, filepath.Join("schemas", "orders.proto")) {
+		t.Fatalf("sourceRoots = %+v, missing schemas/orders.proto", sourceRoots)
+	}
+	if !resourceRootsHaveTopFile(sourceRoots, filepath.Join("api", "schema.graphql")) {
+		t.Fatalf("sourceRoots = %+v, missing api/schema.graphql", sourceRoots)
+	}
+}
+
+func TestScanGenericResourcesSkipsDocsWebAndOpsDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "docs", "schema.sql"), "select 1;\n")
+	writeTestFile(t, filepath.Join(tmpDir, "public", "schema.sql"), "select 1;\n")
+	writeTestFile(t, filepath.Join(tmpDir, "deploy", "schema.sql"), "select 1;\n")
+	writeTestFile(t, filepath.Join(tmpDir, ".github", "workflows", "schema.sql"), "select 1;\n")
+	writeTestFile(t, filepath.Join(tmpDir, "data", "schema.sql"), "select 1;\n")
+
+	sourceRoots, err := scanGenericResources(tmpDir)
+	if err != nil {
+		t.Fatalf("scanGenericResources() error = %v", err)
+	}
+	if len(sourceRoots) != 1 {
+		t.Fatalf("sourceRoots = %+v, want only data resources", sourceRoots)
+	}
+	if !resourceRootsHaveTopFile(sourceRoots, filepath.Join("data", "schema.sql")) {
+		t.Fatalf("sourceRoots = %+v, missing data/schema.sql", sourceRoots)
+	}
+	for _, path := range []string{
+		filepath.Join("docs", "schema.sql"),
+		filepath.Join("public", "schema.sql"),
+		filepath.Join("deploy", "schema.sql"),
+		filepath.Join(".github", "workflows", "schema.sql"),
+	} {
+		if resourceRootsHaveTopFile(sourceRoots, path) {
+			t.Fatalf("sourceRoots = %+v, should skip %s", sourceRoots, path)
+		}
+	}
+}
+
+func TestScanGenericResourcesHandlesEmptyProject(t *testing.T) {
+	sourceRoots, err := scanGenericResources(t.TempDir())
+	if err != nil {
+		t.Fatalf("scanGenericResources() error = %v", err)
+	}
+	if len(sourceRoots) != 0 {
+		t.Fatalf("sourceRoots = %+v, want none for empty project", sourceRoots)
+	}
+}
+
+func TestScanAttachesGenericResourcesToLanguageTopology(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/resources\n")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "app", "app.go"), "package app\n")
+	writeTestFile(t, filepath.Join(tmpDir, "schema.sql"), "create table orders (id integer primary key);\n")
+	writeTestFile(t, filepath.Join(tmpDir, "schemas", "orders.proto"), "syntax = \"proto3\";\n")
+
+	topology, err := NewScanner(tmpDir).Scan()
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if len(topology.Modules) != 1 {
+		t.Fatalf("len(topology.Modules) = %d, want 1", len(topology.Modules))
+	}
+	module := topology.Modules[0]
+	if !hasTopFile(module.TopFiles, "schema.sql") && !moduleHasPackageTopFile(module, "schema.sql") {
+		t.Fatalf("module missing root schema.sql: %+v", module)
+	}
+	if !hasTopFile(module.TopFiles, filepath.Join("schemas", "orders.proto")) && !moduleHasPackageTopFile(module, filepath.Join("schemas", "orders.proto")) {
+		t.Fatalf("module missing schemas/orders.proto: %+v", module)
+	}
+	if findPackage(module, "schemas") == nil {
+		t.Fatalf("module.SourceRoots = %+v, missing schemas package", module.SourceRoots)
+	}
+}
+
+func TestScanGenericFallbackResourceOverlapDeduplicates(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "schema.sql"), "create table orders (id integer primary key);\n")
+
+	topology, err := NewScanner(tmpDir).Scan()
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if len(topology.Modules) != 1 {
+		t.Fatalf("len(topology.Modules) = %d, want generic fallback module", len(topology.Modules))
+	}
+	if countPackageTopFile(topology.Modules[0], "schema.sql") != 1 {
+		t.Fatalf("schema.sql should be surfaced exactly once after generic fallback/resource dedup: %+v", topology.Modules[0].SourceRoots)
+	}
+	if topology.Modules[0].FileCount != 1 {
+		t.Fatalf("module.FileCount = %d, want generic fallback count preserved", topology.Modules[0].FileCount)
+	}
+}
+
+func TestScanGenericResourcesDoNotDuplicateCoLocatedLanguageResources(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/resources\n")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "store.go"), "package store\n")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "schema.sql"), "create table orders (id integer primary key);\n")
+
+	topology, err := NewScanner(tmpDir).Scan()
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if len(topology.Modules) != 1 {
+		t.Fatalf("len(topology.Modules) = %d, want 1", len(topology.Modules))
+	}
+	module := topology.Modules[0]
+	if countPackageTopFile(module, filepath.Join("internal", "store", "schema.sql")) != 1 {
+		t.Fatalf("schema.sql should be surfaced exactly once after Go/resource overlap handling: %+v", module.SourceRoots)
+	}
+	if module.FileCount != 2 {
+		t.Fatalf("module.FileCount = %d, want Go source plus co-located SQL resource", module.FileCount)
+	}
+}
+
 func TestScanReportsMarkerOnlyNodeAsStackNotLanguage(t *testing.T) {
 	tmpDir := t.TempDir()
 	writeTestFile(t, filepath.Join(tmpDir, "pom.xml"), `<project></project>`)
@@ -954,4 +1090,15 @@ func countPackageTopFile(module model.Module, path string) int {
 		}
 	}
 	return count
+}
+
+func resourceRootsHaveTopFile(sourceRoots []model.SourceRoot, path string) bool {
+	for _, sourceRoot := range sourceRoots {
+		for _, pkg := range sourceRoot.Packages {
+			if hasTopFile(pkg.TopFiles, path) {
+				return true
+			}
+		}
+	}
+	return false
 }

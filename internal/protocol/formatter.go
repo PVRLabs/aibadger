@@ -78,14 +78,12 @@ func (f *Formatter) GenerateSchemaAWithTaggedFiles(t *model.ProjectTopology, que
 	headerStr := header.String()
 
 	var packages []string
-	for _, m := range t.Modules {
-		for _, pkg := range schemaAPackages(m) {
-			line := formatPackageLine(pkg)
-			if line == "" {
-				continue
-			}
-			packages = append(packages, line)
+	for _, pkg := range schemaATopologyPackages(t) {
+		line := formatPackageLine(pkg)
+		if line == "" {
+			continue
 		}
+		packages = append(packages, line)
 	}
 
 	var etcBuilder strings.Builder
@@ -184,6 +182,25 @@ func (f *Formatter) writeTopologySection(sb *strings.Builder, t *model.ProjectTo
 	if activeExtractions > 0 {
 		sb.WriteString(fmt.Sprintf("Active Extractions: %d files\n", activeExtractions))
 	}
+}
+
+func schemaATopologyPackages(t *model.ProjectTopology) []model.Package {
+	var packages []model.Package
+	packageIndexes := make(map[string]int)
+
+	for _, m := range t.Modules {
+		for _, pkg := range schemaAPackages(m) {
+			idx, exists := packageIndexes[pkg.Path]
+			if !exists {
+				packageIndexes[pkg.Path] = len(packages)
+				packages = append(packages, pkg)
+				continue
+			}
+			packages[idx] = mergeSchemaAPackage(packages[idx], pkg)
+		}
+	}
+
+	return packages
 }
 
 func schemaAPackages(module model.Module) []model.Package {

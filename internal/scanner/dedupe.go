@@ -12,6 +12,8 @@ import (
 type topologyFileCandidate struct {
 	summary      model.FileSummary
 	modulePath   string
+	moduleName   string
+	moduleLang   string
 	sourceRoot   string
 	packagePath  string
 	inTopFiles   bool
@@ -37,6 +39,8 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 						candidateGroups[normalizedPath] = append(candidateGroups[normalizedPath], topologyFileCandidate{
 							summary:     file,
 							modulePath:  module.Path,
+							moduleName:  module.Name,
+							moduleLang:  module.Language,
 							sourceRoot:  sourceRoot.Path,
 							packagePath: pkg.Path,
 							inTopFiles:  true,
@@ -51,6 +55,8 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 						candidateGroups[normalizedPath] = append(candidateGroups[normalizedPath], topologyFileCandidate{
 							summary:     file,
 							modulePath:  module.Path,
+							moduleName:  module.Name,
+							moduleLang:  module.Language,
 							sourceRoot:  sourceRoot.Path,
 							packagePath: pkg.Path,
 							inTopFiles:  false,
@@ -82,7 +88,7 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 	}
 
 	for _, winner := range winners {
-		module := findModuleByPath(t.Modules, winner.modulePath)
+		module := findModuleByCandidate(t.Modules, winner)
 		if module == nil {
 			continue
 		}
@@ -189,6 +195,8 @@ func recordTopologyFileCandidate(winners map[string]topologyFileCandidate, modul
 	candidate := topologyFileCandidate{
 		summary:      file,
 		modulePath:   module.Path,
+		moduleName:   module.Name,
+		moduleLang:   module.Language,
 		sourceRoot:   sourceRoot.Path,
 		packagePath:  pkg.Path,
 		inTopFiles:   inTopFiles,
@@ -227,7 +235,7 @@ func shouldReplaceTopologyFileCandidate(current, candidate topologyFileCandidate
 }
 
 func topologyFileOwnerKey(candidate topologyFileCandidate) string {
-	return candidate.modulePath + "\x00" + candidate.sourceRoot + "\x00" + candidate.packagePath + "\x00" + candidate.summary.Name + "\x00" + candidate.summary.Kind
+	return candidate.modulePath + "\x00" + candidate.moduleName + "\x00" + candidate.moduleLang + "\x00" + candidate.sourceRoot + "\x00" + candidate.packagePath + "\x00" + candidate.summary.Name + "\x00" + candidate.summary.Kind
 }
 
 func topologyPackageSpecificity(packagePath string) int {
@@ -239,6 +247,8 @@ func topologyPackageSpecificity(packagePath string) int {
 
 func sameTopologyFileCandidate(left, right topologyFileCandidate) bool {
 	return left.modulePath == right.modulePath &&
+		left.moduleName == right.moduleName &&
+		left.moduleLang == right.moduleLang &&
 		left.sourceRoot == right.sourceRoot &&
 		left.packagePath == right.packagePath &&
 		left.inTopFiles == right.inTopFiles &&

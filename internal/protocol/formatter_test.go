@@ -545,6 +545,61 @@ func TestGenerateSchemaACoalescesDuplicatePackageDisplayGroups(t *testing.T) {
 	}
 }
 
+func TestGenerateSchemaACoalescesSamePathPackagesAcrossModules(t *testing.T) {
+	formatter := NewFormatter()
+	topology := &model.ProjectTopology{
+		Languages:       []string{"Go", "JavaScript"},
+		PrimaryLanguage: "Go",
+		Modules: []model.Module{
+			{
+				Language: "Go",
+				SourceRoots: []model.SourceRoot{
+					{
+						Path: "",
+						Role: "Main Source",
+						Packages: []model.Package{
+							{
+								Path:      "",
+								FileCount: 1,
+								TopFiles:  []model.FileSummary{{Name: "main.go", Path: "main.go", Size: 57}},
+							},
+						},
+					},
+				},
+			},
+			{
+				Language: "JavaScript",
+				SourceRoots: []model.SourceRoot{
+					{
+						Path: "",
+						Role: "Module Overview",
+						Packages: []model.Package{
+							{
+								Path:      "",
+								FileCount: 2,
+								TopFiles: []model.FileSummary{
+									{Name: "package.json", Path: "package.json", Size: 49},
+									{Name: "index.js", Path: "index.js", Size: 25},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	output := formatter.GenerateSchemaA(topology, "explain")
+
+	if got := strings.Count(output, "Pkg: . "); got != 1 {
+		t.Fatalf("root package display count = %d, want 1:\n%s", got, output)
+	}
+	want := "Pkg: . [3 files] -> Top: package.json (49B), main.go (57B), index.js (25B)"
+	if !strings.Contains(output, want) {
+		t.Fatalf("expected cross-module coalesced root package line, got:\n%s", output)
+	}
+}
+
 func TestGenerateSchemaARendersAuxBinaryAndAssetFiles(t *testing.T) {
 	formatter := NewFormatter()
 	topology := &model.ProjectTopology{

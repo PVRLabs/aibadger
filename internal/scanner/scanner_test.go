@@ -69,6 +69,103 @@ func TestFinalizeTopology(t *testing.T) {
 	}
 }
 
+func TestFinalizeTopologyWithLanguageWeightsAppliesWeightsOncePerLanguage(t *testing.T) {
+	s := NewScanner("")
+	topology := &model.ProjectTopology{
+		Modules: []model.Module{
+			{Name: "go-a", Path: "go-a", Language: "Go", FileCount: 100},
+			{Name: "go-b", Path: "go-b", Language: "Go", FileCount: 100},
+			{Name: "py", Path: "py", Language: "Python", FileCount: 1},
+		},
+	}
+
+	s.finalizeTopologyWithLanguageWeights(topology, map[string]int64{
+		"Go":     1,
+		"Python": 2,
+	})
+
+	if topology.PrimaryLanguage != "Python" {
+		t.Fatalf("PrimaryLanguage = %q, want Python from one weighted count per language", topology.PrimaryLanguage)
+	}
+}
+
+func TestSourceLanguageWeightsCountActualSourceFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "a.go"), "package store\n")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "b.go"), "package store\n")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "schema.sql"), "create table orders(id int);\n")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "logo.png"), "png")
+
+	modules := []model.Module{
+		{
+			Name:     "example.com/app",
+			Path:     "",
+			Language: "Go",
+			SourceRoots: []model.SourceRoot{
+				{
+					Path: "internal",
+					Role: "Internal Source",
+					Packages: []model.Package{
+						{
+							Path:      filepath.Join("internal", "store"),
+							FileCount: 4,
+							TopFiles: []model.FileSummary{
+								{Name: "a.go", Path: filepath.Join("internal", "store", "a.go")},
+								{Name: "schema.sql", Path: filepath.Join("internal", "store", "schema.sql")},
+							},
+							AuxFiles: []model.FileSummary{
+								{Name: "logo.png", Path: filepath.Join("internal", "store", "logo.png"), Kind: model.FileKindAsset},
+							},
+						},
+					},
+				},
+				{
+					Path: "deploy",
+					Role: "Ops/Deploy",
+					Packages: []model.Package{
+						{Path: "deploy", FileCount: 1},
+					},
+				},
+			},
+		},
+	}
+
+	weights := sourceLanguageWeightsFromModules(modules, tmpDir)
+	if weights["Go"] != 2 {
+		t.Fatalf("Go source weight = %d, want actual .go file count 2", weights["Go"])
+	}
+}
+
+func TestFindModuleByCandidateRequiresIdentityMatch(t *testing.T) {
+	modules := []model.Module{
+		{Name: "go-root", Path: "", Language: "Go"},
+		{Name: "js-root", Path: "", Language: "JavaScript"},
+	}
+
+	matched := findModuleByCandidate(modules, topologyFileCandidate{
+		modulePath: "",
+		moduleName: "js-root",
+		moduleLang: "JavaScript",
+	})
+	if matched == nil || matched.Name != "js-root" {
+		t.Fatalf("matched module = %+v, want JavaScript root", matched)
+	}
+
+	mismatched := findModuleByCandidate(modules, topologyFileCandidate{
+		modulePath: "",
+		moduleName: "renamed",
+		moduleLang: "JavaScript",
+	})
+	if mismatched != nil {
+		t.Fatalf("mismatched candidate resolved to %+v, want nil", mismatched)
+	}
+
+	legacy := findModuleByCandidate(modules, topologyFileCandidate{modulePath: ""})
+	if legacy == nil || legacy.Name != "go-root" {
+		t.Fatalf("legacy candidate resolved to %+v, want path fallback", legacy)
+	}
+}
+
 func TestFinalizeTopologySortsNestedOutput(t *testing.T) {
 	topology := &model.ProjectTopology{
 		Modules: []model.Module{
@@ -722,6 +819,30 @@ func TestScanReportsMarkerOnlyNodeAsStackNotLanguage(t *testing.T) {
 	}
 }
 
+func TestScanPrimaryLanguageIgnoresManifestResourceVisibility(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/hybrid\n")
+	writeTestFile(t, filepath.Join(tmpDir, "main.go"), "package main\nfunc main() {}\n")
+	writeTestFile(t, filepath.Join(tmpDir, "pom.xml"), `<project><modelVersion>4.0.0</modelVersion></project>`)
+	writeTestFile(t, filepath.Join(tmpDir, "package.json"), `{"scripts":{"start":"node index.js"}}`)
+	writeTestFile(t, filepath.Join(tmpDir, "index.js"), "console.log('ok')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "pyproject.toml"), "[project]\nname = \"hybrid\"\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "app", "__init__.py"), "")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "app", "main.py"), "print('ok')\n")
+	writeTestFile(t, filepath.Join(tmpDir, "Makefile"), "test:\n\ttrue\n")
+
+	topology, err := NewScanner(tmpDir).Scan()
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if topology.PrimaryLanguage != "Python" {
+		t.Fatalf("PrimaryLanguage = %q, want Python", topology.PrimaryLanguage)
+	}
+	if !topologyHasPackageTopFile(topology, "pom.xml") {
+		t.Fatalf("topology should still surface pom.xml as a visible root resource: %+v", topology.Modules)
+	}
+}
+
 func TestScannerUsesNodeDetectorForPureJavaScriptProject(t *testing.T) {
 	tmpDir := t.TempDir()
 	writeTestFile(t, filepath.Join(tmpDir, "package.json"), `{"name":"web","main":"src/index.js"}`)
@@ -1065,6 +1186,15 @@ func TestDetectedStackDoesNotInferFrameworkFromDeepProjectStructureAlone(t *test
 	if !reflect.DeepEqual(stack, want) {
 		t.Fatalf("Stack = %v, want %v", stack, want)
 	}
+}
+
+func topologyHasPackageTopFile(topology *model.ProjectTopology, path string) bool {
+	for _, module := range topology.Modules {
+		if moduleHasPackageTopFile(module, path) {
+			return true
+		}
+	}
+	return false
 }
 
 func moduleHasPackageAuxFile(module model.Module, path string) bool {

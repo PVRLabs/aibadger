@@ -76,6 +76,7 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 			usedGenericFallback = true
 		}
 	}
+	languageWeights := sourceLanguageWeightsFromModules(topology.Modules, s.ProjectRoot)
 
 	if !usedGenericFallback {
 		docs, docsErr := scanDocs(s.ProjectRoot)
@@ -105,7 +106,7 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 
 	// Finalize topology
 	topology.ScanTime = time.Since(start)
-	s.finalizeTopology(topology)
+	s.finalizeTopologyWithLanguageWeights(topology, languageWeights)
 
 	return topology, nil
 }

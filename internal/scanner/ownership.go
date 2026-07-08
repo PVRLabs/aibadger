@@ -29,7 +29,7 @@ func adjustTopologyOwnershipStats(t *model.ProjectTopology, candidateGroups map[
 
 // Decrement ownership counters for one duplicate loser without changing summary caps or winners.
 func decrementTopologyOwnershipStats(t *model.ProjectTopology, candidate topologyFileCandidate) {
-	module := findModuleByPath(t.Modules, candidate.modulePath)
+	module := findModuleByCandidate(t.Modules, candidate)
 	if module == nil {
 		return
 	}
@@ -69,6 +69,20 @@ func findModuleByPath(modules []model.Module, modulePath string) *model.Module {
 		}
 	}
 	return nil
+}
+
+func findModuleByCandidate(modules []model.Module, candidate topologyFileCandidate) *model.Module {
+	for idx := range modules {
+		if modules[idx].Path == candidate.modulePath &&
+			modules[idx].Name == candidate.moduleName &&
+			modules[idx].Language == candidate.moduleLang {
+			return &modules[idx]
+		}
+	}
+	if candidate.moduleName != "" || candidate.moduleLang != "" {
+		return nil
+	}
+	return findModuleByPath(modules, candidate.modulePath)
 }
 
 func findSourceRootInModule(module *model.Module, sourceRootPath string) *model.SourceRoot {

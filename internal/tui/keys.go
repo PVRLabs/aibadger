@@ -523,6 +523,7 @@ func (m Model) forwardKeyToInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.goalInput, cmd = m.goalInput.Update(msg)
 			m.enforceGoalByteLimit(pastedKeyMsg(msg))
 			m.resizeGoalEditor()
+			m.refreshCompletionCandidate()
 			m.pruneCompletionSuppression()
 			if msg.Type == tea.KeyRunes {
 				after := m.goalInput.Value()

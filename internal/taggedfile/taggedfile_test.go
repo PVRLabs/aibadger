@@ -292,6 +292,112 @@ func TestCompleteTaggedReferencesMatchesRepoRelativePathPrefix(t *testing.T) {
 	}
 }
 
+func TestCompleteTaggedReferencesDescendsExplicitDirectoryPrefixes(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWrite := func(path string) {
+		t.Helper()
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite("docs/mydoc.md")
+	mustWrite("docs/plans/myplan.md")
+	mustWrite("docs/plans/0000-planning-principles.md")
+	mustWrite("docs/plans/archive/old-plan.md")
+
+	completions, err := Complete(root, "mydoc", nil, 8, nil)
+	if err != nil {
+		t.Fatalf("Complete(shallow basename) error = %v", err)
+	}
+	if !containsSuggestion(completions, "docs/mydoc.md") {
+		t.Fatalf("Complete(shallow basename) missing docs/mydoc.md: %v", suggestionsToPaths(completions))
+	}
+	if containsSuggestion(completions, "docs/plans/myplan.md") {
+		t.Fatalf("Complete(shallow basename) included deeper file: %v", suggestionsToPaths(completions))
+	}
+
+	completions, err = Complete(root, "docs/my", nil, 8, nil)
+	if err != nil {
+		t.Fatalf("Complete(docs/my) error = %v", err)
+	}
+	if !reflect.DeepEqual(suggestionsToPaths(completions), []string{"docs/mydoc.md"}) {
+		t.Fatalf("Complete(docs/my) paths = %v, want only docs/mydoc.md", suggestionsToPaths(completions))
+	}
+
+	completions, err = Complete(root, "docs/plans/my", nil, 8, nil)
+	if err != nil {
+		t.Fatalf("Complete(docs/plans/my) error = %v", err)
+	}
+	if !reflect.DeepEqual(suggestionsToPaths(completions), []string{"docs/plans/myplan.md"}) {
+		t.Fatalf("Complete(docs/plans/my) paths = %v, want docs/plans/myplan.md", suggestionsToPaths(completions))
+	}
+
+	completions, err = Complete(root, "docs/plans/000", nil, 8, nil)
+	if err != nil {
+		t.Fatalf("Complete(docs/plans/000) error = %v", err)
+	}
+	if !reflect.DeepEqual(suggestionsToPaths(completions), []string{"docs/plans/0000-planning-principles.md"}) {
+		t.Fatalf("Complete(docs/plans/000) paths = %v, want docs/plans/0000-planning-principles.md", suggestionsToPaths(completions))
+	}
+}
+
+func TestCompleteTaggedReferencesExplicitDirectoryListsImmediateChildrenOnly(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWrite := func(path string) {
+		t.Helper()
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite("docs/mydoc.md")
+	mustWrite("docs/plans/myplan.md")
+	mustWrite("docs/plans/archive/old-plan.md")
+
+	completions, err := Complete(root, "docs/", nil, 8, nil)
+	if err != nil {
+		t.Fatalf("Complete(docs/) error = %v", err)
+	}
+	paths := suggestionsToPaths(completions)
+	for _, want := range []string{"docs/mydoc.md", "docs/plans/"} {
+		if !containsSuggestion(completions, want) {
+			t.Fatalf("Complete(docs/) missing %q: %v", want, paths)
+		}
+	}
+	for _, notWant := range []string{"docs/plans/myplan.md", "docs/plans/archive/"} {
+		if containsSuggestion(completions, notWant) {
+			t.Fatalf("Complete(docs/) included non-immediate child %q: %v", notWant, paths)
+		}
+	}
+
+	completions, err = Complete(root, "docs/plans/", nil, 8, nil)
+	if err != nil {
+		t.Fatalf("Complete(docs/plans/) error = %v", err)
+	}
+	paths = suggestionsToPaths(completions)
+	for _, want := range []string{"docs/plans/myplan.md", "docs/plans/archive/"} {
+		if !containsSuggestion(completions, want) {
+			t.Fatalf("Complete(docs/plans/) missing %q: %v", want, paths)
+		}
+	}
+	if containsSuggestion(completions, "docs/plans/archive/old-plan.md") {
+		t.Fatalf("Complete(docs/plans/) included non-immediate child: %v", paths)
+	}
+}
+
 func TestCompleteTaggedReferencesRespectsBoundedLimitAndSkip(t *testing.T) {
 	t.Parallel()
 
@@ -527,6 +633,38 @@ func TestCompleteTaggedReferencesExternalFallback(t *testing.T) {
 	}
 	if len(completions) != 0 {
 		t.Fatalf("expected no completions for omitted file, got %v", suggestionsToPaths(completions))
+	}
+}
+
+func TestCompleteTaggedReferencesExplicitDirectoryExternalFallback(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ext := t.TempDir()
+
+	mustWrite := func(dir, path string) {
+		t.Helper()
+		full := filepath.Join(dir, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite(ext, "docs/plans/external-plan.md")
+
+	externalRoots := []ExternalRoot{
+		{Path: "ext", AbsPath: ext},
+	}
+
+	completions, err := Complete(root, "docs/plans/ex", externalRoots, 8, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(suggestionsToPaths(completions), []string{"docs/plans/external-plan.md"}) {
+		t.Fatalf("expected external explicit directory completion, got %v", suggestionsToPaths(completions))
 	}
 }
 

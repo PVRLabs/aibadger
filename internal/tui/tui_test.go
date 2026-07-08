@@ -2217,13 +2217,16 @@ func TestCompletionResetsActiveSelectionWhenSuggestionsChange(t *testing.T) {
 
 	m := NewModel(root, DefaultConfig())
 	m.goalInput.SetValue("Review @docs/")
-	m.goalInput.SetCursor(len("Review @docs/"))
+	m.goalInput.CursorEnd()
 	m.refreshCompletionCandidate()
 	m.completion.activeIndex = 1
 
-	m.goalInput.SetValue("Review @docs/g")
-	m.goalInput.SetCursor(len("Review @docs/g"))
-	m.refreshCompletionCandidate()
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	m = got
 
 	if got := m.completion.activeIndex; got != 0 {
 		t.Fatalf("activeIndex after refresh = %d, want 0", got)
@@ -2439,6 +2442,58 @@ func TestTaggedCompletionEnterAndTabInsertIntoActiveToken(t *testing.T) {
 				t.Fatal("completion insertion returned unexpected command")
 			}
 		})
+	}
+}
+
+func TestTaggedDirectoryCompletionReopensForContinuedDescent(t *testing.T) {
+	root := t.TempDir()
+	writeTaggedCompletionFixture(t, root, "docs/plans/myplan.md")
+	writeTaggedCompletionFixture(t, root, "docs/plans/0000-planning-principles.md")
+
+	m := NewModel(root, DefaultConfig())
+	m.goalInput.SetValue("Review @docs/p")
+	m.goalInput.CursorEnd()
+	m.refreshCompletionCandidate()
+
+	candidate, ok := m.completionVisible()
+	if !ok {
+		t.Fatal("completionVisible() = false, want tagged directory completion")
+	}
+	if len(candidate.suggestions) != 1 || candidate.suggestions[0].replacement != "@docs/plans/" {
+		t.Fatalf("suggestions = %+v, want @docs/plans/", candidate.suggestions)
+	}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want tui.Model", next)
+	}
+	if cmd != nil {
+		t.Fatal("directory completion returned unexpected command")
+	}
+	if got.goalInput.Value() != "Review @docs/plans/" {
+		t.Fatalf("goal input = %q, want completed directory", got.goalInput.Value())
+	}
+
+	candidate, ok = got.completionVisible()
+	if !ok {
+		t.Fatal("completionVisible() = false after directory completion, want next-level suggestions")
+	}
+	var replacements []string
+	for _, suggestion := range candidate.suggestions {
+		replacements = append(replacements, suggestion.replacement)
+	}
+	for _, want := range []string{"@docs/plans/0000-planning-principles.md", "@docs/plans/myplan.md"} {
+		found := false
+		for _, replacement := range replacements {
+			if replacement == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("next-level suggestions missing %q: %v", want, replacements)
+		}
 	}
 }
 

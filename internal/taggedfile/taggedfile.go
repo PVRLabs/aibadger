@@ -245,6 +245,10 @@ func Complete(projectRoot, prefix string, externalRoots []ExternalRoot, limit in
 		return nil, err
 	}
 
+	if hasExplicitCompletionDirectory(prefix) {
+		return completeExplicitDirectoryPrefix(projectRoot, prefix, externalRoots, limit, skip)
+	}
+
 	candidates, err := collectShallowCompletionCandidates(projectRoot, skip)
 	if err != nil {
 		return nil, err
@@ -335,6 +339,161 @@ type scoredSuggestion struct {
 	suggestion Suggestion
 	rank       int
 	isExternal bool
+}
+
+func hasExplicitCompletionDirectory(prefix string) bool {
+	return strings.Contains(strings.TrimSpace(strings.ReplaceAll(prefix, "\\", "/")), "/")
+}
+
+func completeExplicitDirectoryPrefix(projectRoot, prefix string, externalRoots []ExternalRoot, limit int, skip SkipFunc) ([]Suggestion, error) {
+	local, err := collectExplicitDirectorySuggestions(projectRoot, prefix, skip)
+	localErr := err
+
+	scored := make([]scoredSuggestion, 0, len(local))
+	seenPaths := make(map[string]bool)
+	if localErr == nil {
+		for _, suggestion := range local {
+			scored = append(scored, scoredSuggestion{suggestion: suggestion})
+			seenPaths[suggestion.Path] = true
+		}
+	}
+
+	for _, root := range externalRoots {
+		extSuggestions, err := collectExplicitDirectorySuggestions(root.AbsPath, prefix, func(relPath string, isDir bool) bool {
+			if skip != nil && skip(relPath, isDir) {
+				return true
+			}
+			if root.IsOmitted != nil && root.IsOmitted(relPath, filepath.Join(root.AbsPath, filepath.FromSlash(relPath))) {
+				return true
+			}
+			return false
+		})
+		if err != nil {
+			continue
+		}
+		for _, suggestion := range extSuggestions {
+			if seenPaths[suggestion.Path] {
+				continue
+			}
+			scored = append(scored, scoredSuggestion{
+				suggestion: suggestion,
+				isExternal: true,
+			})
+			seenPaths[suggestion.Path] = true
+		}
+	}
+
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].isExternal != scored[j].isExternal {
+			return !scored[i].isExternal
+		}
+		if scored[i].suggestion.IsDir != scored[j].suggestion.IsDir {
+			return !scored[i].suggestion.IsDir && scored[j].suggestion.IsDir
+		}
+		return scored[i].suggestion.Path < scored[j].suggestion.Path
+	})
+
+	if len(scored) > limit {
+		scored = scored[:limit]
+	}
+	suggestions := make([]Suggestion, 0, len(scored))
+	for _, item := range scored {
+		suggestions = append(suggestions, item.suggestion)
+	}
+	if len(suggestions) == 0 && localErr != nil {
+		return nil, localErr
+	}
+	return suggestions, nil
+}
+
+func collectExplicitDirectorySuggestions(projectRoot, prefix string, skip SkipFunc) ([]Suggestion, error) {
+	normalized := strings.TrimSpace(strings.ReplaceAll(prefix, "\\", "/"))
+	dirPrefix, namePrefix := splitExplicitCompletionPrefix(normalized)
+
+	resolvedDir, err := resolveCompletionDirectory(projectRoot, dirPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(resolvedDir.AbsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var suggestions []Suggestion
+	for _, entry := range entries {
+		name := entry.Name()
+		if namePrefix != "" && !hasPrefixFold(name, namePrefix) {
+			continue
+		}
+		relPath := joinTaggedPath(resolvedDir.Path, name)
+		isDir := entry.IsDir()
+		if skip != nil && skip(relPath, isDir) {
+			continue
+		}
+		suggestions = append(suggestions, Suggestion{
+			Path:  dirSuffix(relPath, isDir),
+			IsDir: isDir,
+		})
+	}
+	return suggestions, nil
+}
+
+func splitExplicitCompletionPrefix(prefix string) (string, string) {
+	trimmed := strings.TrimSuffix(prefix, "/")
+	if strings.HasSuffix(prefix, "/") {
+		return trimmed, ""
+	}
+	idx := strings.LastIndex(trimmed, "/")
+	if idx < 0 {
+		return "", trimmed
+	}
+	return trimmed[:idx], trimmed[idx+1:]
+}
+
+func resolveCompletionDirectory(projectRoot, relPath string) (ResolvedPath, error) {
+	clean := strings.TrimSpace(relPath)
+	if clean == "" {
+		return resolveExistingDirectory(projectRoot, "")
+	}
+
+	absRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return ResolvedPath{}, fmt.Errorf("failed to resolve project root: %w", err)
+	}
+
+	currentAbs := absRoot
+	var actualSegments []string
+	for _, segment := range strings.Split(strings.ReplaceAll(clean, "\\", "/"), "/") {
+		if segment == "" || segment == "." {
+			continue
+		}
+		entries, err := os.ReadDir(currentAbs)
+		if err != nil {
+			return ResolvedPath{}, err
+		}
+		var matched os.DirEntry
+		for _, entry := range entries {
+			if strings.EqualFold(entry.Name(), segment) {
+				matched = entry
+				break
+			}
+		}
+		if matched == nil {
+			return ResolvedPath{}, fmt.Errorf("tagged file completion directory does not exist: %s", relPath)
+		}
+		if !matched.IsDir() {
+			return ResolvedPath{}, fmt.Errorf("tagged file completion prefix is not a directory: %s", relPath)
+		}
+		currentAbs = filepath.Join(currentAbs, matched.Name())
+		actualSegments = append(actualSegments, matched.Name())
+	}
+
+	resolved, err := resolveExistingDirectory(projectRoot, strings.Join(actualSegments, "/"))
+	if err != nil {
+		return ResolvedPath{}, err
+	}
+	return resolved, nil
 }
 
 func collectShallowCompletionCandidates(projectRoot string, skip SkipFunc) ([]shallowCompletionCandidate, error) {

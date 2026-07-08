@@ -23,6 +23,7 @@ type completionSuggestion struct {
 	label       string
 	replacement string
 	description string
+	isDir       bool
 }
 
 type completionCandidate struct {
@@ -119,7 +120,8 @@ func (m Model) applyCompletionCandidate(candidate completionCandidate) (tea.Mode
 	if activeIndex < 0 || activeIndex >= len(candidate.suggestions) {
 		activeIndex = 0
 	}
-	replacement := candidate.suggestions[activeIndex].replacement
+	selected := candidate.suggestions[activeIndex]
+	replacement := selected.replacement
 	input := m.goalInput.Value()
 	if candidate.start < 0 || candidate.end < candidate.start || candidate.end > len(input) {
 		return m, nil
@@ -129,7 +131,9 @@ func (m Model) applyCompletionCandidate(candidate completionCandidate) (tea.Mode
 	m.goalInput.SetValue(updated)
 	m.resizeGoalEditor()
 	m.refreshCompletionCandidate()
-	m.completion.suppressedKey = candidate.kind.String() + ":" + replacement
+	if candidate.kind != completionKindTagged || !selected.isDir {
+		m.completion.suppressedKey = candidate.kind.String() + ":" + replacement
+	}
 
 	if candidate.kind == completionKindSlash {
 		return m.submitGoal()
@@ -261,6 +265,7 @@ func (m Model) taggedCompletionCandidate(input string, cursor int) (completionCa
 			label:       replacement,
 			replacement: replacement,
 			description: taggedFileSuggestionDescription(suggestion.Path, suggestion.IsDir),
+			isDir:       suggestion.IsDir,
 		})
 	}
 

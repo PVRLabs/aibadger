@@ -12,6 +12,7 @@ import (
 
 	"github.com/PVRLabs/aibadger/internal/externalcontext"
 	"github.com/PVRLabs/aibadger/internal/filekind"
+	"github.com/PVRLabs/aibadger/internal/imageutil"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
 	"github.com/PVRLabs/aibadger/internal/protocol"
@@ -181,7 +182,7 @@ func (e *Extractor) processLocalCommand(cmd Command, resolvedPath string) (strin
 		if err != nil {
 			return "", false, fmt.Errorf("file not found: %s", cmd.Path)
 		}
-		return summarizeBinaryFile(resolvedPath, int(info.Size()), kind), false, nil
+		return summarizeBinaryFile(resolvedPath, absolutePath, int(info.Size()), kind), false, nil
 	}
 
 	data, err := os.ReadFile(absolutePath)
@@ -229,7 +230,7 @@ func (e *Extractor) processExternalCommand(cmd Command) (externalCommandResult, 
 		if err != nil {
 			return result, fmt.Errorf("file not found: %s", requestPath)
 		}
-		result.content = summarizeBinaryFile(match.DisplayPath, int(info.Size()), kind)
+		result.content = summarizeBinaryFile(match.DisplayPath, absolutePath, int(info.Size()), kind)
 		result.fullFile = cmd.Type == "FILE"
 		return result, nil
 	}
@@ -286,6 +287,42 @@ func isWithinProjectRoot(root, absPath string) bool {
 	return absClean == rootClean || strings.HasPrefix(absClean, rootClean+string(filepath.Separator))
 }
 
-func summarizeBinaryFile(path string, size int, kind string) string {
+var imageAssetExts = map[string]bool{
+	".png":  true,
+	".jpg":  true,
+	".jpeg": true,
+	".gif":  true,
+	".webp": true,
+	".ico":  true,
+}
+
+func isImageAsset(path string) bool {
+	return imageAssetExts[strings.ToLower(filepath.Ext(path))]
+}
+
+func summarizeBinaryFile(path string, absolutePath string, size int, kind string) string {
+	if kind == model.FileKindAsset && isImageAsset(path) {
+		meta := imageutil.GetMetadata(absolutePath)
+		if meta != nil {
+			lines := []string{
+				"Binary file: " + path,
+				"Kind: image",
+				"Format: " + meta.Format,
+				"Size: " + protocol.FormatFileSize(int64(size)),
+				fmt.Sprintf("Dimensions: %dx%d", meta.Width, meta.Height),
+			}
+			if meta.AspectRatio != "" {
+				lines = append(lines, "Aspect ratio: "+meta.AspectRatio)
+			}
+			if meta.HasAlpha {
+				lines = append(lines, "Alpha: yes")
+			}
+			return strings.Join(lines, "\n") + "\n"
+		}
+
+		return fmt.Sprintf("Binary file: %s\nKind: asset\nSize: %s\nMetadata: unavailable\n",
+			path, protocol.FormatFileSize(int64(size)))
+	}
+
 	return fmt.Sprintf("Binary file: %s (%s, kind: %s)\n", path, protocol.FormatFileSize(int64(size)), kind)
 }

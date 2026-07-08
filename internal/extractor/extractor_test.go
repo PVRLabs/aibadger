@@ -2,6 +2,8 @@ package extractor
 
 import (
 	"errors"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -472,8 +474,8 @@ func TestExtractExternalContextBinaryAndAssetSafety(t *testing.T) {
 	if results[1].Path != "../badger-sidecar/docs/hero.png" {
 		t.Fatalf("second result path = %q, want resolved external display path", results[1].Path)
 	}
-	if !strings.Contains(results[1].Content, "Binary file: ../badger-sidecar/docs/hero.png (21B, kind: asset)") {
-		t.Fatalf("asset summary = %q, want binary summary", results[1].Content)
+	if !strings.Contains(results[1].Content, "Binary file: ../badger-sidecar/docs/hero.png\nKind: asset\nSize: 21B\nMetadata: unavailable") {
+		t.Fatalf("asset summary = %q, want binary summary with metadata unavailable", results[1].Content)
 	}
 }
 
@@ -1173,6 +1175,54 @@ func TestResolveFuzzyPath(t *testing.T) {
 	}
 }
 
+func TestExtractSummarizesRealImageWithMetadata(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a real 4x4 PNG image using Go's image/png encoder
+	imgPath := filepath.Join(tempDir, "test.png")
+	f, err := os.Create(imgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := image.NewNRGBA(image.Rect(0, 0, 4, 4))
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	f.Close()
+
+	e := NewExtractor(tempDir, nil)
+	results, err := e.Extract([]Command{
+		{Type: "FILE", Path: "test.png"},
+	})
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+
+	content := results[0].Content
+	if !strings.Contains(content, "Binary file: test.png") {
+		t.Fatalf("missing Binary file line in:\n%s", content)
+	}
+	if !strings.Contains(content, "Kind: image") {
+		t.Fatalf("missing Kind: image line in:\n%s", content)
+	}
+	if !strings.Contains(content, "Format: PNG") {
+		t.Fatalf("missing Format: PNG line in:\n%s", content)
+	}
+	if !strings.Contains(content, "Dimensions: 4x4") {
+		t.Fatalf("missing Dimensions: 4x4 in:\n%s", content)
+	}
+	if !strings.Contains(content, "Aspect ratio: 1:1") {
+		t.Fatalf("missing Aspect ratio: 1:1 in:\n%s", content)
+	}
+	if !strings.Contains(content, "Alpha: yes") {
+		t.Fatalf("missing Alpha: yes in:\n%s", content)
+	}
+}
+
 func TestProcessCommandExcludesBinaryFileFromPrompt2(t *testing.T) {
 	tempDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tempDir, "badger"), []byte{0, 1, 2, 3}, 0755); err != nil {
@@ -1207,7 +1257,7 @@ func TestProcessCommandSummarizesAssetForPrefixAndNear(t *testing.T) {
 		if fullFile {
 			t.Fatalf("expected asset summary for %s to not be marked fullFile", cmdType)
 		}
-		if !strings.Contains(content, "Binary file: hero.png (21B, kind: asset)") {
+		if !strings.Contains(content, "Binary file: hero.png\nKind: asset\nSize: 21B\nMetadata: unavailable") {
 			t.Fatalf("expected asset summary for %s, got %q", cmdType, content)
 		}
 	}

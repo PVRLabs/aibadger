@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
 )
@@ -109,15 +110,19 @@ func (j *JavaDetector) sourceRootCoveredBySelected(projectRoot, modulePath, root
 	candidate := filepath.Join(modulePath, rootSuffix)
 	for _, sr := range selected {
 		selectedPath := filepath.Join(projectRoot, sr.Path)
-		rel, err := filepath.Rel(candidate, selectedPath)
-		if err != nil || rel == "." {
-			continue
-		}
-		if !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != ".." && !filepath.IsAbs(rel) {
+		if sameOrDescendantPath(candidate, selectedPath) || sameOrDescendantPath(selectedPath, candidate) {
 			return true
 		}
 	}
 	return false
+}
+
+func sameOrDescendantPath(parent, child string) bool {
+	rel, err := filepath.Rel(parent, child)
+	if err != nil || filepath.IsAbs(rel) {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
 }
 
 func (j *JavaDetector) inferSourceRole(path string) string {
@@ -136,17 +141,18 @@ func (j *JavaDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string) 
 			return nil
 		}
 
-		if strings.HasSuffix(d.Name(), ".java") {
-			if promptpolicy.IsSensitivePath(relativePath(projectRoot, path)) {
-				return nil
-			}
-			info, infoErr := d.Info()
-			if infoErr != nil {
-				return nil
-			}
-			sr.FileCount++
-			recordJavaFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size())
+		if !isJavaSourceFile(d.Name()) && !isJavaResourceFile(d.Name()) {
+			return nil
 		}
+		if promptpolicy.IsSensitivePath(relativePath(projectRoot, path)) {
+			return nil
+		}
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return nil
+		}
+		sr.FileCount++
+		recordJavaFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size())
 		return nil
 	})
 
@@ -171,7 +177,7 @@ func (j *JavaDetector) findTopFiles(modulePath, projectRoot string, limit int) [
 		}
 
 		// Only consider primary source files
-		if !strings.HasSuffix(d.Name(), ".java") {
+		if !isJavaSourceFile(d.Name()) {
 			return nil
 		}
 		if promptpolicy.IsSensitivePath(relativePath(projectRoot, path)) {
@@ -228,13 +234,20 @@ func recordJavaFile(packageMap map[string]*model.Package, fullRootPath, projectR
 
 	pkg.FileCount++
 	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles)
-	pkg.TopFiles = addTopFile(pkg.TopFiles, model.FileSummary{
+	kind := filekind.Classify(path)
+	file := model.FileSummary{
 		Name: name,
 		Path: relToProject,
 		Size: size,
-	}, limit)
-	if len(pkg.TopFiles) > 0 {
-		pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
+		Kind: kind,
+	}
+	if kind == model.FileKindAsset || kind == model.FileKindBinary {
+		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, limit)
+	} else {
+		pkg.TopFiles = addTopFile(pkg.TopFiles, file, limit)
+		if len(pkg.TopFiles) > 0 {
+			pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
+		}
 	}
 }
 
@@ -244,4 +257,17 @@ func javaPackageName(relPkgPath string) string {
 		return "default"
 	}
 	return pkgName
+}
+
+func isJavaSourceFile(name string) bool {
+	return strings.HasSuffix(name, ".java")
+}
+
+func isJavaResourceFile(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".xml", ".properties", ".yaml", ".yml",
+		".sql", ".proto", ".json", ".txt":
+		return true
+	}
+	return false
 }

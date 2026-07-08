@@ -90,6 +90,74 @@ func TestJavaDetectorFindsSourceRoot(t *testing.T) {
 	}
 }
 
+func TestJavaDetectorIncludesCoLocatedResourceFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeTestFile(t, filepath.Join(tmpDir, "pom.xml"), "")
+	pkgPath := filepath.Join("src", "main", "java", "com", "example")
+	writeTestFile(t, filepath.Join(tmpDir, pkgPath, "OrderMapper.java"), "package com.example;\nclass OrderMapper {}\n")
+	writeTestFile(t, filepath.Join(tmpDir, pkgPath, "OrderMapper.xml"), "<mapper namespace=\"com.example.OrderMapper\" />\n")
+	writeTestFile(t, filepath.Join(tmpDir, pkgPath, "application.properties"), "orders.enabled=true\n")
+	writeTestFile(t, filepath.Join(tmpDir, pkgPath, "archive.zip"), "binary")
+
+	modules, err := NewJavaDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want 1", len(modules))
+	}
+
+	module := modules[0]
+	if module.FileCount != 3 {
+		t.Fatalf("module.FileCount = %d, want Java source, XML mapper, and properties resource", module.FileCount)
+	}
+
+	pkg := findPackage(module, pkgPath)
+	if pkg == nil {
+		t.Fatalf("missing %s package", pkgPath)
+	}
+	if pkg.FileCount != 3 {
+		t.Fatalf("pkg.FileCount = %d, want Java source, XML mapper, and properties resource", pkg.FileCount)
+	}
+	if !hasTopFile(pkg.TopFiles, filepath.Join(pkgPath, "OrderMapper.xml")) {
+		t.Fatalf("pkg.TopFiles = %+v, missing OrderMapper.xml", pkg.TopFiles)
+	}
+	if !hasTopFile(pkg.TopFiles, filepath.Join(pkgPath, "application.properties")) {
+		t.Fatalf("pkg.TopFiles = %+v, missing application.properties", pkg.TopFiles)
+	}
+	if hasTopFile(pkg.TopFiles, filepath.Join(pkgPath, "archive.zip")) || hasAuxFile(pkg.AuxFiles, filepath.Join(pkgPath, "archive.zip")) {
+		t.Fatalf("pkg surfaced excluded archive.zip: top=%+v aux=%+v", pkg.TopFiles, pkg.AuxFiles)
+	}
+}
+
+func TestJavaDetectorDoesNotPromoteSrcMainWhenResourcesExist(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeTestFile(t, filepath.Join(tmpDir, "pom.xml"), "")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "main", "java", "com", "example", "OrderService.java"), "package com.example;\nclass OrderService {}\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "main", "resources", "schema.sql"), "create table orders (id integer primary key);\n")
+
+	modules, err := NewJavaDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want 1", len(modules))
+	}
+
+	module := modules[0]
+	if hasJavaSourceRoot(module, filepath.Join("src", "main")) {
+		t.Fatalf("module.SourceRoots = %+v, should not include overlapping src/main root", module.SourceRoots)
+	}
+	if !hasJavaSourceRoot(module, filepath.Join("src", "main", "java")) {
+		t.Fatalf("module.SourceRoots = %+v, missing src/main/java root", module.SourceRoots)
+	}
+	if module.FileCount != 1 {
+		t.Fatalf("module.FileCount = %d, want only src/main/java file counted without src/main duplication", module.FileCount)
+	}
+}
+
 func TestJavaDetectorRecordsTopFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 

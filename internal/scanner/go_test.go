@@ -95,6 +95,51 @@ func TestGoDetectorIncludesTestOnlyPackages(t *testing.T) {
 	}
 }
 
+func TestGoDetectorIncludesCoLocatedResourceFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/resources\n")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "store.go"), "package store\n\n//go:embed schema.sql\nvar schema string\n")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "schema.sql"), "create table orders (id integer primary key);\n")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "logo.png"), "\x89PNG\r\n\x1a\n")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "tool.exe"), "binary")
+	writeTestFile(t, filepath.Join(tmpDir, "internal", "store", "archive.zip"), "binary")
+
+	modules, err := NewGoDetector().Detect(tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want 1", len(modules))
+	}
+
+	module := modules[0]
+	if module.FileCount != 3 {
+		t.Fatalf("module.FileCount = %d, want Go source, SQL resource, and PNG asset", module.FileCount)
+	}
+
+	pkgPath := filepath.Join("internal", "store")
+	pkg := findPackage(module, pkgPath)
+	if pkg == nil {
+		t.Fatalf("missing %s package", pkgPath)
+	}
+	if pkg.FileCount != 3 {
+		t.Fatalf("pkg.FileCount = %d, want Go source, SQL resource, and PNG asset", pkg.FileCount)
+	}
+	if !hasTopFile(pkg.TopFiles, filepath.Join(pkgPath, "schema.sql")) {
+		t.Fatalf("pkg.TopFiles = %+v, missing schema.sql", pkg.TopFiles)
+	}
+	if !hasAuxFile(pkg.AuxFiles, filepath.Join(pkgPath, "logo.png")) {
+		t.Fatalf("pkg.AuxFiles = %+v, missing logo.png", pkg.AuxFiles)
+	}
+	if hasTopFile(pkg.TopFiles, filepath.Join(pkgPath, "tool.exe")) || hasAuxFile(pkg.AuxFiles, filepath.Join(pkgPath, "tool.exe")) {
+		t.Fatalf("pkg surfaced excluded tool.exe: top=%+v aux=%+v", pkg.TopFiles, pkg.AuxFiles)
+	}
+	if hasTopFile(pkg.TopFiles, filepath.Join(pkgPath, "archive.zip")) || hasAuxFile(pkg.AuxFiles, filepath.Join(pkgPath, "archive.zip")) {
+		t.Fatalf("pkg surfaced excluded archive.zip: top=%+v aux=%+v", pkg.TopFiles, pkg.AuxFiles)
+	}
+}
+
 func TestGoDetectorDetectsRootPackage(t *testing.T) {
 	tmpDir := t.TempDir()
 

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
 )
@@ -245,7 +246,7 @@ func (g *GoDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string, re
 			return nil
 		}
 
-		if !isGoSourceFile(d.Name()) {
+		if !isGoSourceFile(d.Name()) && !isGoResourceFile(d.Name()) {
 			return nil
 		}
 		if promptpolicy.IsSensitivePath(relativePath(projectRoot, path)) {
@@ -354,13 +355,20 @@ func recordGoFile(packageMap map[string]*model.Package, fullRootPath, projectRoo
 
 	pkg.FileCount++
 	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles)
-	pkg.TopFiles = addTopFile(pkg.TopFiles, model.FileSummary{
+	kind := filekind.Classify(path)
+	file := model.FileSummary{
 		Name: name,
 		Path: relToProject,
 		Size: size,
-	}, limit)
-	if len(pkg.TopFiles) > 0 {
-		pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
+		Kind: kind,
+	}
+	if kind == model.FileKindAsset || kind == model.FileKindBinary {
+		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, limit)
+	} else {
+		pkg.TopFiles = addTopFile(pkg.TopFiles, file, limit)
+		if len(pkg.TopFiles) > 0 {
+			pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
+		}
 	}
 }
 
@@ -388,4 +396,15 @@ func goModulePath(goModPath string) string {
 
 func isGoSourceFile(name string) bool {
 	return strings.HasSuffix(name, ".go")
+}
+
+func isGoResourceFile(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".sql", ".yaml", ".yml", ".html", ".htm",
+		".tmpl", ".gotmpl", ".tpl",
+		".proto", ".json", ".xml", ".txt",
+		".png":
+		return true
+	}
+	return false
 }

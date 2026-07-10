@@ -767,6 +767,94 @@ func TestHomeAltEnterInsertsNewlineWithoutSubmitting(t *testing.T) {
 	}
 }
 
+func TestGoalEditorRapidTypingThenBackspaceDeletesLastRune(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	var next tea.Model = m
+	for _, r := range "abcd" {
+		var ok bool
+		next, _ = next.(Model).Update(tea.KeyMsg{
+			Type:  tea.KeyRunes,
+			Runes: []rune{r},
+		})
+		_, ok = next.(Model)
+		if !ok {
+			t.Fatalf("Update returned %T, want tui.Model", next)
+		}
+	}
+
+	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if got.goalPasteCapture {
+		t.Fatal("Backspace left paste capture active")
+	}
+	if got.goalInput.Value() != "abc" {
+		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), "abc")
+	}
+}
+
+func TestGoalEditorPasteThenBackspaceDeletesLastRune(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+
+	next, _ := m.Update(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune("abcd"),
+		Paste: true,
+	})
+	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if got.goalPasteCapture {
+		t.Fatal("Backspace left paste capture active")
+	}
+	if got.goalInput.Value() != "abc" {
+		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), "abc")
+	}
+}
+
+func TestGoalEditorCompletionThenBackspaceDeletesLastRune(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("/des")
+	m.goalInput.SetCursor(len("/des"))
+	m.refreshCompletionCandidate()
+	if _, ok := m.completionVisible(); !ok {
+		t.Fatal("completionVisible() = false, want slash completion")
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "/de" {
+		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), "/de")
+	}
+}
+
+func TestGoalEditorUnicodeBackspaceDeletesOneRune(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+
+	next, _ := m.Update(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune("a界"),
+	})
+	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want tui.Model", next)
+	}
+	if got.goalInput.Value() != "a" {
+		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), "a")
+	}
+	if !utf8.ValidString(got.goalInput.Value()) {
+		t.Fatal("goal input is not valid UTF-8")
+	}
+}
+
 func TestHomeViewRendersLargePastedGoalCompactly(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	goal := strings.Repeat(strings.Join([]string{

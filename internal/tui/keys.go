@@ -21,9 +21,18 @@ const (
 )
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var preKeyCmd tea.Cmd
+	if m.state == stateHome && m.goalFocus == goalFocusEditor && goalEditorKeyFinalizesPasteCapture(msg) {
+		preKeyCmd = m.finishGoalPasteCapture()
+		if goalEditorKeyBypassesAppRouting(msg) {
+			next, inputCmd := m.forwardKeyToInput(msg)
+			return next, tea.Batch(preKeyCmd, inputCmd)
+		}
+	}
+
 	if m.goalFocus == goalFocusEditor {
 		if next, cmd, handled := m.handleCompletionKey(msg.String()); handled {
-			return next, cmd
+			return next, tea.Batch(preKeyCmd, cmd)
 		}
 	}
 
@@ -54,12 +63,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "up":
 		if next, cmd, handled := m.handleKeyUp(); handled {
-			return next, cmd
+			return next, tea.Batch(preKeyCmd, cmd)
 		}
 
 	case "down":
 		if next, cmd, handled := m.handleKeyDown(); handled {
-			return next, cmd
+			return next, tea.Batch(preKeyCmd, cmd)
 		}
 
 	case "backspace":
@@ -119,7 +128,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Forward unhandled keys to the active input widget.
-	return m.forwardKeyToInput(msg)
+	next, cmd := m.forwardKeyToInput(msg)
+	return next, tea.Batch(preKeyCmd, cmd)
 }
 
 // handleKeyEsc cancels the current operation and returns to the home screen,
@@ -559,6 +569,24 @@ func isGoalPasteInsert(msg tea.KeyMsg) bool {
 		return false
 	}
 	return msg.Paste || len(msg.Runes) > 1
+}
+
+func goalEditorKeyFinalizesPasteCapture(msg tea.KeyMsg) bool {
+	switch msg.Type {
+	case tea.KeyBackspace, tea.KeyDelete, tea.KeyLeft, tea.KeyRight, tea.KeyUp, tea.KeyDown, tea.KeyHome, tea.KeyEnd:
+		return true
+	default:
+		return false
+	}
+}
+
+func goalEditorKeyBypassesAppRouting(msg tea.KeyMsg) bool {
+	switch msg.Type {
+	case tea.KeyBackspace, tea.KeyDelete, tea.KeyLeft, tea.KeyRight, tea.KeyHome, tea.KeyEnd:
+		return true
+	default:
+		return false
+	}
 }
 
 func (m Model) goalPasteBurstLikely(msg tea.KeyMsg) bool {

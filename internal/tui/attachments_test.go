@@ -468,6 +468,33 @@ func TestDownOnlyEntersAttachmentsFromLastTextareaLine(t *testing.T) {
 	}
 }
 
+func TestDownEntersAttachmentsFromLastTextareaLine(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.goalInput.SetValue("First line\nSecond line")
+	m.goalInput.CursorEnd()
+	m.goalAttachments = []goalAttachment{
+		newGoalTextAttachment("paste", "attached context"),
+	}
+	m.goalAttachmentSelected = 0
+	m.goalFocus = goalFocusEditor
+	m.goalInput.Focus()
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleKey(Down) returned %T, want tui.Model", next)
+	}
+	if got.goalFocus != goalFocusAttachments {
+		t.Fatalf("goalFocus = %v, want %v", got.goalFocus, goalFocusAttachments)
+	}
+	if got.goalInput.Focused() {
+		t.Fatal("goal input remained focused after moving to attachments")
+	}
+	if cmd == nil {
+		t.Fatal("down into attachments did not return a blink command")
+	}
+}
+
 func TestDeletingLastAttachmentReturnsFocusToEditor(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("Review this change.")

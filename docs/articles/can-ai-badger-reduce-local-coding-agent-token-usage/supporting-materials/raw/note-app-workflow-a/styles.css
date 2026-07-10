@@ -1,0 +1,435 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #eef2f7;
+  --surface: rgba(255, 255, 255, 0.86);
+  --surface-solid: #ffffff;
+  --text: #16202a;
+  --text-secondary: #607080;
+  --border: rgba(22, 32, 42, 0.12);
+  --primary: #2457f5;
+  --primary-strong: #163fd9;
+  --danger: #d83a4d;
+  --danger-strong: #b02d3e;
+  --shadow: 0 18px 50px rgba(17, 33, 68, 0.12);
+  --radius: 18px;
+  --radius-sm: 12px;
+  --bg-gradient-1: rgba(36, 87, 245, 0.18);
+  --bg-gradient-2: rgba(216, 58, 77, 0.12);
+}
+
+[data-theme="dark"] {
+  --bg: #0d1117;
+  --surface: rgba(22, 28, 38, 0.92);
+  --surface-solid: #161e2a;
+  --text: #e6edf3;
+  --text-secondary: #8b949e;
+  --border: rgba(230, 237, 243, 0.12);
+  --primary: #5291ff;
+  --primary-strong: #3d7bf0;
+  --danger: #f85149;
+  --danger-strong: #da3633;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  --bg-gradient-1: rgba(82, 145, 255, 0.10);
+  --bg-gradient-2: rgba(248, 81, 73, 0.08);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, var(--bg-gradient-1), transparent 32%),
+    radial-gradient(circle at top right, var(--bg-gradient-2), transparent 28%),
+    var(--bg);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(1160px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 32px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  padding-bottom: 18px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1;
+}
+
+.controls {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panel-heading h2 {
+  margin: 0;
+}
+
+.panel-heading p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+}
+
+.control {
+  display: grid;
+  gap: 6px;
+}
+
+.control span {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.control input,
+.control select,
+.field input,
+.field textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-solid);
+  color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.control input:focus,
+.control select:focus,
+.field input:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.app-main {
+  margin-top: 18px;
+}
+
+.notes-panel,
+.note-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.notes-panel {
+  padding: 16px;
+}
+
+.panel-heading {
+  margin-bottom: 14px;
+}
+
+.notes-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.note-card {
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.note-card:hover,
+.note-card:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+.note-card.selected {
+  border-color: color-mix(in srgb, var(--primary) 80%, transparent);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.note-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.note-card-body {
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.note-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.tag.muted,
+.muted-text {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+}
+
+.note-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.btn-primary {
+  color: white;
+  background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+}
+
+.btn-secondary {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
+}
+
+.btn-danger {
+  color: white;
+  background: linear-gradient(135deg, var(--danger), var(--danger-strong));
+}
+
+.note-card-btn {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  padding: 0;
+  cursor: pointer;
+}
+
+.note-card-btn.danger {
+  color: var(--danger);
+}
+
+.empty-state {
+  padding: 36px 10px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 8, 18, 0.52);
+}
+
+.modal-content {
+  position: relative;
+  z-index: 1;
+  width: min(540px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+}
+
+.modal-sm {
+  width: min(380px, 100%);
+}
+
+.modal-header,
+.modal-body,
+.modal-footer {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 20px;
+}
+
+.modal-body {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: end;
+  gap: 10px;
+  padding-bottom: 20px;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.field textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.3rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.btn-icon:hover {
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  color: var(--text);
+}
+
+.settings-field + .settings-field {
+  margin-top: 18px;
+}
+
+.settings-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.settings-field select {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-solid);
+  color: var(--text);
+  font: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settings-field select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.btn-close {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    width: min(100% - 20px, 1160px);
+    padding-top: 16px;
+  }
+
+  .app-header,
+  .controls {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-content {
+    border-radius: 16px;
+  }
+}

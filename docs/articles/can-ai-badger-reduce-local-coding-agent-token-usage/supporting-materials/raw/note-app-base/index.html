@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notes App</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Local Notes</p>
+        <h1>Notes</h1>
+      </div>
+      <button id="addNoteBtn" class="btn btn-primary">+ New Note</button>
+    </header>
+
+    <section class="controls" aria-label="Note controls">
+      <label class="control">
+        <span>Search</span>
+        <input type="text" id="searchInput" placeholder="Search title or body" aria-label="Search notes">
+      </label>
+      <label class="control">
+        <span>Tag</span>
+        <select id="tagFilter" aria-label="Filter notes by tag">
+          <option value="all">All tags</option>
+        </select>
+      </label>
+      <label class="control">
+        <span>Sort</span>
+        <select id="sortSelect" aria-label="Sort notes">
+          <option value="updated-newest">Updated newest</option>
+          <option value="updated-oldest">Updated oldest</option>
+          <option value="title-az">Title A-Z</option>
+        </select>
+      </label>
+    </section>
+
+    <main class="app-main">
+      <section class="notes-panel">
+        <div class="panel-heading">
+          <h2>Notes</h2>
+          <p>Click a note to select it.</p>
+        </div>
+        <div id="notesContainer" class="notes-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="noteModal" class="modal hidden" role="dialog" aria-labelledby="modalTitle" aria-modal="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">New Note</h2>
+        <button id="closeModalBtn" class="btn-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="noteTitle">Title</label>
+          <input type="text" id="noteTitle" placeholder="Note title" maxlength="100">
+        </div>
+        <div class="field">
+          <label for="noteTags">Tags</label>
+          <input type="text" id="noteTags" placeholder="comma-separated tags">
+        </div>
+        <div class="field">
+          <label for="noteBody">Body</label>
+          <textarea id="noteBody" placeholder="Write your note here..." rows="6"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelBtn" class="btn btn-secondary">Cancel</button>
+        <button id="saveBtn" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="deleteModal" class="modal hidden" role="dialog" aria-labelledby="deleteModalTitle" aria-modal="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h2 id="deleteModalTitle">Delete Note</h2>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this note?</p>
+      </div>
+      <div class="modal-footer">
+        <button id="deleteCancelBtn" class="btn btn-secondary">Cancel</button>
+        <button id="deleteConfirmBtn" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

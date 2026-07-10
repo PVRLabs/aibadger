@@ -22,24 +22,12 @@ It has the usual local-app pieces: note creation, editing, deletion, search, tag
 
 Both workflows produced working implementations of the requested settings feature and retained the core create, edit, delete, search, and filtering flows in manual review. The outputs differed in UI details and internal organization, and both had minor issues identified afterward. This experiment therefore compares execution efficiency, not equivalent final-code quality.
 
-### Screenshots
-
 <figure>
   <img src="./supporting-materials/screenshots/base-app.jpg" alt="Base app">
   <figcaption>Base app before the feature</figcaption>
 </figure>
 
-<figure>
-  <img src="./supporting-materials/screenshots/workflow-a.jpg" alt="Workflow A">
-  <figcaption>Workflow A: Direct OpenCode</figcaption>
-</figure>
-
-<figure>
-  <img src="./supporting-materials/screenshots/workflow-b.jpg" alt="Workflow B">
-  <figcaption>Workflow B: Badger Design + compact handoff</figcaption>
-</figure>
-
-The screenshots are left unedited. They frame the app clearly enough for this article, and the raw fixture snapshots remain the reproducible source of truth.
+The screenshot is left unedited. It frames the app clearly enough for this article, and the raw fixture snapshots remain the reproducible source of truth.
 
 ## The feature
 
@@ -66,6 +54,11 @@ Workflow A is direct OpenCode prompting with no Badger AI in the loop. Workflow 
 ### Workflow A: direct OpenCode prompt
 
 OpenCode received the feature prompt directly.
+
+<figure>
+  <img src="./supporting-materials/screenshots/workflow-a.jpg" alt="Workflow A">
+  <figcaption>Workflow A: Direct OpenCode</figcaption>
+</figure>
 
 Session:
 
@@ -96,6 +89,11 @@ The compression prompt was:
 ```text
 Design the complete implementation, then produce a compact local-agent implementation plan with concrete changes only. Omit rationale, risks, open questions, acceptance criteria, and broad testing notes. Optimize the output for low token usage.
 ```
+
+<figure>
+  <img src="./supporting-materials/screenshots/workflow-b.jpg" alt="Workflow B">
+  <figcaption>Workflow B: Badger Design + compact handoff</figcaption>
+</figure>
 
 Session:
 
@@ -245,6 +243,7 @@ The main claim stays narrow: in this experiment, a compact Badger-assisted imple
 
 The repository includes the experiment fixtures and the helper used to normalize the OpenCode session exports:
 
+- [experiment prompts](./supporting-materials/prompts.md)
 - [original base app](./supporting-materials/raw/note-app-base/index.html)
 - [workflow A fixture](./supporting-materials/raw/note-app-workflow-a/index.html)
 - [workflow B fixture](./supporting-materials/raw/note-app-workflow-b/index.html)

@@ -9,10 +9,16 @@ fi
 
 PREV_TAG=$(git tag --sort=-version:refname | grep -v '\-dev' | awk -v t="$NEW_TAG" 'found{print;exit} $0==t{found=1}')
 if [ -z "$PREV_TAG" ]; then
-  PREV_TAG=$(git tag --sort=-version:refname | grep -v '\-dev' | head -1)
+	PREV_TAG=$(git tag --sort=-version:refname | grep -v '\-dev' | head -1)
 fi
 
-COMMITS=$(git log "${PREV_TAG}..${NEW_TAG}" --oneline --no-decorate 2>/dev/null | grep -v 'release: v\|Bump version to' || true)
+if git rev-parse -q --verify "refs/tags/${NEW_TAG}" >/dev/null; then
+	END_REF="$NEW_TAG"
+else
+	END_REF="HEAD"
+fi
+
+COMMITS=$(git log "${PREV_TAG}..${END_REF}" --oneline --no-decorate 2>/dev/null | grep -viE '^[0-9a-f]+ (release: v|bump version to|bump to|bump version:|chore: bump( main)? to .*dev)' || true)
 COMMIT_COUNT=$(echo "$COMMITS" | grep -c . || true)
 
 echo "## What's Changed"
@@ -31,11 +37,11 @@ trap 'rm -rf "$WORK"' EXIT
 OTHER="$WORK/other"
 
 while IFS= read -r line; do
-  commit_msg=$(echo "$line" | sed 's/^[0-9a-f]\{7,40\} //')
-  issue=$(echo "$commit_msg" | grep -oE '#[0-9]+' | tail -1)
-  desc=$(echo "$commit_msg" | sed 's/ #.*//' | sed 's/^[[:space:]]*//')
+	commit_msg=$(echo "$line" | sed 's/^[0-9a-f]\{7,40\} //')
+	issue=$(echo "$commit_msg" | grep -oE '#[0-9]+' | tail -1)
+	desc=$(echo "$commit_msg" | sed -E 's/[[:space:]]*[(]?#[0-9]+[)]?[[:space:]]*$//' | sed 's/^[[:space:]]*//')
 
-  if [ -n "$issue" ]; then
+	if [ -n "$issue" ]; then
     echo "$desc" >> "$WORK/$issue"
   else
     echo "$desc" >> "$OTHER"

@@ -79,6 +79,7 @@ Full usage: [docs/usage.md](docs/usage.md)
 ## Learn More
 
 - [Usage Examples & Walkthrough](docs/usage.md)
+- [Articles](docs/articles/)
 - [Protocol Reference](docs/protocol.md)
 - [Limitations & Supported Projects](docs/limitations.md)
 - [Privacy & Safety](docs/privacy.md)

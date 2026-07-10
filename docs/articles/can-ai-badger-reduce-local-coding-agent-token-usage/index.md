@@ -55,7 +55,7 @@ The original app requirements were broader, but the feature under test was inten
 
 ## Two workflows
 
-Workflow A is direct OpenCode prompting with no Badger AI in the loop. Workflow B uses Badger Design plus a compact handoff. `/plan` is the planned next step.
+Workflow A is direct OpenCode prompting with no Badger AI in the loop. Workflow B uses Badger Design plus a compact handoff.
 
 ### Workflow A: direct OpenCode prompt
 
@@ -197,7 +197,7 @@ That is the shape I want a future Badger focus mode to automate.
 
 For a tiny app, AI chat can sometimes generate the entire implementation without using a local coding agent at all, which is not the comparison here. That workflow can work well for small changes, but it does not scale cleanly to larger repositories. The more scalable path is the one used here: Badger exposes the relevant project context, external chat compresses it, and the local coding agent still performs the edit inside the repo.
 
-## Product implication: planned `/plan`
+## Product implication: automating the compact handoff
 
 This experiment used Badger's existing `/design` workflow, not a dedicated plan mode.
 
@@ -209,7 +209,7 @@ That suggests a future Badger focus:
 /plan    -> produce compact implementation handoff for a local coding agent
 ```
 
-`/plan` is not implemented yet. This article is a product-direction signal, not a claim that the feature already exists.
+`/plan` is one possible name for a future mode that could automate this compact handoff. This article is a product-direction signal, not a claim that the feature already exists.
 
 A future `/plan` mode could automate the compression step. But I do not want to rush it. The manual workflow has a safety valve: I can inspect the topology summary before asking for a compact handoff. An automated `/plan` mode would need enough confidence that the right context was found before handing instructions to a local agent.
 
@@ -230,7 +230,7 @@ The experiment therefore points to a sequence:
 - No repeated runs yet.
 - `summary.files` reported 0 in both exported sessions, so file-derived token metrics were ignored.
 - Results may differ for trivial changes, very large changes, or tasks that require broad exploration.
-- `/plan` is not implemented yet; the experiment used `/design` plus a manual compact-handoff prompt.
+- The compact handoff was produced in an external AI chat, not by Badger itself.
 - Automating `/plan` too early could be risky if the topology scan misses key files.
 
 The main claim stays narrow: in this experiment, a compact Badger-assisted implementation handoff reduced OpenCode token movement and runtime compared with prompting OpenCode directly.

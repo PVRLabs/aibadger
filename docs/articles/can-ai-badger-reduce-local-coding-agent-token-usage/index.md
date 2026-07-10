@@ -27,7 +27,7 @@ Both workflows produced working implementations of the requested settings featur
   <figcaption>Base app before the feature</figcaption>
 </figure>
 
-The screenshot is left unedited. It frames the app clearly enough for this article, and the raw fixture snapshots remain the reproducible source of truth.
+The screenshot is left unedited. The raw fixture snapshots remain the reproducible source of truth.
 
 ## The feature
 

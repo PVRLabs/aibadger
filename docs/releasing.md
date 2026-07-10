@@ -62,7 +62,7 @@ git push origin "${RELEASE_VERSION}"
 4. Publish the GitHub Release for that tag.
 5. Confirm the release workflow builds and uploads the release archives.
 6. After the release is public, bump `internal/version/version.go` on `main` to
-   the next development version,
+   the next development version (e.g. `v0.2.8-dev` after releasing `v0.2.7`),
    commit, and push.
 7. Update the Homebrew tap formula at `Formula/badger.rb` in the
    [`homebrew-aibadger`](https://github.com/PVRLabs/homebrew-aibadger) repo with

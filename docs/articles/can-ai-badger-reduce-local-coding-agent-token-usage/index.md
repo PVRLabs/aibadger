@@ -24,14 +24,20 @@ Both workflows produced working implementations of the requested settings featur
 
 ### Screenshots
 
-<image-card alt="Base app" src="./supporting-materials/screenshots/base-app.jpg"></image-card>
-*Base app before the feature*
+<figure>
+  <img src="./supporting-materials/screenshots/base-app.jpg" alt="Base app">
+  <figcaption>Base app before the feature</figcaption>
+</figure>
 
-<image-card alt="Workflow A" src="./supporting-materials/screenshots/workflow-a.jpg"></image-card>
-*Workflow A: Direct OpenCode*
+<figure>
+  <img src="./supporting-materials/screenshots/workflow-a.jpg" alt="Workflow A">
+  <figcaption>Workflow A: Direct OpenCode</figcaption>
+</figure>
 
-<image-card alt="Workflow B" src="./supporting-materials/screenshots/workflow-b.jpg"></image-card>
-*Workflow B: Badger Design + compact handoff*
+<figure>
+  <img src="./supporting-materials/screenshots/workflow-b.jpg" alt="Workflow B">
+  <figcaption>Workflow B: Badger Design + compact handoff</figcaption>
+</figure>
 
 The screenshots are left unedited. They frame the app clearly enough for this article, and the raw fixture snapshots remain the reproducible source of truth.
 

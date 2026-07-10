@@ -1,3 +1,7 @@
+# Experiment Prompts
+
+This document captures the exact prompts used for the base app fixture and the two workflow variants measured in the article.
+
 ## Base App Prompt
 
 ```text

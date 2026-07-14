@@ -65,7 +65,7 @@ git push origin "${RELEASE_VERSION}"
    the next development version (e.g. `v0.2.8-dev` after releasing `v0.2.7`),
    commit, and push.
 7. Update the Homebrew tap formula at `Formula/badger.rb` in the
-   [`homebrew-aibadger`](https://github.com/PVRLabs/homebrew-aibadger) repo with
+   [`homebrew-tap`](https://github.com/PVRLabs/homebrew-tap) repo with
    the new version and release archive checksums, then push.
 
 The release workflow lives in `.github/workflows/release.yml` and is triggered by
@@ -73,13 +73,12 @@ tag pushes and published releases.
 
 ## Public Availability
 
-The public Homebrew tap lives at `https://github.com/PVRLabs/homebrew-aibadger`.
+The public Homebrew tap lives at `https://github.com/PVRLabs/homebrew-tap`.
 After a release is published, update the tap's `Formula/badger.rb` with the new
 version and release checksums, then verify the public install path:
 
 ```bash
-brew tap pvrlabs/aibadger
-brew install pvrlabs/aibadger/badger
+brew install pvrlabs/tap/badger
 badger --version
 ```
 
@@ -98,7 +97,7 @@ curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | 
 - Downloading an asset yields the expected binary archive.
 - `./badger --version` reports the release version.
 - Source builds from `main` after the release report the next `-dev` version.
-- The public Homebrew tap installs `badger` from GitHub Releases.
+- The shared public Homebrew tap installs `badger` from GitHub Releases.
 - The curl installer downloads, verifies, and runs the release binary.
 
 ## Manual Fallback

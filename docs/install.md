@@ -4,11 +4,10 @@ This document covers install and build paths for the public OSS binary.
 
 ## Homebrew
 
-Install from the public tap:
+Install from the shared PVRLabs tap:
 
 ```bash
-brew tap pvrlabs/aibadger
-brew install pvrlabs/aibadger/badger
+brew install pvrlabs/tap/badger
 ```
 
 The tap pulls release tarballs from GitHub Releases.

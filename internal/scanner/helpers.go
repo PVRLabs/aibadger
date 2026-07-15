@@ -129,6 +129,134 @@ func shouldOmitFile(root, path, name string) bool {
 	return isRootExtensionlessBinary(root, path, name)
 }
 
+func isUnderIgnoredDir(root, path string, exclusions map[string]bool) bool {
+	rel := relativePath(root, path)
+	if rel == "" {
+		return false
+	}
+	for dir := filepath.Dir(rel); dir != "." && dir != ""; dir = filepath.Dir(dir) {
+		if exclusions[strings.ToLower(filepath.Base(dir))] {
+			return true
+		}
+		if next := filepath.Dir(dir); next == dir {
+			break
+		}
+	}
+	return false
+}
+
+// ReviewPathPriority reports whether a Git path should be surfaced in review
+// context and, if so, whether it should be treated as a recognized project file
+// or a lower-priority auxiliary file.
+//
+// The returned priority is 1 for recognized project files and 0 for auxiliary
+// files. The boolean reports whether the path passes the existing omission
+// policy.
+func ReviewPathPriority(root, path string) (priority int, ok bool) {
+	name := filepath.Base(path)
+	if shouldOmitReviewPath(root, path, name) {
+		return 0, false
+	}
+
+	lowerPath := strings.ToLower(relativePath(root, path))
+	base := strings.ToLower(name)
+	isRootPath := isRootReviewPath(lowerPath)
+
+	if isCriticalGuidanceDoc(base) || isIdentityManifest(base) || isOperationalConfigFile(base) {
+		return 1, true
+	}
+	if priority := highSignalDocPriority(lowerPath, base); priority > 0 {
+		return 1, true
+	}
+	if isRootStaticSiteEntryPath(lowerPath, base) || isRootPath && isRootWebResourceName(base) || isKnownStaticWebPath(lowerPath) {
+		return 1, true
+	}
+	if !isRootPath && isRootWebResourceName(base) {
+		return 0, true
+	}
+	if isConfigFileName(base) || isTextControlFile(base) || isGenericResourceFile(base) {
+		return 1, true
+	}
+	if filegroups.IsOpsEnvExampleName(base) || filegroups.IsRootOpsFileName(base) || filegroups.IsOpsContextFileName(base) {
+		return 1, true
+	}
+	if isRecognizedAuxiliaryPath(base) {
+		return 0, true
+	}
+	if isRecognizedScriptPath(base) || isRecognizedReviewCategoryPath(lowerPath) {
+		return 1, true
+	}
+	if isRecognizedSourcePath(base) {
+		return 1, true
+	}
+
+	return 0, true
+}
+
+func shouldOmitReviewPath(root, path, name string) bool {
+	if promptpolicy.IsSensitivePath(relativePath(root, path)) {
+		return true
+	}
+	if isUnderIgnoredDir(root, path, commonIgnoredDirs) {
+		return true
+	}
+	return isOmittedNoiseName(name)
+}
+
+func isRecognizedSourcePath(base string) bool {
+	switch strings.ToLower(filepath.Ext(base)) {
+	case ".go", ".java", ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
+		".cpp", ".c", ".h", ".hpp", ".rs", ".rb", ".php", ".cs", ".kt", ".swift",
+		".html", ".htm", ".css", ".scss", ".sass", ".json", ".yaml", ".yml",
+		".toml", ".xml", ".ini", ".conf", ".properties", ".md", ".txt",
+		".webmanifest", ".sql":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRecognizedScriptPath(base string) bool {
+	switch strings.ToLower(filepath.Ext(base)) {
+	case ".sh", ".bash", ".zsh":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRecognizedAuxiliaryPath(base string) bool {
+	switch strings.ToLower(filepath.Ext(base)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
+		".woff", ".woff2", ".ttf", ".otf", ".mp3", ".mp4", ".mov", ".webm",
+		".exe", ".dll", ".so", ".dylib", ".class", ".jar", ".war", ".ear",
+		".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar",
+		".pdf", ".wasm", ".bin":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRootReviewPath(lowerPath string) bool {
+	return !strings.Contains(lowerPath, string(filepath.Separator))
+}
+
+func isRecognizedReviewCategoryPath(lowerPath string) bool {
+	dir := filepath.Dir(lowerPath)
+	if dir == "." || dir == "" {
+		return false
+	}
+	for _, component := range strings.Split(dir, string(filepath.Separator)) {
+		switch component {
+		case "test", "tests", "testdata", "fixture", "fixtures",
+			"migration", "migrations", "migrate", "schema", "sample":
+			return true
+		}
+	}
+	return false
+}
+
 func isOmittedNoiseName(name string) bool {
 	switch strings.ToLower(name) {
 	case ".ds_store", "thumbs.db",

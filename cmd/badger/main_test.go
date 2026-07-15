@@ -296,7 +296,7 @@ func TestApplyReviewStartupHeadlessRejectsNoDiff(t *testing.T) {
 	if cfg.Startup.Goal != "" {
 		t.Fatalf("headless review startup goal = %q, want empty on failure", cfg.Startup.Goal)
 	}
-	if !strings.Contains(err.Error(), "no git diff was detected") {
+	if !strings.Contains(err.Error(), "no reviewable changes were detected") {
 		t.Fatalf("error = %v, want no-diff failure", err)
 	}
 }
@@ -408,8 +408,8 @@ func TestPrintUsageIncludesReviewEntrypoint(t *testing.T) {
 		"badger badge",
 		"Launch the TUI with /badge preloaded",
 		"badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]",
-		"`badger review` preloads an editable review prompt from the current git diff.",
-		"manual fallback prompt in the editor",
+		"`badger review` preloads an editable review prompt from the current Git working tree.",
+		"relevant Git-untracked paths",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("printUsage output missing %q:\n%s", want, out)

@@ -17,10 +17,10 @@ cd your-project
 badger review
 ```
 
-Badger opens your editor with a prompt pre-filled from the current git diff. Review it, make any tweaks, then save and close to submit.
+Badger opens your editor with a prompt pre-filled from the current Git working tree. Review it, make any tweaks, then save and close to submit.
 
 > [!NOTE]
-> Only project structure and your diff are included — source code content stays local until you paste extraction commands.
+> Only project structure, the tracked diff, and relevant Git-untracked paths are included. Untracked file contents and unchanged source code stay local until you paste extraction commands.
 > Large pasted review context may be preserved as a separate removable attachment so the editor stays focused on your instruction.
 
 ### Step 2: Copy Prompt 1 (Map) to your AI chat
@@ -131,7 +131,7 @@ Keep the change small and include any tests that should change.
 ## Commands
 
 - `/help`: show the interactive command reference.
-- `/review`: seed an editable review prompt from the current git diff. It reuses the same review flow as `badger review`.
+- `/review`: seed an editable review prompt from the current Git working tree. It reuses the same review flow as `badger review`.
 - `/design`: switch the active focus to Design. The active focus appears in the status bar as `Focus: Design` and the prompt seeds a short, conversational brainstorm.
 - `/followup`: switch the active focus to Follow-up. The active focus appears in the status bar as `Focus: Follow-up` and the prompt seeds a short follow-up framing.
 - `/exit`: quit Badger.
@@ -142,7 +142,7 @@ first argument:
 ```bash
 badger            # Code focus (default)
 badger design     # Design focus — prompt seeds a short, conversational brainstorm
-badger review     # Review focus — prompt is prefilled from the current git diff
+badger review     # Review focus — prompt is prefilled from the current Git working tree
 badger followup   # Follow-up focus — prompt seeds a short follow-up framing
 ```
 
@@ -151,8 +151,11 @@ badger followup   # Follow-up focus — prompt seeds a short follow-up framing
 When you paste a git diff, error output, or other supporting text into
 Badger, it is preserved as a **removable attachment** so the goal input
 stays clean and focused. The `badger review` command automatically
-attaches the current git diff. Text pastes exceeding 16KB or 40 lines are
-automatically converted into attachments.
+attaches the current Git diff in default mode and lists relevant
+Git-untracked paths separately without including their contents. At most 25
+untracked paths are included. `--staged`, `--branch`, and `--commit` remain
+tracked-diff only. Text pastes exceeding 16KB or 40 lines are automatically
+converted into attachments.
 
 Press **Tab** to switch focus between the goal editor and the attachment
 list, then use the **arrow keys** to cycle through attachments — the focused

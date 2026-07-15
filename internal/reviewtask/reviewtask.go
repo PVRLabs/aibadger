@@ -3,9 +3,15 @@ package reviewtask
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/PVRLabs/aibadger/internal/scanner"
 	"github.com/PVRLabs/aibadger/internal/startup"
 )
 
@@ -45,7 +51,7 @@ type FailureClassification string
 const (
 	// FailureNone means a diff was resolved successfully.
 	FailureNone FailureClassification = ""
-	// FailureNoDiff means git was available but the selected diff was empty.
+	// FailureNoDiff means git was available but no reviewable changes were found.
 	FailureNoDiff FailureClassification = "no_diff"
 	// FailureNotGit means the root is not backed by a git repository.
 	FailureNotGit FailureClassification = "not_git"
@@ -60,18 +66,23 @@ type Options struct {
 
 // Task is the editable review prompt payload prepared for the caller.
 type Task struct {
-	Mode                  Mode
-	Ref                   string
-	ExtraFocus            string
-	Instruction           string
-	Diff                  string
-	FilesChanged          int
-	Additions             int
-	Deletions             int
-	Prompt                string
-	FallbackPrompt        string
-	FailureClassification FailureClassification
+	Mode                     Mode
+	Ref                      string
+	ExtraFocus               string
+	Instruction              string
+	Diff                     string
+	FilesChanged             int
+	Additions                int
+	Deletions                int
+	UntrackedFiles           []string
+	UntrackedOmitted         int
+	UntrackedDiscoveryFailed bool
+	Prompt                   string
+	FallbackPrompt           string
+	FailureClassification    FailureClassification
 }
+
+const maxUntrackedReviewFiles = 25
 
 // StartupPrompt returns the editable prompt text appropriate for interactive
 // startup. When a diff was resolved, that is the review prompt. Otherwise it is
@@ -88,9 +99,18 @@ func (t Task) StartupPrompt() string {
 func (t Task) StartupStatus() (text, severity string) {
 	switch t.FailureClassification {
 	case FailureNone:
-		return "Loaded review prompt from the current git diff. Edit it before submitting.", "success"
+		if t.UntrackedDiscoveryFailed {
+			return "Loaded tracked review context, but Git-untracked files could not be listed. Edit it before submitting.", "warning"
+		}
+		if t.Mode == ModeDefault {
+			return "Loaded review context from the current Git working tree. Edit it before submitting.", "success"
+		}
+		return "Loaded review context. Edit it before submitting.", "success"
 	case FailureNoDiff:
-		return "No git diff was detected. The prompt is editable.", "warning"
+		if t.UntrackedOmitted > 0 {
+			return fmt.Sprintf("No reviewable changes were available; %s could not be inspected. The prompt is editable.", untrackedFileCount(t.UntrackedOmitted)), "warning"
+		}
+		return "No reviewable changes were detected. The prompt is editable.", "warning"
 	case FailureNotGit:
 		return "This directory is not a git repository. The prompt is editable.", "warning"
 	default:
@@ -112,17 +132,34 @@ func (t Task) StartupContext() startup.Context {
 		return ctx
 	}
 	ctx.Goal = t.Instruction
-	ctx.Attachments = []startup.Attachment{{
-		Type:         "git diff",
-		Source:       "git diff",
-		Text:         t.Diff,
-		SizeBytes:    int64(len(t.Diff)),
-		Lines:        strings.Count(strings.TrimRight(t.Diff, "\n"), "\n") + 1,
-		FilesChanged: t.FilesChanged,
-		Additions:    t.Additions,
-		Deletions:    t.Deletions,
-	}}
+	if t.Diff != "" {
+		ctx.Attachments = append(ctx.Attachments, startup.Attachment{
+			Type:         "git diff",
+			Source:       "git diff",
+			Text:         t.Diff,
+			SizeBytes:    int64(len(t.Diff)),
+			Lines:        countReviewTextLines(t.Diff),
+			FilesChanged: t.FilesChanged,
+			Additions:    t.Additions,
+			Deletions:    t.Deletions,
+		})
+	}
+	if untrackedSection := formatUntrackedSection(t.UntrackedFiles, t.UntrackedOmitted); untrackedSection != "" {
+		ctx.Attachments = append(ctx.Attachments, startup.Attachment{
+			Type:      "text",
+			Source:    "Git-untracked files",
+			Text:      untrackedSection,
+			SizeBytes: int64(len(untrackedSection)),
+			Lines:     countReviewTextLines(untrackedSection),
+		})
+	}
 	return ctx
+}
+
+// HasReviewableChanges reports whether the task contains tracked diff content
+// or relevant untracked files suitable for review.
+func (t Task) HasReviewableChanges() bool {
+	return strings.TrimSpace(t.Diff) != "" || len(t.UntrackedFiles) > 0
 }
 
 // HeadlessGoal returns the generated prompt that should seed headless review
@@ -133,7 +170,10 @@ func (t Task) HeadlessGoal() (string, error) {
 	case FailureNone:
 		return t.Prompt, nil
 	case FailureNoDiff:
-		return "", errors.New("review prompt could not be prepared: no git diff was detected")
+		if t.UntrackedOmitted > 0 {
+			return "", fmt.Errorf("review prompt could not be prepared: no reviewable changes were available; %s could not be inspected", untrackedFileCount(t.UntrackedOmitted))
+		}
+		return "", errors.New("review prompt could not be prepared: no reviewable changes were detected")
 	case FailureNotGit:
 		return "", errors.New("review prompt could not be prepared: this directory is not a git repository")
 	default:
@@ -143,6 +183,12 @@ func (t Task) HeadlessGoal() (string, error) {
 
 // Build prepares a review prompt from the requested diff mode.
 func Build(root string, opts Options) (Task, error) {
+	return build(root, opts, discoverUntrackedFiles)
+}
+
+type untrackedDiscoverer func(string) ([]string, int, error)
+
+func build(root string, opts Options, discoverUntracked untrackedDiscoverer) (Task, error) {
 	if err := validateOptions(opts); err != nil {
 		return Task{}, err
 	}
@@ -166,20 +212,41 @@ func Build(root string, opts Options) (Task, error) {
 		return Task{}, err
 	}
 	diff = strings.TrimRight(diff, "\n")
-	if strings.TrimSpace(diff) == "" {
-		task.FailureClassification = FailureNoDiff
-		task.Diff = ""
-		task.FallbackPrompt = buildFallbackPrompt(task.ExtraFocus)
-		task.Prompt = buildFallbackPromptWithReason(task.ExtraFocus, "No git diff was detected.")
-		return task, nil
-	}
-
 	task.Diff = diff
 	task.FilesChanged = filesChanged
 	task.Additions = additions
 	task.Deletions = deletions
+
+	if opts.Mode == ModeDefault {
+		task.UntrackedFiles, task.UntrackedOmitted, err = discoverUntracked(root)
+		if err != nil {
+			// Discovery is all-or-nothing: never surface partial results with an
+			// incomplete-context warning.
+			task.UntrackedFiles = nil
+			task.UntrackedOmitted = 0
+			if strings.TrimSpace(task.Diff) == "" {
+				return Task{}, err
+			}
+			task.UntrackedDiscoveryFailed = true
+		}
+	}
+
+	if !task.HasReviewableChanges() {
+		task.FailureClassification = FailureNoDiff
+		task.FallbackPrompt = buildFallbackPrompt(task.ExtraFocus)
+		reason := "No reviewable changes were detected."
+		if task.UntrackedOmitted > 0 {
+			reason = fmt.Sprintf("No reviewable changes were available; %s could not be inspected.", untrackedFileCount(task.UntrackedOmitted))
+		}
+		task.Prompt = buildFallbackPromptWithReason(task.ExtraFocus, reason)
+		return task, nil
+	}
+
 	task.FallbackPrompt = buildFallbackPrompt(task.ExtraFocus)
-	task.Prompt = buildReviewPrompt(task.ExtraFocus, diff)
+	task.Prompt = buildReviewPrompt(task.ExtraFocus, task.Diff, formatUntrackedSection(task.UntrackedFiles, task.UntrackedOmitted))
+	if task.UntrackedDiscoveryFailed {
+		task.Prompt += "\n\nWarning:\nGit-untracked files could not be listed; review context may be incomplete."
+	}
 	return task, nil
 }
 
@@ -230,6 +297,133 @@ func resolveDiffAndStats(root string, diffArgs, numstatArgs []string) (string, i
 	}
 	filesChanged, additions, deletions := parseNumstat(numstat)
 	return diff, filesChanged, additions, deletions, nil
+}
+
+type reviewUntrackedFile struct {
+	path     string
+	priority int
+	modTime  time.Time
+}
+
+func discoverUntrackedFiles(root string) ([]string, int, error) {
+	output, err := runGit(root, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return nil, 0, err
+	}
+
+	paths, omitted := rankUntrackedFiles(root, strings.Split(output, "\x00"))
+	return paths, omitted, nil
+}
+
+func rankUntrackedFiles(root string, entries []string) ([]string, int) {
+	files := make([]reviewUntrackedFile, 0, len(entries))
+	omitted := 0
+	for _, rel := range entries {
+		if rel == "" {
+			continue
+		}
+		normalized := normalizeReviewPath(rel)
+		absPath := filepath.Join(root, filepath.FromSlash(normalized))
+		priority, ok := scanner.ReviewPathPriority(root, absPath)
+		if !ok {
+			continue
+		}
+		info, statErr := os.Lstat(absPath)
+		if statErr != nil {
+			omitted++
+			continue
+		}
+		files = append(files, reviewUntrackedFile{
+			path:     normalized,
+			priority: priority,
+			modTime:  info.ModTime(),
+		})
+	}
+
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].priority != files[j].priority {
+			return files[i].priority > files[j].priority
+		}
+		if !files[i].modTime.Equal(files[j].modTime) {
+			return files[i].modTime.After(files[j].modTime)
+		}
+		return files[i].path < files[j].path
+	})
+
+	if len(files) > maxUntrackedReviewFiles {
+		omitted += len(files) - maxUntrackedReviewFiles
+		files = files[:maxUntrackedReviewFiles]
+	}
+
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		paths = append(paths, file.path)
+	}
+	return paths, omitted
+}
+
+func countReviewTextLines(text string) int {
+	if text == "" {
+		return 0
+	}
+	text = strings.TrimRight(text, "\r\n")
+	if text == "" {
+		return 0
+	}
+	lines := 1
+	for i := 0; i < len(text); i++ {
+		switch text[i] {
+		case '\n':
+			lines++
+		case '\r':
+			lines++
+			if i+1 < len(text) && text[i+1] == '\n' {
+				i++
+			}
+		}
+	}
+	return lines
+}
+
+func normalizeReviewPath(path string) string {
+	return filepath.ToSlash(filepath.Clean(path))
+}
+
+func formatUntrackedSection(paths []string, omitted int) string {
+	if len(paths) == 0 && omitted == 0 {
+		return ""
+	}
+
+	lines := make([]string, 0, len(paths)+3)
+	lines = append(lines, "Git-untracked files:")
+	for _, path := range paths {
+		lines = append(lines, "- "+escapeReviewPath(path))
+	}
+	if omitted > 0 {
+		lines = append(lines, "")
+		if len(paths) == 0 && omitted == 1 {
+			lines = append(lines, "1 Git-untracked file omitted.")
+		} else if len(paths) == 0 {
+			lines = append(lines, fmt.Sprintf("%d Git-untracked files omitted.", omitted))
+		} else if omitted == 1 {
+			lines = append(lines, "1 additional Git-untracked file omitted.")
+		} else {
+			lines = append(lines, fmt.Sprintf("%d additional Git-untracked files omitted.", omitted))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func untrackedFileCount(count int) string {
+	if count == 1 {
+		return "1 review-eligible Git-untracked file"
+	}
+	return fmt.Sprintf("%d review-eligible Git-untracked files", count)
+}
+
+func escapeReviewPath(path string) string {
+	quoted := strconv.QuoteToGraphic(path)
+	return quoted[1 : len(quoted)-1]
 }
 
 func parseNumstat(output string) (filesChanged, additions, deletions int) {
@@ -287,9 +481,14 @@ func runGit(root string, args ...string) (string, error) {
 	return string(output), nil
 }
 
-func buildReviewPrompt(extraFocus, diff string) string {
+func buildReviewPrompt(extraFocus, diff, untrackedSection string) string {
 	lines := []string{buildReviewInstruction(extraFocus)}
-	lines = append(lines, "", "Diff:", diff)
+	if diff != "" {
+		lines = append(lines, "", "Diff:", diff)
+	}
+	if untrackedSection != "" {
+		lines = append(lines, "", untrackedSection)
+	}
 	return strings.Join(lines, "\n")
 }
 

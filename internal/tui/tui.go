@@ -16,6 +16,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
+	"github.com/PVRLabs/aibadger/internal/startup"
 	"github.com/PVRLabs/aibadger/internal/taggedfile"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
@@ -254,7 +255,7 @@ func (m *Model) applyStartupGoal() {
 	m.status = startupMessage(m.cfg.Startup.Status.Severity, m.cfg.Startup.Status.Text)
 	m.err = nil
 	m.setGoalInputValue(m.cfg.Startup.Goal)
-	m.setGoalAttachments(startupGoalAttachments(m.cfg))
+	m.setGoalAttachments(startupGoalAttachments(m.cfg.Startup.Attachments))
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""
 	m.goalInput.Focus()
@@ -284,9 +285,9 @@ func (m *Model) appendGoalAttachment(attachment goalAttachment) {
 	}
 }
 
-func startupGoalAttachments(cfg Config) []goalAttachment {
-	attachments := make([]goalAttachment, 0, len(cfg.Startup.Attachments))
-	for _, attachment := range cfg.Startup.Attachments {
+func startupGoalAttachments(attachmentsIn []startup.Attachment) []goalAttachment {
+	attachments := make([]goalAttachment, 0, len(attachmentsIn))
+	for _, attachment := range attachmentsIn {
 		if strings.TrimSpace(attachment.Text) == "" {
 			continue
 		}
@@ -688,24 +689,19 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 		return m, textarea.Blink
 	}
 
+	ctx := task.StartupContext()
 	m.cfg.Focus = protocol.FocusReview
 	m.state = stateHome
 	m.goal = ""
 	m.err = nil
 	m.completion.suppressedKey = ""
-	if task.FailureClassification == reviewtask.FailureNone {
-		m.setGoalInputValue(task.Instruction)
-		m.setGoalAttachments([]goalAttachment{newGoalGitDiffAttachmentWithStats("git diff", task.Diff, task.FilesChanged, task.Additions, task.Deletions)})
-	} else {
-		m.setGoalInputValue(task.StartupPrompt())
-		m.setGoalAttachments(nil)
-	}
+	m.setGoalInputValue(ctx.Goal)
+	m.setGoalAttachments(startupGoalAttachments(ctx.Attachments))
 	m.resizeGoalEditor()
 	m.focusGoalEditor()
 	m.paste.Blur()
 
-	status, severity := task.StartupStatus()
-	m.status = startupMessage(severity, status)
+	m.status = startupMessage(ctx.Status.Severity, ctx.Status.Text)
 
 	return m, textarea.Blink
 }

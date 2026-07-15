@@ -117,6 +117,7 @@ func TestShouldOmitFile(t *testing.T) {
 		{relPath: "package-lock.json", data: []byte("{}"), want: true},
 		{relPath: "lib/app.jar", data: []byte("jar"), want: true},
 		{relPath: "Main.class", data: []byte("class"), want: true},
+		{relPath: filepath.Join("build", "tmp.txt"), data: []byte("generated"), want: false},
 		{relPath: "badger", data: []byte{0, 1, 2, 3}, want: true},
 		{relPath: ".gitignore", data: []byte("tmp\n"), want: true},
 		{relPath: ".dockerignore", data: []byte(".git\n"), want: true},
@@ -132,6 +133,78 @@ func TestShouldOmitFile(t *testing.T) {
 		if got := shouldOmitFile(root, path, filepath.Base(path)); got != tt.want {
 			t.Fatalf("shouldOmitFile(%q) = %v, want %v", tt.relPath, got, tt.want)
 		}
+	}
+}
+
+func TestReviewPathPriorityPathCategories(t *testing.T) {
+	root := t.TempDir()
+	tests := []struct {
+		name     string
+		relPath  string
+		priority int
+		ok       bool
+	}{
+		{name: "source path", relPath: filepath.Join("internal", "api", "new_client.go"), priority: 1, ok: true},
+		{name: "asset path", relPath: filepath.Join("media", "logo.png"), priority: 0, ok: true},
+		{name: "binary path", relPath: filepath.Join("bin", "tool.exe"), priority: 0, ok: true},
+		{name: "unknown extension", relPath: filepath.Join("notes", "draft.xyz"), priority: 0, ok: true},
+		{name: "extensionless path", relPath: filepath.Join("tools", "badger"), priority: 0, ok: true},
+		{name: "generated path", relPath: filepath.Join("build", "tmp.txt"), priority: 0, ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := ReviewPathPriority(root, filepath.Join(root, tt.relPath))
+			if ok != tt.ok {
+				t.Fatalf("ok = %v, want %v", ok, tt.ok)
+			}
+			if got != tt.priority {
+				t.Fatalf("priority = %d, want %d", got, tt.priority)
+			}
+		})
+	}
+}
+
+func TestReviewPathPrioritySeparatorHandling(t *testing.T) {
+	root := t.TempDir()
+	tests := []struct {
+		name     string
+		relPath  string
+		priority int
+	}{
+		{name: "root index html", relPath: "index.html", priority: 1},
+		{name: "nested index html", relPath: filepath.Join("docs", "index.html"), priority: 1},
+		{name: "public path", relPath: filepath.Join("public", "app.js"), priority: 1},
+		{name: "static path", relPath: filepath.Join("static", "style.css"), priority: 1},
+		{name: "assets path", relPath: filepath.Join("assets", "logo.png"), priority: 1},
+		{name: "nested source path", relPath: filepath.Join("internal", "api", "service.go"), priority: 1},
+		{name: "top-level tests path", relPath: filepath.Join("tests", "data.xyz"), priority: 1},
+		{name: "top-level testdata path", relPath: filepath.Join("testdata", "data.xyz"), priority: 1},
+		{name: "top-level fixtures path", relPath: filepath.Join("fixtures", "data.xyz"), priority: 1},
+		{name: "top-level migrations path", relPath: filepath.Join("migrations", "data.xyz"), priority: 1},
+		{name: "top-level schema path", relPath: filepath.Join("schema", "data.xyz"), priority: 1},
+		{name: "top-level sample path", relPath: filepath.Join("sample", "data.xyz"), priority: 1},
+		{name: "nested category path", relPath: filepath.Join("pkg", "testdata", "data.xyz"), priority: 1},
+		{name: "binary in tests", relPath: filepath.Join("tests", "tool.exe"), priority: 0},
+		{name: "asset in fixtures", relPath: filepath.Join("fixtures", "logo.png"), priority: 0},
+		{name: "archive in sample", relPath: filepath.Join("sample", "archive.jar"), priority: 0},
+		{name: "migration filename only", relPath: "migration-notes.log", priority: 0},
+		{name: "test filename only", relPath: "test_output.xyz", priority: 0},
+		{name: "similar directory name", relPath: filepath.Join("samples", "data.xyz"), priority: 0},
+		{name: "nested root web resource", relPath: filepath.Join("docs", "favicon.ico"), priority: 0},
+		{name: "nested robots file", relPath: filepath.Join("examples", "robots.txt"), priority: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := ReviewPathPriority(root, filepath.Join(root, tt.relPath))
+			if !ok {
+				t.Fatalf("ok = false, want true")
+			}
+			if got != tt.priority {
+				t.Fatalf("priority = %d, want %d", got, tt.priority)
+			}
+		})
 	}
 }
 

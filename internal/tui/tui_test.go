@@ -192,7 +192,7 @@ func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
 		Deletions:    0,
 	}}
 	cfg.Startup.Status = startup.Status{
-		Text:     "Loaded review prompt from the current git diff. Edit it before submitting.",
+		Text:     "Loaded review context from the current Git working tree. Edit it before submitting.",
 		Severity: "success",
 	}
 	cfg.SkipOnboarding = true
@@ -277,7 +277,7 @@ func TestNewModelAppliesFallbackReviewGoalAndWarningStatus(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Startup.Goal = "Review the following change before committing."
 	cfg.Startup.Status = startup.Status{
-		Text:     "No git diff was detected. The prompt is editable.",
+		Text:     "No reviewable changes were detected. The prompt is editable.",
 		Severity: "warning",
 	}
 	cfg.SkipOnboarding = true
@@ -1490,7 +1490,7 @@ func TestSubmitGoalReviewCommandUsesPreparedPrompt(t *testing.T) {
 	if !strings.Contains(got.goalAttachments[0].Text, "println(\"updated\")") {
 		t.Fatalf("goal attachment missing diff content:\n%s", got.goalAttachments[0].Text)
 	}
-	if !strings.Contains(got.status.text, "Loaded review prompt from the current git diff") {
+	if !strings.Contains(got.status.text, "Loaded review context") {
 		t.Fatalf("status = %q, want success review status", got.status.text)
 	}
 	if cmd == nil {
@@ -1544,8 +1544,121 @@ func TestSubmitGoalReviewCommandUsesFallbackPromptWhenNoDiff(t *testing.T) {
 	if !strings.Contains(got.goalInput.Value(), "Paste the diff below or replace this text with the change you want reviewed.") {
 		t.Fatalf("goal input missing manual fallback text:\n%s", got.goalInput.Value())
 	}
-	if !strings.Contains(got.status.text, "No git diff was detected") {
+	if !strings.Contains(got.status.text, "No reviewable changes were detected") {
 		t.Fatalf("status = %q, want no-diff warning", got.status.text)
+	}
+	if cmd == nil {
+		t.Fatal("review command returned nil blink command")
+	}
+}
+
+func TestSubmitGoalReviewCommandUsesUntrackedFilesOnly(t *testing.T) {
+	repo := newReviewRepo(t, "")
+	writeReviewFile(t, repo, "notes/todo.md", "secret untracked contents\n")
+	m := NewModel(repo, DefaultConfig())
+	m.goalInput.SetValue("/review")
+
+	next, cmd := m.submitGoal()
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("submitGoal returned %T, want tui.Model", next)
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if got.cfg.Focus != protocol.FocusReview {
+		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusReview)
+	}
+	if got.goalInput.Value() == "" {
+		t.Fatal("goal input is empty")
+	}
+	if strings.Contains(got.goalInput.Value(), "Paste the diff below") {
+		t.Fatalf("goal input unexpectedly contains fallback prompt:\n%s", got.goalInput.Value())
+	}
+	if !strings.Contains(got.goalInput.Value(), "Review the following change for concrete bugs") {
+		t.Fatalf("goal input missing review instruction:\n%s", got.goalInput.Value())
+	}
+	if len(got.goalAttachments) != 1 {
+		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
+	}
+	if got.goalAttachments[0].Type != goalAttachmentText {
+		t.Fatalf("goal attachment type = %q, want %q", got.goalAttachments[0].Type, goalAttachmentText)
+	}
+	if got.goalAttachments[0].Source != "Git-untracked files" {
+		t.Fatalf("goal attachment source = %q, want Git-untracked files", got.goalAttachments[0].Source)
+	}
+	if !strings.Contains(got.goalAttachments[0].Text, "notes/todo.md") {
+		t.Fatalf("goal attachment missing untracked path:\n%s", got.goalAttachments[0].Text)
+	}
+	if strings.Contains(got.goalAttachments[0].Text, "secret untracked contents") {
+		t.Fatalf("goal attachment leaked untracked file contents:\n%s", got.goalAttachments[0].Text)
+	}
+	if strings.Contains(got.goalAttachments[0].Text, "Diff:") {
+		t.Fatalf("goal attachment unexpectedly contains diff heading:\n%s", got.goalAttachments[0].Text)
+	}
+	if !strings.Contains(got.status.text, "Loaded review context from the current Git working tree") {
+		t.Fatalf("status = %q, want success review status", got.status.text)
+	}
+	if cmd == nil {
+		t.Fatal("review command returned nil blink command")
+	}
+}
+
+func TestSubmitGoalReviewCommandUsesTrackedAndUntrackedAttachments(t *testing.T) {
+	repo := newReviewRepo(t, "println(\"updated\")")
+	writeReviewFile(t, repo, "notes/todo.md", "secret untracked contents\n")
+	m := NewModel(repo, DefaultConfig())
+	m.goalInput.SetValue("/review")
+
+	next, cmd := m.submitGoal()
+	got, ok := next.(Model)
+	if !ok {
+		t.Fatalf("submitGoal returned %T, want tui.Model", next)
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if got.cfg.Focus != protocol.FocusReview {
+		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusReview)
+	}
+	if strings.Contains(got.goalInput.Value(), "Paste the diff below") {
+		t.Fatalf("goal input unexpectedly contains fallback prompt:\n%s", got.goalInput.Value())
+	}
+	if !strings.Contains(got.goalInput.Value(), "Review the following change for concrete bugs") {
+		t.Fatalf("goal input missing review instruction:\n%s", got.goalInput.Value())
+	}
+	if len(got.goalAttachments) != 2 {
+		t.Fatalf("goalAttachments length = %d, want 2", len(got.goalAttachments))
+	}
+	if got.goalAttachments[0].Type != goalAttachmentGitDiff {
+		t.Fatalf("first attachment type = %q, want %q", got.goalAttachments[0].Type, goalAttachmentGitDiff)
+	}
+	if got.goalAttachments[0].Source != "git diff" {
+		t.Fatalf("first attachment source = %q, want git diff", got.goalAttachments[0].Source)
+	}
+	if !strings.Contains(got.goalAttachments[0].Text, "println(\"updated\")") {
+		t.Fatalf("first attachment missing tracked diff content:\n%s", got.goalAttachments[0].Text)
+	}
+	if got.goalAttachments[0].FilesChanged == 0 || got.goalAttachments[0].Additions == 0 {
+		t.Fatalf("first attachment missing diff statistics: %#v", got.goalAttachments[0])
+	}
+	if got.goalAttachments[1].Type != goalAttachmentText {
+		t.Fatalf("second attachment type = %q, want %q", got.goalAttachments[1].Type, goalAttachmentText)
+	}
+	if got.goalAttachments[1].Source != "Git-untracked files" {
+		t.Fatalf("second attachment source = %q, want Git-untracked files", got.goalAttachments[1].Source)
+	}
+	if !strings.Contains(got.goalAttachments[1].Text, "notes/todo.md") {
+		t.Fatalf("second attachment missing untracked path:\n%s", got.goalAttachments[1].Text)
+	}
+	if strings.Contains(got.goalAttachments[1].Text, "secret untracked contents") {
+		t.Fatalf("second attachment leaked untracked file contents:\n%s", got.goalAttachments[1].Text)
+	}
+	if strings.Contains(got.goalAttachments[1].Text, "Diff:") {
+		t.Fatalf("second attachment unexpectedly contains diff heading:\n%s", got.goalAttachments[1].Text)
+	}
+	if !strings.Contains(got.status.text, "Loaded review context from the current Git working tree") {
+		t.Fatalf("status = %q, want success review status", got.status.text)
 	}
 	if cmd == nil {
 		t.Fatal("review command returned nil blink command")
@@ -1666,7 +1779,7 @@ func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 		"/help",
 		"Show commands and keyboard shortcuts.",
 		"/review",
-		"Seed an editable review prompt from the current git diff.",
+		"Seed an editable review prompt from the current Git working tree.",
 		"/design",
 		"Switch the active focus to Design.",
 		"/followup",
@@ -1883,7 +1996,7 @@ func TestHomeTabCompletesReviewSuggestionAndStartsReview(t *testing.T) {
 	if len(got.goalAttachments) != 1 {
 		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
 	}
-	if !strings.Contains(got.status.text, "Loaded review prompt from the current git diff") {
+	if !strings.Contains(got.status.text, "Loaded review context") {
 		t.Fatalf("status = %q, want review success", got.status.text)
 	}
 	if cmd == nil {
@@ -2459,7 +2572,7 @@ func TestSlashCompletionEnterStartsReview(t *testing.T) {
 	if got.state != stateHome {
 		t.Fatalf("state = %v, want home", got.state)
 	}
-	if !strings.Contains(got.status.text, "Loaded review prompt from the current git diff") {
+	if !strings.Contains(got.status.text, "Loaded review context") {
 		t.Fatalf("status = %q, want review success", got.status.text)
 	}
 	if cmd == nil {
@@ -4238,6 +4351,9 @@ func writeReviewFile(t *testing.T, dir, path, contents string) {
 	t.Helper()
 
 	fullPath := filepath.Join(dir, path)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", filepath.Dir(fullPath), err)
+	}
 	if err := os.WriteFile(fullPath, []byte(contents), 0o644); err != nil {
 		t.Fatalf("WriteFile(%s) error = %v", fullPath, err)
 	}

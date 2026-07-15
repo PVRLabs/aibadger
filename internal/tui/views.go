@@ -190,7 +190,7 @@ func (m Model) renderCompletionSuggestions(candidate completionCandidate) string
 func (m Model) slashCommandSuggestions() []slashCommandSuggestion {
 	suggestions := []slashCommandSuggestion{
 		{command: helpCommand, description: "Show commands and keyboard shortcuts."},
-		{command: reviewCommand, description: "Seed an editable review prompt from the current git diff."},
+		{command: reviewCommand, description: "Seed an editable review prompt from the current Git working tree."},
 		{command: designCommand, description: "Switch the active focus to Design."},
 		{command: followupCommand, description: "Switch the active focus to Follow-up."},
 		{command: badgeCommand, description: "Show GitHub stargazer scoreboard"},

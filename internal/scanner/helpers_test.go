@@ -145,6 +145,7 @@ func TestReviewPathPriorityPathCategories(t *testing.T) {
 		ok       bool
 	}{
 		{name: "source path", relPath: filepath.Join("internal", "api", "new_client.go"), priority: 1, ok: true},
+		{name: "Go test source path", relPath: filepath.Join("internal", "model", "topology_test.go"), priority: 1, ok: true},
 		{name: "asset path", relPath: filepath.Join("media", "logo.png"), priority: 0, ok: true},
 		{name: "binary path", relPath: filepath.Join("bin", "tool.exe"), priority: 0, ok: true},
 		{name: "unknown extension", relPath: filepath.Join("notes", "draft.xyz"), priority: 0, ok: true},

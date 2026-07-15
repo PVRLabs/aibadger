@@ -395,7 +395,7 @@ func formatUntrackedSection(paths []string, omitted int) string {
 	}
 
 	lines := make([]string, 0, len(paths)+3)
-	lines = append(lines, "Git-untracked files:")
+	lines = append(lines, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]")
 	for _, path := range paths {
 		lines = append(lines, "- "+escapeReviewPath(path))
 	}

@@ -20,7 +20,7 @@ badger review
 Badger opens your editor with a prompt pre-filled from the current Git working tree. Review it, make any tweaks, then save and close to submit.
 
 > [!NOTE]
-> Only project structure, the tracked diff, and relevant Git-untracked paths are included. Untracked file contents and unchanged source code stay local until you paste extraction commands.
+> Default review includes staged and unstaged tracked changes plus up to 25 relevant Git-untracked paths in a separate section. An untracked-only review is valid. Untracked file contents and unchanged source code stay local until you paste extraction commands.
 > Large pasted review context may be preserved as a separate removable attachment so the editor stays focused on your instruction.
 
 ### Step 2: Copy Prompt 1 (Map) to your AI chat
@@ -150,11 +150,12 @@ badger followup   # Follow-up focus — prompt seeds a short follow-up framing
 
 When you paste a git diff, error output, or other supporting text into
 Badger, it is preserved as a **removable attachment** so the goal input
-stays clean and focused. The `badger review` command automatically
-attaches the current Git diff in default mode and lists relevant
-Git-untracked paths separately without including their contents. At most 25
-untracked paths are included. `--staged`, `--branch`, and `--commit` remain
-tracked-diff only. Text pastes exceeding 16KB or 40 lines are automatically
+stays clean and focused. In default mode, the `badger review` command
+attaches staged and unstaged tracked changes and lists up to 25 relevant
+Git-untracked paths separately without including their contents. Relevant
+untracked paths alone are enough to start a review. `--staged`, `--branch`,
+and `--commit` exclude working-tree untracked files. Text pastes exceeding
+16KB or 40 lines are automatically
 converted into attachments.
 
 Press **Tab** to switch focus between the goal editor and the attachment

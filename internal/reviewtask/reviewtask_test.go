@@ -40,7 +40,7 @@ func TestBuildDefaultTrackedChangesOnly(t *testing.T) {
 	if !strings.Contains(task.Prompt, "Diff:") {
 		t.Fatalf("Prompt missing diff heading:\n%s", task.Prompt)
 	}
-	if strings.Contains(task.Prompt, "Git-untracked files:") {
+	if strings.Contains(task.Prompt, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
 		t.Fatalf("Prompt unexpectedly included untracked section:\n%s", task.Prompt)
 	}
 	if !strings.Contains(task.Prompt, "println(\"updated\")") {
@@ -192,7 +192,7 @@ func TestBuildDefaultTrackedAndUntrackedTogether(t *testing.T) {
 	if task.UntrackedOmitted != 0 {
 		t.Fatalf("UntrackedOmitted = %d, want 0", task.UntrackedOmitted)
 	}
-	if !strings.Contains(task.Prompt, "Diff:") || !strings.Contains(task.Prompt, "Git-untracked files:") {
+	if !strings.Contains(task.Prompt, "Diff:") || !strings.Contains(task.Prompt, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
 		t.Fatalf("Prompt missing tracked and untracked sections:\n%s", task.Prompt)
 	}
 
@@ -227,7 +227,7 @@ func TestBuildDefaultUntrackedOnly(t *testing.T) {
 	if !task.HasReviewableChanges() {
 		t.Fatal("HasReviewableChanges() = false, want true")
 	}
-	if !strings.Contains(task.Prompt, "Git-untracked files:") {
+	if !strings.Contains(task.Prompt, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
 		t.Fatalf("Prompt missing untracked heading:\n%s", task.Prompt)
 	}
 	if strings.Contains(task.Prompt, "Diff:") {
@@ -565,7 +565,7 @@ func TestFormatUntrackedSectionEscapesPathControlCharacters(t *testing.T) {
 	if strings.Contains(got, path) {
 		t.Fatalf("formatUntrackedSection() included raw control characters:\n%q", got)
 	}
-	want := "Git-untracked files:\n- notes/line\\n- injected\\rDiff:\\tvalue.go"
+	want := "[REVIEW CONTEXT: GIT-UNTRACKED FILES]\n- notes/line\\n- injected\\rDiff:\\tvalue.go"
 	if got != want {
 		t.Fatalf("formatUntrackedSection() = %q, want %q", got, want)
 	}
@@ -682,7 +682,7 @@ func TestBuildDefaultPromptOnlyIncludesDiffHeadingWhenDiffExists(t *testing.T) {
 	if !strings.Contains(task.Prompt, "Diff:") {
 		t.Fatalf("Prompt missing diff heading:\n%s", task.Prompt)
 	}
-	if !strings.Contains(task.Prompt, "Git-untracked files:") {
+	if !strings.Contains(task.Prompt, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
 		t.Fatalf("Prompt missing untracked heading:\n%s", task.Prompt)
 	}
 }
@@ -695,7 +695,7 @@ func TestBuildHeadlessPromptWithDiffOnly(t *testing.T) {
 
 	if got, err := task.HeadlessGoal(); err != nil {
 		t.Fatalf("HeadlessGoal() error = %v", err)
-	} else if !strings.Contains(got, "Diff:") || strings.Contains(got, "Git-untracked files:") {
+	} else if !strings.Contains(got, "Diff:") || strings.Contains(got, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
 		t.Fatalf("HeadlessGoal() = %q", got)
 	}
 }
@@ -711,7 +711,7 @@ func TestBuildHeadlessPromptWithDiffAndUntrackedPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HeadlessGoal() error = %v", err)
 	}
-	if !strings.Contains(got, "Diff:") || !strings.Contains(got, "Git-untracked files:") {
+	if !strings.Contains(got, "Diff:") || !strings.Contains(got, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
 		t.Fatalf("HeadlessGoal() missing sections:\n%s", got)
 	}
 }
@@ -729,7 +729,7 @@ func TestBuildHeadlessPromptWithUntrackedPathsOnly(t *testing.T) {
 	if strings.Contains(got, "Diff:") {
 		t.Fatalf("HeadlessGoal() unexpectedly included diff heading:\n%s", got)
 	}
-	if !strings.Contains(got, "Git-untracked files:") {
+	if !strings.Contains(got, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
 		t.Fatalf("HeadlessGoal() missing untracked section:\n%s", got)
 	}
 }
@@ -908,6 +908,50 @@ func TestBuildDefaultUntrackedOnlyHasReviewableChanges(t *testing.T) {
 
 	if !task.HasReviewableChanges() {
 		t.Fatal("HasReviewableChanges() = false, want true")
+	}
+}
+
+func TestBuildUntrackedGoTestFileReviewEligibility(t *testing.T) {
+	const (
+		path     = "internal/model/topology_test.go"
+		contents = "package model\n\nconst hiddenTopologyValue = 42\n"
+	)
+	repo := newGitRepo(t)
+	writeUntrackedFile(t, repo, path, contents)
+
+	task := buildTask(t, repo, Options{Mode: ModeDefault})
+	if task.FailureClassification != FailureNone {
+		t.Fatalf("FailureClassification = %q, want %q", task.FailureClassification, FailureNone)
+	}
+	if len(task.UntrackedFiles) != 1 || task.UntrackedFiles[0] != path {
+		t.Fatalf("UntrackedFiles = %v, want [%q]", task.UntrackedFiles, path)
+	}
+	untrackedSection := formatUntrackedSection(task.UntrackedFiles, task.UntrackedOmitted)
+	if !strings.Contains(untrackedSection, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]\n- "+path) {
+		t.Fatalf("untracked section missing path:\n%s", untrackedSection)
+	}
+	if strings.Contains(untrackedSection, "hiddenTopologyValue") || strings.Contains(task.Prompt, "hiddenTopologyValue") {
+		t.Fatalf("untracked review context leaked file contents:\n%s", task.Prompt)
+	}
+
+	initialCommit := strings.TrimSpace(runGitCmd(t, repo, "rev-parse", "HEAD"))
+	for _, tt := range []struct {
+		name string
+		opts Options
+	}{
+		{name: "staged", opts: Options{Mode: ModeStaged}},
+		{name: "branch", opts: Options{Mode: ModeBranch, Ref: "main"}},
+		{name: "commit", opts: Options{Mode: ModeCommit, Ref: initialCommit}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			narrowTask := buildTask(t, repo, tt.opts)
+			if len(narrowTask.UntrackedFiles) != 0 {
+				t.Fatalf("UntrackedFiles = %v, want none", narrowTask.UntrackedFiles)
+			}
+			if strings.Contains(narrowTask.Prompt, path) {
+				t.Fatalf("Prompt unexpectedly includes untracked path:\n%s", narrowTask.Prompt)
+			}
+		})
 	}
 }
 

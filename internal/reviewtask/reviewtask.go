@@ -269,7 +269,11 @@ func validateOptions(opts Options) error {
 func resolveDiff(root string, mode Mode, ref string) (string, int, int, int, error) {
 	switch mode {
 	case ModeDefault:
-		return resolveDiffAndStats(root, []string{"diff", "--no-ext-diff", "--unified=3", "HEAD"}, []string{"diff", "--no-ext-diff", "--numstat", "HEAD"})
+		base, err := defaultDiffBase(root)
+		if err != nil {
+			return "", 0, 0, 0, err
+		}
+		return resolveDiffAndStats(root, []string{"diff", "--no-ext-diff", "--unified=3", base}, []string{"diff", "--no-ext-diff", "--numstat", base})
 	case ModeStaged:
 		return resolveDiffAndStats(root, []string{"diff", "--no-ext-diff", "--unified=3", "--cached"}, []string{"diff", "--no-ext-diff", "--numstat", "--cached"})
 	case ModeBranch:
@@ -284,6 +288,46 @@ func resolveDiff(root string, mode Mode, ref string) (string, int, int, int, err
 	default:
 		return "", 0, 0, 0, fmt.Errorf("unknown review mode %d", mode)
 	}
+}
+
+func defaultDiffBase(root string) (string, error) {
+	_, headErr := runGit(root, "rev-parse", "--verify", "HEAD")
+	if headErr == nil {
+		return "HEAD", nil
+	}
+	if !hasUnbornHead(root) {
+		return "", headErr
+	}
+
+	// Derive the empty-tree ID through Git instead of assuming SHA-1. This also
+	// supports repositories initialized with SHA-256 object IDs.
+	emptyTree, err := runGitWithInput(root, "", "hash-object", "-t", "tree", "--stdin")
+	if err != nil {
+		return "", err
+	}
+	emptyTree = strings.TrimSpace(emptyTree)
+	if emptyTree == "" {
+		return "", errors.New("git returned an empty object ID for the empty tree")
+	}
+	return emptyTree, nil
+}
+
+func hasUnbornHead(root string) bool {
+	headRef, err := runGit(root, "symbolic-ref", "-q", "HEAD")
+	if err != nil {
+		return false
+	}
+	headRef = strings.TrimSpace(headRef)
+	if headRef == "" {
+		return false
+	}
+
+	_, err = runGit(root, "show-ref", "--verify", "--quiet", headRef)
+	if err == nil {
+		return false
+	}
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1
 }
 
 func resolveDiffAndStats(root string, diffArgs, numstatArgs []string) (string, int, int, int, error) {
@@ -468,12 +512,17 @@ func isGitRepository(root string) bool {
 }
 
 func runGit(root string, args ...string) (string, error) {
+	return runGitWithInput(root, "", args...)
+}
+
+func runGitWithInput(root, input string, args ...string) (string, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		root = "."
 	}
 
 	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	cmd.Stdin = strings.NewReader(input)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))

@@ -255,6 +255,80 @@ func TestBuildDefaultUntrackedOnly(t *testing.T) {
 	}
 }
 
+func TestBuildDefaultUnbornRepositoryWithUntrackedFile(t *testing.T) {
+	repo := newUnbornGitRepo(t)
+	writeUntrackedFile(t, repo, "internal/api/new_client.go", "package api\n\nconst value = 1\n")
+
+	task := buildTask(t, repo, Options{Mode: ModeDefault})
+
+	if task.FailureClassification != FailureNone {
+		t.Fatalf("FailureClassification = %q, want %q", task.FailureClassification, FailureNone)
+	}
+	if task.Diff != "" {
+		t.Fatalf("Diff = %q, want empty", task.Diff)
+	}
+	if len(task.UntrackedFiles) != 1 || task.UntrackedFiles[0] != "internal/api/new_client.go" {
+		t.Fatalf("UntrackedFiles = %v, want [internal/api/new_client.go]", task.UntrackedFiles)
+	}
+	if !strings.Contains(task.Prompt, "- internal/api/new_client.go") {
+		t.Fatalf("Prompt missing untracked path:\n%s", task.Prompt)
+	}
+}
+
+func TestBuildDefaultUnbornRepositoryWithStagedAndUnstagedChanges(t *testing.T) {
+	repo := newUnbornGitRepo(t)
+	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"staged\") }\n")
+	runGitCmd(t, repo, "add", "app.go")
+	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"working tree\") }\n")
+
+	task := buildTask(t, repo, Options{Mode: ModeDefault})
+
+	if task.FailureClassification != FailureNone {
+		t.Fatalf("FailureClassification = %q, want %q", task.FailureClassification, FailureNone)
+	}
+	if !strings.Contains(task.Diff, "println(\"working tree\")") {
+		t.Fatalf("Diff missing current working-tree content:\n%s", task.Diff)
+	}
+	if task.FilesChanged != 1 || task.Additions == 0 {
+		t.Fatalf("diff stats = files:%d additions:%d deletions:%d, want one added file", task.FilesChanged, task.Additions, task.Deletions)
+	}
+	if len(task.UntrackedFiles) != 0 {
+		t.Fatalf("UntrackedFiles = %v, want none for staged path", task.UntrackedFiles)
+	}
+}
+
+func TestBuildDefaultEmptyUnbornRepositoryHasNoReviewableChanges(t *testing.T) {
+	repo := newUnbornGitRepo(t)
+
+	task := buildTask(t, repo, Options{Mode: ModeDefault})
+
+	if task.FailureClassification != FailureNoDiff {
+		t.Fatalf("FailureClassification = %q, want %q", task.FailureClassification, FailureNoDiff)
+	}
+	if task.HasReviewableChanges() {
+		t.Fatal("HasReviewableChanges() = true, want false")
+	}
+	if !strings.Contains(task.Prompt, "No reviewable changes were detected.") {
+		t.Fatalf("Prompt missing no-change explanation:\n%s", task.Prompt)
+	}
+}
+
+func TestBuildDefaultDoesNotTreatInvalidHeadAsUnborn(t *testing.T) {
+	repo := newUnbornGitRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, ".git", "refs", "heads", "main"), []byte("not-an-object\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(invalid HEAD ref) error = %v", err)
+	}
+
+	_, err := Build(repo, Options{Mode: ModeDefault})
+
+	if err == nil {
+		t.Fatal("Build() error = nil, want invalid HEAD error")
+	}
+	if !strings.Contains(err.Error(), "git rev-parse --verify HEAD") {
+		t.Fatalf("Build() error = %v, want original HEAD resolution error", err)
+	}
+}
+
 func TestBuildDefaultEscapesUntrackedPathControlCharacters(t *testing.T) {
 	repo := newGitRepo(t)
 	rel := filepath.Join("notes", "line\n- injected\rDiff:\tvalue.go")
@@ -968,12 +1042,19 @@ func buildTask(t *testing.T, repo string, opts Options) Task {
 func newGitRepo(t *testing.T) string {
 	t.Helper()
 
+	dir := newUnbornGitRepo(t)
+	commitTrackedFile(t, dir, "app.go", "package main\n\nfunc main() {\n\tprintln(\"base\")\n}\n", "initial commit")
+	return dir
+}
+
+func newUnbornGitRepo(t *testing.T) string {
+	t.Helper()
+
 	dir := t.TempDir()
 	runGitCmd(t, dir, "init")
 	runGitCmd(t, dir, "checkout", "-b", "main")
 	runGitCmd(t, dir, "config", "user.name", "Badger Test")
 	runGitCmd(t, dir, "config", "user.email", "badger@example.com")
-	commitTrackedFile(t, dir, "app.go", "package main\n\nfunc main() {\n\tprintln(\"base\")\n}\n", "initial commit")
 	return dir
 }
 

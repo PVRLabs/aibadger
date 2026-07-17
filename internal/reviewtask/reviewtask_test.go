@@ -7,11 +7,100 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/PVRLabs/aibadger/internal/scanner"
 )
+
+var (
+	committedRepo string
+	unbornRepo    string
+	committedOnce sync.Once
+	unbornOnce    sync.Once
+)
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if committedRepo != "" {
+		if err := os.RemoveAll(committedRepo); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to remove committed template %s: %v\n", committedRepo, err)
+		}
+	}
+	if unbornRepo != "" {
+		if err := os.RemoveAll(unbornRepo); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to remove unborn template %s: %v\n", unbornRepo, err)
+		}
+	}
+	os.Exit(code)
+}
+
+func ensureCommittedTemplate() {
+	committedOnce.Do(func() {
+		committedRepo = createCommittedTemplate()
+	})
+}
+
+func ensureUnbornTemplate() {
+	unbornOnce.Do(func() {
+		unbornRepo = createUnbornTemplate()
+	})
+}
+
+func createCommittedTemplate() (dir string) {
+	dir, err := os.MkdirTemp("", "badger-review-committed-*")
+	if err != nil {
+		panic(fmt.Sprintf("MkdirTemp: %v", err))
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			os.RemoveAll(dir)
+		}
+	}()
+	runTemplateGit(dir, "init", "--template=")
+	runTemplateGit(dir, "checkout", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "app.go"),
+		[]byte("package main\n\nfunc main() {\n\tprintln(\"base\")\n}\n"), 0o644); err != nil {
+		panic(fmt.Sprintf("WriteFile app.go: %v", err))
+	}
+	runTemplateGit(dir, "add", "app.go")
+	runTemplateGit(dir, "commit", "-m", "initial commit")
+	ok = true
+	return dir
+}
+
+func createUnbornTemplate() (dir string) {
+	dir, err := os.MkdirTemp("", "badger-review-unborn-*")
+	if err != nil {
+		panic(fmt.Sprintf("MkdirTemp: %v", err))
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			os.RemoveAll(dir)
+		}
+	}()
+	runTemplateGit(dir, "init", "--template=")
+	runTemplateGit(dir, "checkout", "-b", "main")
+	ok = true
+	return dir
+}
+
+func runTemplateGit(dir string, args ...string) {
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Badger Test",
+		"GIT_AUTHOR_EMAIL=badger@example.com",
+		"GIT_COMMITTER_NAME=Badger Test",
+		"GIT_COMMITTER_EMAIL=badger@example.com",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		panic(fmt.Sprintf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(out)))
+	}
+}
 
 func TestBuildDefaultTrackedChangesOnly(t *testing.T) {
 	repo := newGitRepo(t)
@@ -1041,21 +1130,22 @@ func buildTask(t *testing.T, repo string, opts Options) Task {
 
 func newGitRepo(t *testing.T) string {
 	t.Helper()
-
-	dir := newUnbornGitRepo(t)
-	commitTrackedFile(t, dir, "app.go", "package main\n\nfunc main() {\n\tprintln(\"base\")\n}\n", "initial commit")
-	return dir
+	ensureCommittedTemplate()
+	dst := t.TempDir()
+	if err := os.CopyFS(dst, os.DirFS(committedRepo)); err != nil {
+		t.Fatalf("copy committed template: %v", err)
+	}
+	return dst
 }
 
 func newUnbornGitRepo(t *testing.T) string {
 	t.Helper()
-
-	dir := t.TempDir()
-	runGitCmd(t, dir, "init")
-	runGitCmd(t, dir, "checkout", "-b", "main")
-	runGitCmd(t, dir, "config", "user.name", "Badger Test")
-	runGitCmd(t, dir, "config", "user.email", "badger@example.com")
-	return dir
+	ensureUnbornTemplate()
+	dst := t.TempDir()
+	if err := os.CopyFS(dst, os.DirFS(unbornRepo)); err != nil {
+		t.Fatalf("copy unborn template: %v", err)
+	}
+	return dst
 }
 
 func writeTrackedFile(t *testing.T, dir, path, contents string) {

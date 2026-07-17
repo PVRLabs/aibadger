@@ -2319,6 +2319,41 @@ func TestTaggedCompletionActivatesAtExpectedBoundaries(t *testing.T) {
 	}
 }
 
+func TestTaggedCompletionUsesExternalRootSuffix(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "statlite")
+	externalDocs := filepath.Join(parent, "statlite-private", "docs")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(externalDocs, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".badger-context"), []byte("../statlite-private/docs\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(externalDocs, "product.md"), []byte("product\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, input := range []string{"Review @prod", "Review @docs/pro"} {
+		t.Run(input, func(t *testing.T) {
+			m := NewModel(root, DefaultConfig())
+			m.goalInput.SetValue(input)
+			m.goalInput.CursorEnd()
+			m.refreshCompletionCandidate()
+
+			candidate, ok := m.completionVisible()
+			if !ok {
+				t.Fatal("completionVisible() = false, want external tagged completion")
+			}
+			if len(candidate.suggestions) != 1 || candidate.suggestions[0].replacement != "@docs/product.md" {
+				t.Fatalf("suggestions = %+v, want @docs/product.md", candidate.suggestions)
+			}
+		})
+	}
+}
+
 func TestTaggedCompletionSkipsNoisyDirectories(t *testing.T) {
 	root := t.TempDir()
 	writeTaggedCompletionFixture(t, root, "notes.md")

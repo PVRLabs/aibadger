@@ -162,11 +162,11 @@ func Resolve(projectRoot, relPath string, externalRoots []ExternalRoot) (Resolve
 	var matches []ResolvedPath
 	seenAbs := make(map[string]bool)
 
-	addMatch := func(m ResolvedPath, root ExternalRoot) {
+	addMatch := func(m ResolvedPath, root ExternalRoot, rootRelPath string) {
 		if seenAbs[m.AbsPath] || m.IsDir {
 			return
 		}
-		if root.IsOmitted != nil && root.IsOmitted(relPath, m.AbsPath) {
+		if root.IsOmitted != nil && root.IsOmitted(rootRelPath, m.AbsPath) {
 			return
 		}
 		m.Path = relPath // Preserve original reference path for display and fallback resolution
@@ -179,7 +179,7 @@ func Resolve(projectRoot, relPath string, externalRoots []ExternalRoot) (Resolve
 	for _, root := range externalRoots {
 		// Strategy 1: Exact match or relative to external root (handles @spec.md)
 		if m, err := resolveExistingPath(root.AbsPath, relPath); err == nil {
-			addMatch(m, root)
+			addMatch(m, root, relPath)
 		}
 
 		// Strategy 2: relPath starts with root display path (handles @../badger-sidecar/docs/spec.md)
@@ -187,7 +187,7 @@ func Resolve(projectRoot, relPath string, externalRoots []ExternalRoot) (Resolve
 		if strings.HasPrefix(relPath, displayPrefix) {
 			remainder := relPath[len(displayPrefix):]
 			if m, err := resolveExistingPath(root.AbsPath, remainder); err == nil {
-				addMatch(m, root)
+				addMatch(m, root, remainder)
 			}
 		}
 
@@ -196,12 +196,21 @@ func Resolve(projectRoot, relPath string, externalRoots []ExternalRoot) (Resolve
 		if stripped != "" && strings.HasPrefix(relPath, stripped+"/") {
 			remainder := relPath[len(stripped)+1:]
 			if m, err := resolveExistingPath(root.AbsPath, remainder); err == nil {
-				addMatch(m, root)
+				addMatch(m, root, remainder)
+			}
+		}
+
+		// Strategy 4: Match the configured root's final path component
+		// (handles @docs/spec.md for ../badger-sidecar/docs).
+		if alias := externalRootTagPrefix(root); alias != "" && strings.HasPrefix(relPath, alias+"/") {
+			remainder := relPath[len(alias)+1:]
+			if m, err := resolveExistingPath(root.AbsPath, remainder); err == nil {
+				addMatch(m, root, remainder)
 			}
 		}
 	}
 
-	// Strategy 4: Loose resolution from project root (handles @../badger-sidecar/docs/spec.md safely)
+	// Strategy 5: Loose resolution from project root (handles @../badger-sidecar/docs/spec.md safely)
 	if isEscape {
 		absRoot, _ := filepath.Abs(projectRoot)
 		fullPath := filepath.Clean(filepath.Join(absRoot, filepath.FromSlash(relPath)))
@@ -217,7 +226,7 @@ func Resolve(projectRoot, relPath string, externalRoots []ExternalRoot) (Resolve
 						Path:    relPath,
 						AbsPath: fullPath,
 						IsDir:   false,
-					}, root)
+					}, root, filepath.ToSlash(rel))
 				}
 			}
 		}
@@ -256,6 +265,7 @@ func Complete(projectRoot, prefix string, externalRoots []ExternalRoot, limit in
 
 	scored := make([]scoredSuggestion, 0, len(candidates))
 	seenPaths := make(map[string]bool)
+	localPaths := make(map[string]bool)
 	for _, candidate := range candidates {
 		rank, ok := scoreCompletionCandidate(prefix, candidate)
 		if !ok {
@@ -269,6 +279,7 @@ func Complete(projectRoot, prefix string, externalRoots []ExternalRoot, limit in
 			rank: rank,
 		})
 		seenPaths[candidate.Path] = true
+		localPaths[candidate.Path] = true
 	}
 
 	for _, root := range externalRoots {
@@ -285,6 +296,10 @@ func Complete(projectRoot, prefix string, externalRoots []ExternalRoot, limit in
 			continue
 		}
 		for _, candidate := range extCandidates {
+			if localPaths[candidate.Path] {
+				continue
+			}
+			candidate = externalCompletionCandidate(root, candidate)
 			if seenPaths[candidate.Path] {
 				continue
 			}
@@ -359,27 +374,30 @@ func completeExplicitDirectoryPrefix(projectRoot, prefix string, externalRoots [
 	}
 
 	for _, root := range externalRoots {
-		extSuggestions, err := collectExplicitDirectorySuggestions(root.AbsPath, prefix, func(relPath string, isDir bool) bool {
-			if skip != nil && skip(relPath, isDir) {
-				return true
-			}
-			if root.IsOmitted != nil && root.IsOmitted(relPath, filepath.Join(root.AbsPath, filepath.FromSlash(relPath))) {
-				return true
-			}
-			return false
-		})
-		if err != nil {
-			continue
-		}
-		for _, suggestion := range extSuggestions {
-			if seenPaths[suggestion.Path] {
+		for _, rootPrefix := range externalCompletionSearchPrefixes(root, prefix) {
+			extSuggestions, err := collectExplicitDirectorySuggestions(root.AbsPath, rootPrefix, func(relPath string, isDir bool) bool {
+				if skip != nil && skip(relPath, isDir) {
+					return true
+				}
+				if root.IsOmitted != nil && root.IsOmitted(relPath, filepath.Join(root.AbsPath, filepath.FromSlash(relPath))) {
+					return true
+				}
+				return false
+			})
+			if err != nil {
 				continue
 			}
-			scored = append(scored, scoredSuggestion{
-				suggestion: suggestion,
-				isExternal: true,
-			})
-			seenPaths[suggestion.Path] = true
+			for _, suggestion := range extSuggestions {
+				suggestion.Path = externalCompletionPath(root, suggestion.Path, suggestion.IsDir)
+				if seenPaths[suggestion.Path] {
+					continue
+				}
+				scored = append(scored, scoredSuggestion{
+					suggestion: suggestion,
+					isExternal: true,
+				})
+				seenPaths[suggestion.Path] = true
+			}
 		}
 	}
 
@@ -437,6 +455,49 @@ func collectExplicitDirectorySuggestions(projectRoot, prefix string, skip SkipFu
 		})
 	}
 	return suggestions, nil
+}
+
+func externalRootTagPrefix(root ExternalRoot) string {
+	clean := filepath.Clean(filepath.FromSlash(strings.TrimSpace(root.Path)))
+	base := filepath.Base(clean)
+	if base == "" || base == "." || base == ".." || base == string(filepath.Separator) {
+		return ""
+	}
+	return filepath.ToSlash(base)
+}
+
+func externalCompletionCandidate(root ExternalRoot, candidate shallowCompletionCandidate) shallowCompletionCandidate {
+	if externalRootTagPrefix(root) == "" {
+		return candidate
+	}
+	candidate.Path = externalCompletionPath(root, candidate.Path, candidate.IsDir)
+	candidate.Depth++
+	return candidate
+}
+
+func externalCompletionPath(root ExternalRoot, relPath string, isDir bool) string {
+	alias := externalRootTagPrefix(root)
+	if alias == "" {
+		return relPath
+	}
+	path := joinTaggedPath(alias, strings.TrimSuffix(relPath, "/"))
+	return dirSuffix(path, isDir)
+}
+
+func externalCompletionSearchPrefixes(root ExternalRoot, prefix string) []string {
+	prefixes := []string{prefix}
+	alias := externalRootTagPrefix(root)
+	normalized := strings.TrimSpace(strings.ReplaceAll(prefix, "\\", "/"))
+	if alias == "" || len(normalized) < len(alias) || !strings.EqualFold(normalized[:len(alias)], alias) {
+		return prefixes
+	}
+	if len(normalized) == len(alias) {
+		return append(prefixes, "")
+	}
+	if normalized[len(alias)] != '/' {
+		return prefixes
+	}
+	return append(prefixes, normalized[len(alias)+1:])
 }
 
 func splitExplicitCompletionPrefix(prefix string) (string, string) {

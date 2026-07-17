@@ -528,6 +528,35 @@ func TestResolveTaggedReferenceExternalFallback(t *testing.T) {
 	}
 }
 
+func TestResolveTaggedReferenceExternalRootSuffix(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ext := t.TempDir()
+	if err := os.WriteFile(filepath.Join(ext, "product.md"), []byte("product\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	externalRoots := []ExternalRoot{
+		{Path: "../statlite-private/docs", AbsPath: ext},
+	}
+
+	for _, reference := range []string{"product.md", "docs/product.md", "../statlite-private/docs/product.md"} {
+		t.Run(reference, func(t *testing.T) {
+			resolved, err := Resolve(root, reference, externalRoots)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resolved.Source != SourceExternal {
+				t.Fatalf("source = %v, want SourceExternal", resolved.Source)
+			}
+			if resolved.AbsPath != filepath.Join(ext, "product.md") {
+				t.Fatalf("absolute path = %q, want external product.md", resolved.AbsPath)
+			}
+		})
+	}
+}
+
 func TestResolveTaggedReferenceExternalSafety(t *testing.T) {
 	t.Parallel()
 
@@ -605,12 +634,12 @@ func TestCompleteTaggedReferencesExternalFallback(t *testing.T) {
 	}
 
 	// 2. External match
-	completions, err = Complete(root, "ext", externalRoots, 8, nil)
+	completions, err = Complete(root, "external", externalRoots, 8, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(completions) != 1 || completions[0].Path != "external-file.txt" {
-		t.Fatalf("expected external-file.txt, got %v", suggestionsToPaths(completions))
+	if len(completions) != 1 || completions[0].Path != "ext/external-file.txt" {
+		t.Fatalf("expected ext/external-file.txt, got %v", suggestionsToPaths(completions))
 	}
 
 	// 3. Local priority (duplicate suppression)
@@ -663,8 +692,51 @@ func TestCompleteTaggedReferencesExplicitDirectoryExternalFallback(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(suggestionsToPaths(completions), []string{"docs/plans/external-plan.md"}) {
+	if !reflect.DeepEqual(suggestionsToPaths(completions), []string{"ext/docs/plans/external-plan.md"}) {
 		t.Fatalf("expected external explicit directory completion, got %v", suggestionsToPaths(completions))
+	}
+}
+
+func TestCompleteTaggedReferencesUsesExternalRootSuffix(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ext := t.TempDir()
+	mustWrite := func(path string) {
+		t.Helper()
+		full := filepath.Join(ext, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("product.md")
+	mustWrite("plans/0000-planning-principles.md")
+
+	externalRoots := []ExternalRoot{
+		{Path: "../statlite-private/docs", AbsPath: ext},
+	}
+
+	for _, test := range []struct {
+		prefix string
+		want   string
+	}{
+		{prefix: "prod", want: "docs/product.md"},
+		{prefix: "docs/pro", want: "docs/product.md"},
+		{prefix: "plans/0000", want: "docs/plans/0000-planning-principles.md"},
+		{prefix: "docs/plans/0000", want: "docs/plans/0000-planning-principles.md"},
+	} {
+		t.Run(test.prefix, func(t *testing.T) {
+			completions, err := Complete(root, test.prefix, externalRoots, 8, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(suggestionsToPaths(completions), []string{test.want}) {
+				t.Fatalf("Complete(%q) = %v, want %q", test.prefix, suggestionsToPaths(completions), test.want)
+			}
+		})
 	}
 }
 

@@ -177,7 +177,7 @@ attachment's details are shown inline, and you can remove it with
 
 ## External Context
 
-You can add read-only external directories by creating a `.badger-context` file in the project root, one path per line.
+You can add read-only external directories by creating a `.badger-context` file in the project root, one path per line. Paths are relative to the `.badger-context` file location.
 
 Example:
 

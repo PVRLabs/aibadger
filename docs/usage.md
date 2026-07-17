@@ -146,6 +146,19 @@ badger review     # Review focus — prompt is prefilled from the current Git wo
 badger followup   # Follow-up focus — prompt seeds a short follow-up framing
 ```
 
+### Review Options
+
+`badger review` accepts these flags to control the diff source:
+
+```bash
+badger review                        # unstaged + staged tracked changes + untracked paths
+badger review --staged               # staged changes only
+badger review --branch <ref>         # changes since branching off <ref>
+badger review --commit <sha>         # a single commit
+```
+
+Flags are mutually exclusive. When `--staged`, `--branch`, or `--commit` is used, working-tree untracked files are excluded.
+
 ## Attachments
 
 When you paste a git diff, error output, or other supporting text into
@@ -153,8 +166,7 @@ Badger, it is preserved as a **removable attachment** so the goal input
 stays clean and focused. In default mode, the `badger review` command
 attaches staged and unstaged tracked changes and lists up to 25 relevant
 Git-untracked paths separately without including their contents. Relevant
-untracked paths alone are enough to start a review. `--staged`, `--branch`,
-and `--commit` exclude working-tree untracked files. Text pastes exceeding
+untracked paths alone are enough to start a review. See [Review Options](#review-options) for how `--staged`, `--branch`, and `--commit` affect attachment behavior. Text pastes exceeding
 16KB or 40 lines are automatically
 converted into attachments.
 

@@ -257,69 +257,35 @@ func TestApplyReviewStartupUsesReviewPrompt(t *testing.T) {
 	}
 }
 
-func TestApplyReviewStartupHeadlessUsesPreparedPrompt(t *testing.T) {
+func TestRunHeadlessReviewWritesPreparedGoal(t *testing.T) {
 	repo := newGitRepo(t)
 	writeFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"updated\")\n}\n")
 	cfg := badger.DefaultConfig()
 	cfg.Root = repo
-	app := appConfig{
-		focus:      protocol.FocusReview,
-		headless:   true,
-		reviewMode: reviewtask.ModeDefault,
-	}
+	var stdout bytes.Buffer
 
-	if err := applyReviewStartup(&cfg, app); err != nil {
-		t.Fatalf("applyReviewStartup() error = %v", err)
+	if err := runHeadlessReview(cfg, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, io.Discard); err != nil {
+		t.Fatalf("runHeadlessReview() error = %v", err)
 	}
-	if cfg.Startup.Goal == "" {
-		t.Fatal("headless review startup goal is empty")
+	if !strings.Contains(stdout.String(), "Diff:") {
+		t.Fatalf("runHeadlessReview() output missing diff:\n%s", stdout.String())
 	}
-	if !strings.Contains(cfg.Startup.Goal, "Diff:") {
-		t.Fatalf("headless review startup goal missing diff prompt:\n%s", cfg.Startup.Goal)
+	if !strings.HasSuffix(stdout.String(), "\n") || strings.HasSuffix(stdout.String(), "\n\n") {
+		t.Fatalf("runHeadlessReview() output should have exactly one trailing newline: %q", stdout.String())
 	}
 }
 
-func TestApplyReviewStartupHeadlessRejectsNoDiff(t *testing.T) {
-	repo := newGitRepo(t)
+func TestRunHeadlessReviewPropagatesErrors(t *testing.T) {
 	cfg := badger.DefaultConfig()
-	cfg.Root = repo
-	app := appConfig{
-		focus:      protocol.FocusReview,
-		headless:   true,
-		reviewMode: reviewtask.ModeDefault,
-	}
+	cfg.Root = t.TempDir()
+	var stdout bytes.Buffer
 
-	err := applyReviewStartup(&cfg, app)
-	if err == nil {
-		t.Fatal("applyReviewStartup() error = nil, want no-diff failure")
+	err := runHeadlessReview(cfg, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "not a git repository") {
+		t.Fatalf("runHeadlessReview() error = %v, want non-git error", err)
 	}
-	if cfg.Startup.Goal != "" {
-		t.Fatalf("headless review startup goal = %q, want empty on failure", cfg.Startup.Goal)
-	}
-	if !strings.Contains(err.Error(), "no reviewable changes were detected") {
-		t.Fatalf("error = %v, want no-diff failure", err)
-	}
-}
-
-func TestApplyReviewStartupHeadlessRejectsNonGit(t *testing.T) {
-	dir := t.TempDir()
-	cfg := badger.DefaultConfig()
-	cfg.Root = dir
-	app := appConfig{
-		focus:      protocol.FocusReview,
-		headless:   true,
-		reviewMode: reviewtask.ModeDefault,
-	}
-
-	err := applyReviewStartup(&cfg, app)
-	if err == nil {
-		t.Fatal("applyReviewStartup() error = nil, want non-git failure")
-	}
-	if cfg.Startup.Goal != "" {
-		t.Fatalf("headless review startup goal = %q, want empty on failure", cfg.Startup.Goal)
-	}
-	if !strings.Contains(err.Error(), "not a git repository") {
-		t.Fatalf("error = %v, want non-git failure", err)
+	if stdout.Len() != 0 {
+		t.Fatalf("runHeadlessReview() stdout = %q, want empty", stdout.String())
 	}
 }
 
@@ -475,12 +441,25 @@ func TestLoadConfigHeadlessDevStepInput(t *testing.T) {
 		if cfg.stepFlag != "extraction" {
 			t.Fatalf("stepFlag = %q, want %q", cfg.stepFlag, "extraction")
 		}
+		if !cfg.stepFlagSet {
+			t.Fatal("stepFlagSet = false, want true")
+		}
 		if cfg.inputFlag != "commands.txt" {
 			t.Fatalf("inputFlag = %q, want %q", cfg.inputFlag, "commands.txt")
 		}
 		if !cfg.truncateTopology {
 			t.Fatal("truncateTopology = false, want true")
 		}
+	}
+}
+
+func TestLoadConfigTracksEmptyStepFlag(t *testing.T) {
+	cfg := loadConfig([]string{"review", "--headless", "--step", ""})
+	if cfg.parseErr != nil {
+		t.Fatalf("parseErr = %v", cfg.parseErr)
+	}
+	if !cfg.stepFlagSet || cfg.stepFlag != "" {
+		t.Fatalf("step flag = (%q, %v), want (empty, true)", cfg.stepFlag, cfg.stepFlagSet)
 	}
 }
 

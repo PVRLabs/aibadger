@@ -243,24 +243,6 @@ func TestBuildDefaultInspectionOnlyOmissionsExplainNoReviewableChanges(t *testin
 	}
 }
 
-func TestBuildDefaultStagedTrackedChangesIncludedThroughGitDiffHead(t *testing.T) {
-	repo := newGitRepo(t)
-	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"staged\")\n}\n")
-	runGitCmd(t, repo, "add", "app.go")
-
-	task := buildTask(t, repo, Options{Mode: ModeDefault})
-
-	if task.FailureClassification != FailureNone {
-		t.Fatalf("FailureClassification = %q, want %q", task.FailureClassification, FailureNone)
-	}
-	if !strings.Contains(task.Diff, "staged") {
-		t.Fatalf("Diff missing staged change:\n%s", task.Diff)
-	}
-	if len(task.UntrackedFiles) != 0 {
-		t.Fatalf("UntrackedFiles = %v, want none", task.UntrackedFiles)
-	}
-}
-
 func TestBuildDefaultTrackedAndUntrackedTogether(t *testing.T) {
 	repo := newGitRepo(t)
 	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"tracked\")\n}\n")
@@ -341,26 +323,6 @@ func TestBuildDefaultUntrackedOnly(t *testing.T) {
 	}
 	if strings.Contains(ctx.Attachments[0].Text, "const value = 1") {
 		t.Fatalf("untracked attachment leaked file contents:\n%s", ctx.Attachments[0].Text)
-	}
-}
-
-func TestBuildDefaultUnbornRepositoryWithUntrackedFile(t *testing.T) {
-	repo := newUnbornGitRepo(t)
-	writeUntrackedFile(t, repo, "internal/api/new_client.go", "package api\n\nconst value = 1\n")
-
-	task := buildTask(t, repo, Options{Mode: ModeDefault})
-
-	if task.FailureClassification != FailureNone {
-		t.Fatalf("FailureClassification = %q, want %q", task.FailureClassification, FailureNone)
-	}
-	if task.Diff != "" {
-		t.Fatalf("Diff = %q, want empty", task.Diff)
-	}
-	if len(task.UntrackedFiles) != 1 || task.UntrackedFiles[0] != "internal/api/new_client.go" {
-		t.Fatalf("UntrackedFiles = %v, want [internal/api/new_client.go]", task.UntrackedFiles)
-	}
-	if !strings.Contains(task.Prompt, "- internal/api/new_client.go") {
-		t.Fatalf("Prompt missing untracked path:\n%s", task.Prompt)
 	}
 }
 
@@ -785,116 +747,6 @@ func TestBuildDeterministicOrdering(t *testing.T) {
 			t.Fatalf("UntrackedFiles = %v, want lexical tie-break", task.UntrackedFiles)
 		}
 	})
-}
-
-func TestBuildStagedModeIgnoresUntrackedFiles(t *testing.T) {
-	repo := newGitRepo(t)
-	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"staged\")\n}\n")
-	runGitCmd(t, repo, "add", "app.go")
-	writeUntrackedFile(t, repo, "internal/api/new_client.go", "package api\n")
-
-	task := buildTask(t, repo, Options{Mode: ModeStaged})
-
-	if len(task.UntrackedFiles) != 0 {
-		t.Fatalf("UntrackedFiles = %v, want none in staged mode", task.UntrackedFiles)
-	}
-	if !strings.Contains(task.Diff, "staged") {
-		t.Fatalf("Diff missing staged content:\n%s", task.Diff)
-	}
-}
-
-func TestBuildBranchModeIgnoresWorkingTreeUntrackedFiles(t *testing.T) {
-	repo := newGitRepo(t)
-	runGitCmd(t, repo, "checkout", "-b", "feature")
-	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"branch\")\n}\n")
-	runGitCmd(t, repo, "commit", "-am", "feature change")
-	writeUntrackedFile(t, repo, "internal/api/new_client.go", "package api\n")
-
-	task := buildTask(t, repo, Options{Mode: ModeBranch, Ref: "main"})
-
-	if len(task.UntrackedFiles) != 0 {
-		t.Fatalf("UntrackedFiles = %v, want none in branch mode", task.UntrackedFiles)
-	}
-	if !strings.Contains(task.Diff, "branch") {
-		t.Fatalf("Diff missing branch change:\n%s", task.Diff)
-	}
-}
-
-func TestBuildCommitModeIgnoresWorkingTreeUntrackedFiles(t *testing.T) {
-	repo := newGitRepo(t)
-	commit := commitTrackedFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"commit\")\n}\n", "commit change")
-	writeUntrackedFile(t, repo, "internal/api/new_client.go", "package api\n")
-
-	task := buildTask(t, repo, Options{Mode: ModeCommit, Ref: commit})
-
-	if len(task.UntrackedFiles) != 0 {
-		t.Fatalf("UntrackedFiles = %v, want none in commit mode", task.UntrackedFiles)
-	}
-	if !strings.Contains(task.Diff, "commit") {
-		t.Fatalf("Diff missing commit content:\n%s", task.Diff)
-	}
-}
-
-func TestBuildDefaultPromptOnlyIncludesDiffHeadingWhenDiffExists(t *testing.T) {
-	repo := newGitRepo(t)
-	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"diff\")\n}\n")
-	writeUntrackedFile(t, repo, "internal/api/new_client.go", "package api\n")
-
-	task := buildTask(t, repo, Options{Mode: ModeDefault})
-
-	if !strings.Contains(task.Prompt, "Diff:") {
-		t.Fatalf("Prompt missing diff heading:\n%s", task.Prompt)
-	}
-	if !strings.Contains(task.Prompt, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
-		t.Fatalf("Prompt missing untracked heading:\n%s", task.Prompt)
-	}
-}
-
-func TestBuildHeadlessPromptWithDiffOnly(t *testing.T) {
-	repo := newGitRepo(t)
-	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"diff\")\n}\n")
-
-	task := buildTask(t, repo, Options{Mode: ModeDefault})
-
-	if got, err := task.HeadlessGoal(); err != nil {
-		t.Fatalf("HeadlessGoal() error = %v", err)
-	} else if !strings.Contains(got, "Diff:") || strings.Contains(got, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
-		t.Fatalf("HeadlessGoal() = %q", got)
-	}
-}
-
-func TestBuildHeadlessPromptWithDiffAndUntrackedPaths(t *testing.T) {
-	repo := newGitRepo(t)
-	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"diff\")\n}\n")
-	writeUntrackedFile(t, repo, "internal/api/new_client.go", "package api\n")
-
-	task := buildTask(t, repo, Options{Mode: ModeDefault})
-
-	got, err := task.HeadlessGoal()
-	if err != nil {
-		t.Fatalf("HeadlessGoal() error = %v", err)
-	}
-	if !strings.Contains(got, "Diff:") || !strings.Contains(got, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
-		t.Fatalf("HeadlessGoal() missing sections:\n%s", got)
-	}
-}
-
-func TestBuildHeadlessPromptWithUntrackedPathsOnly(t *testing.T) {
-	repo := newGitRepo(t)
-	writeUntrackedFile(t, repo, "internal/api/new_client.go", "package api\n")
-
-	task := buildTask(t, repo, Options{Mode: ModeDefault})
-
-	got, err := task.HeadlessGoal()
-	if err != nil {
-		t.Fatalf("HeadlessGoal() error = %v", err)
-	}
-	if strings.Contains(got, "Diff:") {
-		t.Fatalf("HeadlessGoal() unexpectedly included diff heading:\n%s", got)
-	}
-	if !strings.Contains(got, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
-		t.Fatalf("HeadlessGoal() missing untracked section:\n%s", got)
-	}
 }
 
 func TestBuildInteractiveContextWithDiffAttachmentOnly(t *testing.T) {

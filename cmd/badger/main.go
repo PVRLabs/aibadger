@@ -17,6 +17,7 @@ type appConfig struct {
 	showBadge        bool
 	focus            protocol.Focus
 	stepFlag         string
+	stepFlagSet      bool
 	inputFlag        string
 	truncateTopology bool
 	reviewMode       reviewtask.Mode
@@ -63,6 +64,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Error: --step, --input, and --truncate-topology require --headless.")
 		os.Exit(1)
 	}
+	if cfg.focus == protocol.FocusReview && cfg.headless && cfg.stepFlagSet {
+		fmt.Fprintln(os.Stderr, "Error: --step cannot be used with review --headless")
+		os.Exit(1)
+	}
 
 	// Profile mode: start CPU profiling if --cpuprofile flag provided
 	var cpuprofile *os.File
@@ -89,6 +94,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	}
+	if cfg.focus == protocol.FocusReview && cfg.headless {
+		if err := runHeadlessReview(badgerCfg, cfg, os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 	if cfg.focus == protocol.FocusReview {
 		if err := applyReviewStartup(&badgerCfg, cfg); err != nil {
@@ -192,6 +204,7 @@ func parseArgs(args []string, cfg *appConfig) error {
 					return err
 				}
 				cfg.stepFlag = value
+				cfg.stepFlagSet = true
 			case arg == "--input":
 				value, err := nextValue("input")
 				if err != nil {
@@ -271,6 +284,23 @@ func parseArgs(args []string, cfg *appConfig) error {
 	}
 
 	return nil
+}
+
+func runHeadlessReview(cfg badger.Config, app appConfig, stdout, _ io.Writer) error {
+	reviewTask, err := reviewtask.Build(cfg.Root, reviewtask.Options{
+		Mode:       app.reviewMode,
+		Ref:        app.reviewRef,
+		ExtraFocus: app.reviewExtraFocus,
+	})
+	if err != nil {
+		return err
+	}
+	goal, err := reviewTask.HeadlessGoal()
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(stdout, strings.TrimRight(goal, "\n"))
+	return err
 }
 
 func flagValue(arg, name string) (string, bool) {
@@ -378,7 +408,7 @@ func isFlagArg(arg, name string) bool {
 }
 
 func hasHeadlessOnlyFlagsWithoutHeadless(cfg appConfig) bool {
-	return !cfg.headless && (cfg.stepFlag != "" || cfg.inputFlag != "" || cfg.truncateTopology)
+	return !cfg.headless && (cfg.stepFlagSet || cfg.inputFlag != "" || cfg.truncateTopology)
 }
 
 func printUsage(cfg appConfig) {

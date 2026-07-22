@@ -13,8 +13,9 @@ import (
 
 const maxGenericResourcePackageFiles = 5
 
-// scanGenericResources finds schema-like resources outside language-specific
-// source roots without depending on a language detector.
+// scanGenericResources finds schema-like resources and conventional example
+// configuration files outside language-specific source roots without depending
+// on a language detector.
 func scanGenericResources(root string) ([]model.SourceRoot, error) {
 	packages := make(map[string]*model.Package)
 
@@ -34,7 +35,7 @@ func scanGenericResources(root string) ([]model.SourceRoot, error) {
 		}
 
 		name := entry.Name()
-		if !isGenericResourceFile(name) || shouldOmitFile(root, path, name) {
+		if (!isGenericResourceFile(name) && !isTopLevelExampleResourceFile(root, path, name)) || shouldOmitFile(root, path, name) {
 			return nil
 		}
 		info, infoErr := entry.Info()
@@ -75,6 +76,39 @@ func shouldSkipGenericResourceDir(root, path, name string) bool {
 func isGenericResourceFile(name string) bool {
 	switch strings.ToLower(filepath.Ext(name)) {
 	case ".sql", ".proto", ".graphql", ".gql":
+		return true
+	default:
+		return false
+	}
+}
+
+// isTopLevelExampleResourceFile limits configuration recognition to
+// conventional public example directories at the project root. This keeps
+// generic resource scanning conservative outside those directories.
+func isTopLevelExampleResourceFile(root, path, name string) bool {
+	if !isTopLevelExamplePath(relativePath(root, path)) {
+		return false
+	}
+
+	lowerName := strings.ToLower(name)
+	if filegroups.IsOpsEnvExampleName(lowerName) {
+		return true
+	}
+	switch strings.ToLower(filepath.Ext(lowerName)) {
+	case ".yaml", ".yml", ".json", ".toml", ".properties", ".xml":
+		return true
+	default:
+		return false
+	}
+}
+
+func isTopLevelExamplePath(relPath string) bool {
+	topLevel, _, ok := strings.Cut(relPath, string(filepath.Separator))
+	if !ok {
+		return false
+	}
+	switch strings.ToLower(topLevel) {
+	case "example", "examples", "sample", "samples", "demo", "demos":
 		return true
 	default:
 		return false

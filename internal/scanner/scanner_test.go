@@ -3,6 +3,7 @@ package scanner
 import (
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/PVRLabs/aibadger/internal/model"
@@ -691,6 +692,94 @@ func TestScanGenericResourcesFindsRootAndNestedSchemaFiles(t *testing.T) {
 	}
 }
 
+func TestScanGenericResourcesFindsTopLevelExampleConfigs(t *testing.T) {
+	tmpDir := t.TempDir()
+	for relPath := range map[string]bool{
+		filepath.Join("examples", "actuator.yaml"):          true,
+		filepath.Join("examples", "nested", "statlite.yml"): true,
+		filepath.Join("example", "single.json"):             true,
+		filepath.Join("sample", "finrecord.json"):           true,
+		filepath.Join("samples", "settings.toml"):           true,
+		filepath.Join("demo", "demo.xml"):                   true,
+		filepath.Join("demos", "demo.properties"):           true,
+		filepath.Join("examples", ".env.example"):           true,
+		filepath.Join("examples", ".env.template"):          true,
+		filepath.Join("examples", ".env.sample"):            true,
+	} {
+		writeTestFile(t, filepath.Join(tmpDir, relPath), "example\n")
+	}
+	writeTestFile(t, filepath.Join(tmpDir, "examples", ".env"), "secret\n")
+	writeTestFile(t, filepath.Join(tmpDir, "examples", "usage.md"), "documentation\n")
+	writeTestFile(t, filepath.Join(tmpDir, "examples", "notes.txt"), "documentation\n")
+	writeTestFile(t, filepath.Join(tmpDir, "examples", "node_modules", "ignored.yaml"), "ignored\n")
+	writeTestFile(t, filepath.Join(tmpDir, "src", "examples", "not-public.yaml"), "ignored\n")
+
+	sourceRoots, err := scanGenericResources(tmpDir)
+	if err != nil {
+		t.Fatalf("scanGenericResources() error = %v", err)
+	}
+	for _, relPath := range []string{
+		filepath.Join("examples", "actuator.yaml"),
+		filepath.Join("examples", "nested", "statlite.yml"),
+		filepath.Join("example", "single.json"),
+		filepath.Join("sample", "finrecord.json"),
+		filepath.Join("samples", "settings.toml"),
+		filepath.Join("demo", "demo.xml"),
+		filepath.Join("demos", "demo.properties"),
+		filepath.Join("examples", ".env.example"),
+		filepath.Join("examples", ".env.template"),
+		filepath.Join("examples", ".env.sample"),
+	} {
+		if !resourceRootsHaveTopFile(sourceRoots, relPath) {
+			t.Fatalf("sourceRoots = %+v, missing %s", sourceRoots, relPath)
+		}
+	}
+	for _, relPath := range []string{
+		filepath.Join("examples", ".env"),
+		filepath.Join("examples", "node_modules", "ignored.yaml"),
+		filepath.Join("src", "examples", "not-public.yaml"),
+		filepath.Join("examples", "usage.md"),
+		filepath.Join("examples", "notes.txt"),
+	} {
+		if resourceRootsHaveTopFile(sourceRoots, relPath) {
+			t.Fatalf("sourceRoots = %+v, should omit %s", sourceRoots, relPath)
+		}
+	}
+}
+
+func TestScanGenericResourcesPrioritizesExampleConfigsWithinPackageCap(t *testing.T) {
+	tmpDir := t.TempDir()
+	for _, name := range []string{
+		"guide-a.md", "guide-b.md", "guide-c.md", "guide-d.md", "guide-e.md", "guide-f.md", "notes.txt",
+	} {
+		writeTestFile(t, filepath.Join(tmpDir, "examples", name), strings.Repeat("documentation\n", 100))
+	}
+	for _, name := range []string{"actuator.yaml", "statlite.yml"} {
+		writeTestFile(t, filepath.Join(tmpDir, "examples", name), "targets: []\n")
+	}
+
+	sourceRoots, err := scanGenericResources(tmpDir)
+	if err != nil {
+		t.Fatalf("scanGenericResources() error = %v", err)
+	}
+	for _, relPath := range []string{
+		filepath.Join("examples", "actuator.yaml"),
+		filepath.Join("examples", "statlite.yml"),
+	} {
+		if !resourceRootsHaveTopFile(sourceRoots, relPath) {
+			t.Fatalf("sourceRoots = %+v, missing example config %s", sourceRoots, relPath)
+		}
+	}
+	for _, relPath := range []string{
+		filepath.Join("examples", "guide-a.md"),
+		filepath.Join("examples", "notes.txt"),
+	} {
+		if resourceRootsHaveTopFile(sourceRoots, relPath) {
+			t.Fatalf("sourceRoots = %+v, should omit example prose %s", sourceRoots, relPath)
+		}
+	}
+}
+
 func TestScanGenericResourcesSkipsDocsWebAndOpsDirs(t *testing.T) {
 	tmpDir := t.TempDir()
 	writeTestFile(t, filepath.Join(tmpDir, "docs", "schema.sql"), "select 1;\n")
@@ -754,6 +843,30 @@ func TestScanAttachesGenericResourcesToLanguageTopology(t *testing.T) {
 	}
 	if findPackage(module, "schemas") == nil {
 		t.Fatalf("module.SourceRoots = %+v, missing schemas package", module.SourceRoots)
+	}
+}
+
+func TestScanAttachesTopLevelExampleConfigsToLanguageTopology(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/examples\n")
+	writeTestFile(t, filepath.Join(tmpDir, "main.go"), "package main\nfunc main() {}\n")
+	writeTestFile(t, filepath.Join(tmpDir, "examples", "actuator.yaml"), "targets: []\n")
+	writeTestFile(t, filepath.Join(tmpDir, "examples", "statlite.yml"), "targets: []\n")
+
+	topology, err := NewScanner(tmpDir).Scan()
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if len(topology.Modules) != 1 {
+		t.Fatalf("len(topology.Modules) = %d, want 1", len(topology.Modules))
+	}
+	for _, relPath := range []string{
+		filepath.Join("examples", "actuator.yaml"),
+		filepath.Join("examples", "statlite.yml"),
+	} {
+		if !moduleHasPackageTopFile(topology.Modules[0], relPath) {
+			t.Fatalf("module = %+v, missing example config %s", topology.Modules[0], relPath)
+		}
 	}
 }
 

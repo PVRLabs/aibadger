@@ -62,21 +62,34 @@ try {
 }
 
 Write-Host ""
+$normalizedInstallDir = $installDir.TrimEnd("\")
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$pathEntries = if ($userPath) {
+  $userPath -split ";" | ForEach-Object { $_.TrimEnd("\") } | Where-Object { $_ -ne "" }
+} else {
+  @()
+}
+
+if ($pathEntries -notcontains $normalizedInstallDir) {
+  try {
+    $newPath = (@($normalizedInstallDir) + $pathEntries) -join ";"
+    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+    Write-Host "Added $normalizedInstallDir to your User PATH."
+  } catch {
+    Write-Warning "Could not update your User PATH: $($_.Exception.Message)"
+    Write-Host "Run this command to add it to your User PATH manually:"
+    Write-Host "  [Environment]::SetEnvironmentVariable('Path', '$normalizedInstallDir;' + [Environment]::GetEnvironmentVariable('Path', 'User'), 'User')"
+  }
+}
+
+$sessionPaths = $env:Path -split ";" | ForEach-Object { $_.TrimEnd("\") }
+if ($sessionPaths -notcontains $normalizedInstallDir) {
+  $env:Path = "$normalizedInstallDir;$env:Path"
+}
+
 Write-Host "Installed badger to:"
 Write-Host "  $targetPath"
-Write-Host ""
-
-# Check PATH (normalize trailing backslash for comparison)
-$paths = $env:Path -split ";" | ForEach-Object { $_.TrimEnd("\") }
-$normalizedInstallDir = $installDir.TrimEnd("\")
-if ($paths -notcontains $normalizedInstallDir) {
-  Write-Host "This directory is not on your PATH yet."
-  Write-Host ""
-  Write-Host "Run the following command to add it to your User PATH,"
-  Write-Host "then restart your terminal:"
-  Write-Host ""
-  Write-Host "  [Environment]::SetEnvironmentVariable(""Path"", [Environment]::GetEnvironmentVariable(""Path"", ""User"") + "";$installDir"", ""User"")"
-}
+Write-Host "Restart already-open terminals (or open a new one) if 'badger' is not found elsewhere."
 
 # Print version
 & $targetPath --version

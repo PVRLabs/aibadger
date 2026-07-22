@@ -12,7 +12,7 @@ brew install pvrlabs/tap/badger
 
 The tap pulls release tarballs from GitHub Releases.
 
-## Curl Installer
+## Curl Installer (Linux and macOS)
 
 Install the latest release:
 
@@ -22,14 +22,23 @@ curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | 
 
 The installer downloads the matching GitHub Release tarball for your platform,
 verifies its SHA-256 checksum, and installs `badger` into `~/.local/bin` by
-default. If that directory is not on your `PATH`, add it before running
-`badger`.
+default. When that directory is not already on `PATH`, it tries to make
+`badger` available immediately with a symlink and updates supported shell
+configuration (`bash`, `zsh`, or `fish`) for future terminals. If needed,
+restart the terminal or add the directory yourself:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
 
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | BADGER_VERSION=v0.2.0 sh
+curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | BADGER_VERSION=vX.Y.Z sh
 ```
+
+Set installer environment variables immediately before `sh`, as in the example
+above.
 
 Install into a custom directory:
 
@@ -45,11 +54,15 @@ PowerShell one-liner (default install to `%LOCALAPPDATA%\Programs\Badger`):
 irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
 ```
 
+The installer adds this directory to your User `PATH` and updates the current
+PowerShell session when possible. Restart other terminals that were already
+open before installing.
+
 Custom directory or version:
 
 ```powershell
 $env:BADGER_INSTALL_DIR = "$HOME\bin"; irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
-$env:BADGER_VERSION = "v0.2.0"; irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
+$env:BADGER_VERSION = "vX.Y.Z"; irm https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.ps1 | iex
 ```
 
 Manual: download `badger_<version>_windows_amd64.zip` from the [latest release](https://github.com/PVRLabs/aibadger/releases/latest) and extract `badger.exe` to your `PATH`.
@@ -79,13 +92,15 @@ go build -tags aibadger_release -ldflags="-s -w" -o badger ./cmd/badger
 Check the binary version:
 
 ```bash
-./badger --version
+badger --version
+# or, if PATH still needs to be refreshed:
+~/.local/bin/badger --version
 ```
 
 Expected output:
 
 ```text
-badger v0.2.0
+badger vX.Y.Z
 ```
 
 Published installs should report the current release version. Source builds from

@@ -90,6 +90,14 @@ func (e *Engine) GenerateMap(goal string) string {
 	return schema
 }
 
+// GenerateTopology builds the formatted topology portion of Prompt 1.
+func (e *Engine) GenerateTopology() string {
+	if e == nil || e.formatter == nil {
+		return ""
+	}
+	return e.formatter.GenerateTopology(e.Topology)
+}
+
 // GenerateMapDetailed builds Prompt 1: Topology and returns any non-blocking
 // tagged-file warnings collected from the submitted goal.
 func (e *Engine) GenerateMapDetailed(goal string) (string, []string) {

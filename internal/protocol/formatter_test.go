@@ -84,6 +84,24 @@ func TestGenerateSchemaA(t *testing.T) {
 	}
 }
 
+func TestGenerateTopologyIsSchemaAPrefix(t *testing.T) {
+	formatter := NewFormatter()
+	topology := &model.ProjectTopology{
+		Languages: []string{"Go"},
+		Stack:     []string{"Go Modules"},
+		Structure: "Single Module",
+	}
+
+	standalone := formatter.GenerateTopology(topology)
+	schemaA := formatter.GenerateSchemaA(topology, "inspect this project")
+	if !strings.HasPrefix(schemaA, standalone) {
+		t.Fatalf("Schema A does not start with standalone topology\ntopology:\n%s\nSchema A:\n%s", standalone, schemaA)
+	}
+	if strings.Contains(standalone, "[TASK]") || strings.Contains(standalone, "[CONSTRAINT]") {
+		t.Fatalf("standalone topology contains prompt-only sections:\n%s", standalone)
+	}
+}
+
 func TestGenerateSchemaAIncludesContextSelectionGuidance(t *testing.T) {
 	formatter := NewFormatter()
 	output := formatter.GenerateSchemaA(&model.ProjectTopology{}, "what should I do next?")

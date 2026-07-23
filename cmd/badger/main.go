@@ -38,7 +38,7 @@ var devOnlyFlags = []string{
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "api" {
-		if err := runAPI(os.Args[2:], os.Stdout); err != nil {
+		if err := runAPI(os.Args[2:], os.Stdout, os.Stderr); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -142,23 +142,23 @@ type apiConfig struct {
 	operation string
 	root      string
 	inputPath string
+	focus     protocol.Focus
 }
 
-func runAPI(args []string, stdout io.Writer) error {
+func runAPI(args []string, stdout, stderr io.Writer) error {
 	api, err := parseAPIConfig(args)
 	if err != nil {
 		return err
 	}
 
 	cfg := badger.DefaultConfig()
-	if api.root != "" {
-		cfg.Root = api.root
-	}
-
-	return badger.RunHeadless(cfg, badger.HeadlessOptions{
-		Step:      api.operation,
+	cfg.Root = api.root
+	return badger.RunAPI(cfg, badger.APIOptions{
+		Operation: api.operation,
 		InputPath: api.inputPath,
+		Focus:     api.focus,
 		Stdout:    stdout,
+		Stderr:    stderr,
 	})
 }
 
@@ -169,7 +169,7 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 
 	cfg := apiConfig{operation: args[0]}
 	switch cfg.operation {
-	case "scan", "goal", "extraction", "write-plan":
+	case "topology", "prompt", "scan", "goal", "extraction", "write-plan":
 	default:
 		return apiConfig{}, fmt.Errorf("unknown api operation: %s", cfg.operation)
 	}
@@ -200,19 +200,45 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 				return apiConfig{}, err
 			}
 			cfg.inputPath = value
+		case arg == "--focus" || strings.HasPrefix(arg, "--focus="):
+			value, err := nextValue("focus")
+			if err != nil {
+				return apiConfig{}, err
+			}
+			switch protocol.Focus(value) {
+			case protocol.FocusCode, protocol.FocusDesign:
+				cfg.focus = protocol.Focus(value)
+			default:
+				return apiConfig{}, fmt.Errorf("api prompt supports --focus <code|design>; got %q", value)
+			}
 		default:
 			return apiConfig{}, fmt.Errorf("unknown api flag: %s", arg)
 		}
 	}
 
-	if cfg.operation == "scan" {
+	if cfg.root == "" {
+		return apiConfig{}, fmt.Errorf("api %s requires --root <project>", cfg.operation)
+	}
+	if cfg.operation == "scan" || cfg.operation == "topology" {
 		if cfg.inputPath != "" {
-			return apiConfig{}, fmt.Errorf("api scan does not accept --input")
+			return apiConfig{}, fmt.Errorf("api %s does not accept --input", cfg.operation)
+		}
+		if cfg.focus != "" {
+			return apiConfig{}, fmt.Errorf("api %s does not accept --focus", cfg.operation)
 		}
 		return cfg, nil
 	}
 	if cfg.inputPath == "" {
 		return apiConfig{}, fmt.Errorf("api %s requires --input <file>", cfg.operation)
+	}
+	if cfg.operation == "prompt" {
+		if cfg.focus == "" {
+			return apiConfig{}, fmt.Errorf("api prompt requires --focus <code|design>")
+		}
+		return cfg, nil
+	}
+	if cfg.focus != "" {
+		return apiConfig{}, fmt.Errorf("api %s does not accept --focus", cfg.operation)
 	}
 	return cfg, nil
 }

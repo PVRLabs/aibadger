@@ -69,9 +69,20 @@ func (f *Formatter) GenerateSchemaA(t *model.ProjectTopology, query string) stri
 	return f.GenerateSchemaAWithTaggedFiles(t, query, nil)
 }
 
+// GenerateTopology builds the standalone formatted topology used by Schema A.
+func (f *Formatter) GenerateTopology(t *model.ProjectTopology) string {
+	return f.generateTopology(t, nil, 0)
+}
+
 // GenerateSchemaAWithTaggedFiles builds Prompt 1: Topology and appends a
 // user-selected tagged-files section when paths are supplied.
 func (f *Formatter) GenerateSchemaAWithTaggedFiles(t *model.ProjectTopology, query string, taggedFiles []TaggedFile) string {
+	instr := f.currentInstructions()
+	footer := fmt.Sprintf(instr.SchemaAConstraint, query)
+	return f.generateTopology(t, taggedFiles, len(footer)) + footer
+}
+
+func (f *Formatter) generateTopology(t *model.ProjectTopology, taggedFiles []TaggedFile, reservedBytes int) string {
 	var header strings.Builder
 	f.writeTopologySection(&header, t, 0)
 	header.WriteString("\n[SOURCE TREE]\n")
@@ -92,13 +103,10 @@ func (f *Formatter) GenerateSchemaAWithTaggedFiles(t *model.ProjectTopology, que
 	etcBuilder.WriteString("\n")
 	etcStr := etcBuilder.String()
 
-	instr := f.currentInstructions()
-	footer := fmt.Sprintf(instr.SchemaAConstraint, query)
-
 	keep := len(packages)
 
 	if f.MaxTotalContextBytes > 0 && keep > 0 {
-		fixedSize := len(headerStr) + len(etcStr) + len(footer)
+		fixedSize := len(headerStr) + len(etcStr) + reservedBytes
 		available := f.MaxTotalContextBytes - fixedSize
 		if available < 0 {
 			available = 0
@@ -127,7 +135,6 @@ func (f *Formatter) GenerateSchemaAWithTaggedFiles(t *model.ProjectTopology, que
 		result.WriteString("... [Truncated due to size limit] ...\n")
 	}
 	result.WriteString(etcStr)
-	result.WriteString(footer)
 
 	return result.String()
 }

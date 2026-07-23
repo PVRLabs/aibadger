@@ -537,23 +537,53 @@ func TestParseAPIConfig(t *testing.T) {
 			want: apiConfig{operation: "goal", root: "/project", inputPath: "goal.txt"},
 		},
 		{
+			name: "topology",
+			args: []string{"topology", "--root", "/project"},
+			want: apiConfig{operation: "topology", root: "/project"},
+		},
+		{
+			name: "design prompt",
+			args: []string{"prompt", "--focus=design", "--root", "/project", "--input", "goal.txt"},
+			want: apiConfig{operation: "prompt", root: "/project", inputPath: "goal.txt", focus: protocol.FocusDesign},
+		},
+		{
 			name:    "missing operation",
 			wantErr: "api operation is required",
 		},
 		{
+			name:    "missing root",
+			args:    []string{"scan"},
+			wantErr: "api scan requires --root <project>",
+		},
+		{
 			name:    "unknown operation",
-			args:    []string{"topology"},
-			wantErr: "unknown api operation: topology",
+			args:    []string{"unknown"},
+			wantErr: "unknown api operation: unknown",
 		},
 		{
 			name:    "missing input",
-			args:    []string{"write-plan"},
+			args:    []string{"write-plan", "--root", "/project"},
 			wantErr: "api write-plan requires --input <file>",
 		},
 		{
 			name:    "scan rejects input",
-			args:    []string{"scan", "--input", "ignored.txt"},
+			args:    []string{"scan", "--root", "/project", "--input", "ignored.txt"},
 			wantErr: "api scan does not accept --input",
+		},
+		{
+			name:    "prompt requires focus",
+			args:    []string{"prompt", "--root", "/project", "--input", "goal.txt"},
+			wantErr: "api prompt requires --focus <code|design>",
+		},
+		{
+			name:    "prompt rejects unsupported focus",
+			args:    []string{"prompt", "--root", "/project", "--input", "goal.txt", "--focus", "review"},
+			wantErr: `api prompt supports --focus <code|design>; got "review"`,
+		},
+		{
+			name:    "topology rejects focus",
+			args:    []string{"topology", "--root", "/project", "--focus", "design"},
+			wantErr: "api topology does not accept --focus",
 		},
 	}
 
@@ -584,10 +614,14 @@ func TestRunAPIGoalUsesInputFile(t *testing.T) {
 	}
 
 	var output bytes.Buffer
-	if err := runAPI([]string{"goal", "--root", root, "--input", inputPath}, &output); err != nil {
+	var diagnostics bytes.Buffer
+	if err := runAPI([]string{"goal", "--root", root, "--input", inputPath}, &output, &diagnostics); err != nil {
 		t.Fatalf("runAPI() error = %v", err)
 	}
 	if !strings.Contains(output.String(), "Dev goal: inspect this project") {
 		t.Fatalf("runAPI() output = %q, want goal output", output.String())
+	}
+	if diagnostics.Len() != 0 {
+		t.Fatalf("runAPI() diagnostics = %q, want empty", diagnostics.String())
 	}
 }

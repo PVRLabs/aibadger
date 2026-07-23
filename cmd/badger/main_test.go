@@ -518,3 +518,76 @@ func TestLoadConfigParseError(t *testing.T) {
 		t.Fatal("parseErr = nil, want missing value error")
 	}
 }
+
+func TestParseAPIConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    apiConfig
+		wantErr string
+	}{
+		{
+			name: "scan with root",
+			args: []string{"scan", "--root", "/project"},
+			want: apiConfig{operation: "scan", root: "/project"},
+		},
+		{
+			name: "goal with input equals syntax",
+			args: []string{"goal", "--root=/project", "--input=goal.txt"},
+			want: apiConfig{operation: "goal", root: "/project", inputPath: "goal.txt"},
+		},
+		{
+			name:    "missing operation",
+			wantErr: "api operation is required",
+		},
+		{
+			name:    "unknown operation",
+			args:    []string{"topology"},
+			wantErr: "unknown api operation: topology",
+		},
+		{
+			name:    "missing input",
+			args:    []string{"write-plan"},
+			wantErr: "api write-plan requires --input <file>",
+		},
+		{
+			name:    "scan rejects input",
+			args:    []string{"scan", "--input", "ignored.txt"},
+			wantErr: "api scan does not accept --input",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseAPIConfig(tt.args)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("parseAPIConfig() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseAPIConfig() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("parseAPIConfig() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunAPIGoalUsesInputFile(t *testing.T) {
+	root := t.TempDir()
+	inputPath := filepath.Join(root, "goal.txt")
+	if err := os.WriteFile(inputPath, []byte("inspect this project\n"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var output bytes.Buffer
+	if err := runAPI([]string{"goal", "--root", root, "--input", inputPath}, &output); err != nil {
+		t.Fatalf("runAPI() error = %v", err)
+	}
+	if !strings.Contains(output.String(), "Dev goal: inspect this project") {
+		t.Fatalf("runAPI() output = %q, want goal output", output.String())
+	}
+}

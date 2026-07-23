@@ -37,6 +37,14 @@ var devOnlyFlags = []string{
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "api" {
+		if err := runAPI(os.Args[2:], os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	cfg := loadConfig(os.Args[1:])
 	if cfg.showHelp {
 		printUsage(cfg)
@@ -128,6 +136,85 @@ func main() {
 	}); err != nil {
 		fmt.Printf("Error: %v\n", err)
 	}
+}
+
+type apiConfig struct {
+	operation string
+	root      string
+	inputPath string
+}
+
+func runAPI(args []string, stdout io.Writer) error {
+	api, err := parseAPIConfig(args)
+	if err != nil {
+		return err
+	}
+
+	cfg := badger.DefaultConfig()
+	if api.root != "" {
+		cfg.Root = api.root
+	}
+
+	return badger.RunHeadless(cfg, badger.HeadlessOptions{
+		Step:      api.operation,
+		InputPath: api.inputPath,
+		Stdout:    stdout,
+	})
+}
+
+func parseAPIConfig(args []string) (apiConfig, error) {
+	if len(args) == 0 {
+		return apiConfig{}, fmt.Errorf("api operation is required")
+	}
+
+	cfg := apiConfig{operation: args[0]}
+	switch cfg.operation {
+	case "scan", "goal", "extraction", "write-plan":
+	default:
+		return apiConfig{}, fmt.Errorf("unknown api operation: %s", cfg.operation)
+	}
+
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		nextValue := func(flagName string) (string, error) {
+			if value, ok := flagValue(arg, flagName); ok {
+				return value, nil
+			}
+			if i+1 >= len(args) {
+				return "", fmt.Errorf("flag needs an argument: %s", arg)
+			}
+			i++
+			return args[i], nil
+		}
+
+		switch {
+		case arg == "--root" || strings.HasPrefix(arg, "--root="):
+			value, err := nextValue("root")
+			if err != nil {
+				return apiConfig{}, err
+			}
+			cfg.root = value
+		case arg == "--input" || strings.HasPrefix(arg, "--input="):
+			value, err := nextValue("input")
+			if err != nil {
+				return apiConfig{}, err
+			}
+			cfg.inputPath = value
+		default:
+			return apiConfig{}, fmt.Errorf("unknown api flag: %s", arg)
+		}
+	}
+
+	if cfg.operation == "scan" {
+		if cfg.inputPath != "" {
+			return apiConfig{}, fmt.Errorf("api scan does not accept --input")
+		}
+		return cfg, nil
+	}
+	if cfg.inputPath == "" {
+		return apiConfig{}, fmt.Errorf("api %s requires --input <file>", cfg.operation)
+	}
+	return cfg, nil
 }
 
 func loadConfig(args []string) appConfig {

@@ -365,7 +365,7 @@ func TestPrintVersion(t *testing.T) {
 	}
 }
 
-func TestPrintUsageIncludesReviewEntrypoint(t *testing.T) {
+func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 	out := captureStdout(t, func() {
 		printUsage(appConfig{})
 	})
@@ -376,9 +376,18 @@ func TestPrintUsageIncludesReviewEntrypoint(t *testing.T) {
 		"badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]",
 		"`badger review` preloads an editable review prompt from the current Git working tree.",
 		"relevant Git-untracked paths",
+		"badger api topology --root <project>",
+		"badger api prompt --root <project> --focus <code|design> --input <goal-file>",
+		"badger api extract --root <project> --input <selector-file> --goal-file <goal-file>",
+		"The api commands are non-interactive and write directly usable prompt text to stdout.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("printUsage output missing %q:\n%s", want, out)
+		}
+	}
+	for _, hidden := range []string{"api scan", "api goal", "api extraction", "api write-plan"} {
+		if strings.Contains(out, hidden) {
+			t.Fatalf("printUsage output exposed certification-only operation %q:\n%s", hidden, out)
 		}
 	}
 }
@@ -431,91 +440,37 @@ func TestApplyBadgeStartupRejectsNonInteractive(t *testing.T) {
 	}
 }
 
-func TestLoadConfigHeadlessDevStepInput(t *testing.T) {
-	cfg := loadConfig([]string{"--headless", "--step", "extraction", "--input", "commands.txt", "--truncate-topology"})
-
-	if !releaseBuild {
-		if !cfg.headless {
-			t.Fatal("headless = false, want true")
-		}
-		if cfg.stepFlag != "extraction" {
-			t.Fatalf("stepFlag = %q, want %q", cfg.stepFlag, "extraction")
-		}
-		if !cfg.stepFlagSet {
-			t.Fatal("stepFlagSet = false, want true")
-		}
-		if cfg.inputFlag != "commands.txt" {
-			t.Fatalf("inputFlag = %q, want %q", cfg.inputFlag, "commands.txt")
-		}
-		if !cfg.truncateTopology {
-			t.Fatal("truncateTopology = false, want true")
+func TestLoadConfigRejectsRetiredGenericHeadlessFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"--step", "topology"},
+		{"--input", "commands.txt"},
+		{"--truncate-topology"},
+	} {
+		cfg := loadConfig(args)
+		if cfg.parseErr == nil || !strings.Contains(cfg.parseErr.Error(), "unknown flag") {
+			t.Fatalf("loadConfig(%v) parseErr = %v, want unknown flag", args, cfg.parseErr)
 		}
 	}
 }
 
-func TestLoadConfigTracksEmptyStepFlag(t *testing.T) {
-	cfg := loadConfig([]string{"review", "--headless", "--step", ""})
-	if cfg.parseErr != nil {
-		t.Fatalf("parseErr = %v", cfg.parseErr)
+func TestValidateHeadlessModeOnlyAllowsReview(t *testing.T) {
+	if err := validateHeadlessMode(appConfig{headless: true}); err == nil {
+		t.Fatal("validateHeadlessMode() error = nil for generic --headless")
 	}
-	if !cfg.stepFlagSet || cfg.stepFlag != "" {
-		t.Fatalf("step flag = (%q, %v), want (empty, true)", cfg.stepFlag, cfg.stepFlagSet)
-	}
-}
-
-func TestLoadConfigParsesHeadlessOnlyFlagsWithoutHeadless(t *testing.T) {
-	cfg := loadConfig([]string{"--step", "extraction", "--input", "commands.txt", "--truncate-topology"})
-
-	if cfg.headless {
-		t.Fatal("headless = true without --headless")
-	}
-	if !hasHeadlessOnlyFlagsWithoutHeadless(cfg) {
-		t.Fatalf("hasHeadlessOnlyFlagsWithoutHeadless() = false for step=%q input=%q truncateTopology=%v", cfg.stepFlag, cfg.inputFlag, cfg.truncateTopology)
+	if err := validateHeadlessMode(appConfig{headless: true, focus: protocol.FocusReview}); err != nil {
+		t.Fatalf("validateHeadlessMode() review error = %v", err)
 	}
 }
 
-func TestUsedDevOnlyFlags(t *testing.T) {
-	got := usedDevOnlyFlags([]string{
-		"--step",
-		"topology",
-		"-input=commands.txt",
-		"--headless",
-		"--step=context",
-		"-truncate-topology",
-	})
-	want := []string{"--step", "--input", "--headless", "--truncate-topology"}
-
-	if len(got) != len(want) {
-		t.Fatalf("usedDevOnlyFlags() = %v, want %v", got, want)
+func TestUsedDevOnlyFlagsTracksReviewHeadlessOnly(t *testing.T) {
+	got := usedDevOnlyFlags([]string{"review", "--headless", "--step=topology"})
+	if len(got) != 1 || got[0] != "--headless" {
+		t.Fatalf("usedDevOnlyFlags() = %v, want [--headless]", got)
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("usedDevOnlyFlags() = %v, want %v", got, want)
-		}
-	}
-}
 
-func TestUsedDevOnlyFlagsDoesNotMatchPrefixes(t *testing.T) {
-	got := usedDevOnlyFlags([]string{"--stepper", "--input-file", "--headless-mode", "--truncate-topology-extra"})
-
+	got = usedDevOnlyFlags([]string{"--", "--headless"})
 	if len(got) != 0 {
-		t.Fatalf("usedDevOnlyFlags() = %v, want none", got)
-	}
-}
-
-func TestUsedDevOnlyFlagsStopsAtOptionTerminator(t *testing.T) {
-	got := usedDevOnlyFlags([]string{"--", "--headless", "--step=topology"})
-
-	if len(got) != 0 {
-		t.Fatalf("usedDevOnlyFlags() = %v, want none", got)
-	}
-}
-
-func TestLoadConfigParseError(t *testing.T) {
-	cfg := loadConfig([]string{"--step"})
-
-	if cfg.parseErr == nil {
-		t.Fatal("parseErr = nil, want missing value error")
+		t.Fatalf("usedDevOnlyFlags() after option terminator = %v, want none", got)
 	}
 }
 

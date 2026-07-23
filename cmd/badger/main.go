@@ -16,10 +16,6 @@ type appConfig struct {
 	headless         bool
 	showBadge        bool
 	focus            protocol.Focus
-	stepFlag         string
-	stepFlagSet      bool
-	inputFlag        string
-	truncateTopology bool
 	reviewMode       reviewtask.Mode
 	reviewRef        string
 	reviewExtraFocus string
@@ -31,9 +27,6 @@ type appConfig struct {
 
 var devOnlyFlags = []string{
 	"headless",
-	"step",
-	"input",
-	"truncate-topology",
 }
 
 func main() {
@@ -68,12 +61,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", cfg.parseErr)
 		os.Exit(1)
 	}
-	if hasHeadlessOnlyFlagsWithoutHeadless(cfg) {
-		fmt.Fprintln(os.Stderr, "Error: --step, --input, and --truncate-topology require --headless.")
-		os.Exit(1)
-	}
-	if cfg.focus == protocol.FocusReview && cfg.headless && cfg.stepFlagSet {
-		fmt.Fprintln(os.Stderr, "Error: --step cannot be used with review --headless")
+	if err := validateHeadlessMode(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -122,19 +111,8 @@ func main() {
 	if cfg.focus == protocol.FocusFollowup {
 		applyFollowupStartup(&badgerCfg, cfg)
 	}
-	if !cfg.headless {
-		if err := badger.Run(badgerCfg); err != nil {
-			fmt.Printf("TUI error: %v\n", err)
-		}
-		return
-	}
-
-	if err := badger.RunHeadless(badgerCfg, badger.HeadlessOptions{
-		Step:             cfg.stepFlag,
-		InputPath:        cfg.inputFlag,
-		TruncateTopology: cfg.truncateTopology,
-	}); err != nil {
-		fmt.Printf("Error: %v\n", err)
+	if err := badger.Run(badgerCfg); err != nil {
+		fmt.Printf("TUI error: %v\n", err)
 	}
 }
 
@@ -337,21 +315,6 @@ func parseArgs(args []string, cfg *appConfig) error {
 			switch {
 			case arg == "--headless":
 				cfg.headless = true
-			case arg == "--step":
-				value, err := nextValue("step")
-				if err != nil {
-					return err
-				}
-				cfg.stepFlag = value
-				cfg.stepFlagSet = true
-			case arg == "--input":
-				value, err := nextValue("input")
-				if err != nil {
-					return err
-				}
-				cfg.inputFlag = value
-			case arg == "--truncate-topology":
-				cfg.truncateTopology = true
 			case profileBuild && arg == "--cpuprofile":
 				value, err := nextValue("cpuprofile")
 				if err != nil {
@@ -470,6 +433,13 @@ func validateReviewOptions(mode reviewtask.Mode, ref string) error {
 	return nil
 }
 
+func validateHeadlessMode(cfg appConfig) error {
+	if cfg.headless && cfg.focus != protocol.FocusReview {
+		return fmt.Errorf("--headless is only valid with badger review")
+	}
+	return nil
+}
+
 func applyDesignStartup(cfg *badger.Config, app appConfig) {
 	cfg.SkipOnboarding = true
 	cfg.Startup = badger.StartupContext{
@@ -546,30 +516,23 @@ func isFlagArg(arg, name string) bool {
 		strings.HasPrefix(arg, "--"+name+"=")
 }
 
-func hasHeadlessOnlyFlagsWithoutHeadless(cfg appConfig) bool {
-	return !cfg.headless && (cfg.stepFlagSet || cfg.inputFlag != "" || cfg.truncateTopology)
-}
-
 func printUsage(cfg appConfig) {
-	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design|followup] [--help]\n  badger [code|review|design|followup] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nStandard runs start the interactive BYOL workflow for the current directory.\nThe default focus is Code; use badger review, badger design, or badger followup to start in a different focus.\n`badger review` preloads an editable review prompt from the current Git working tree. Default mode includes staged and unstaged tracked changes plus up to 25 relevant Git-untracked paths in a separate section; it never includes untracked file contents, and untracked paths alone are valid review context. `--staged`, `--branch <ref>`, and `--commit <sha>` exclude working-tree untracked files. If no reviewable changes are available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
+	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design|followup] [--help]\n  badger [code|review|design|followup] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger api topology --root <project>\n  badger api prompt --root <project> --focus <code|design> --input <goal-file>\n  badger api extract --root <project> --input <selector-file> --goal-file <goal-file>\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nThe api commands are non-interactive and write directly usable prompt text to stdout.\nStandard runs start the interactive BYOL workflow for the current directory.\nThe default focus is Code; use badger review, badger design, or badger followup to start in a different focus.\n`badger review` preloads an editable review prompt from the current Git working tree. Default mode includes staged and unstaged tracked changes plus up to 25 relevant Git-untracked paths in a separate section; it never includes untracked file contents, and untracked paths alone are valid review context. `--staged`, `--branch <ref>`, and `--commit <sha>` exclude working-tree untracked files. If no reviewable changes are available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
 
 	// Show note about dev flags in release builds
 	if releaseBuild {
-		fmt.Printf(`
-Note: This is a release build. Development flags (--headless, --step, --input, --truncate-topology)
-are not available. Use the development build (default 'go build') or profile build for those features.
+		fmt.Print(`
+Note: This is a release build. The development-only review --headless mode
+is not available. Use the development build (default 'go build') for that mode.
 `)
 		return
 	}
 
-	fmt.Printf(`
+	fmt.Print(`
 Developer testing flags:
-  --headless        Run the non-interactive automation path.
-  --step <name>     With --headless, run one step and exit: %s.
-  --input <file>   With --headless, read step input from a file.
-  --truncate-topology
-                  With --headless, cap Prompt 1: Topology package output.
-`, badger.StepNames)
+  review --headless
+                  Prepare a review goal from Git state and exit.
+`)
 
 	// Profile mode: show profiler-specific help
 	if profileBuild {

@@ -78,6 +78,7 @@ Full usage: [docs/usage.md](docs/usage.md)
 ## Learn More
 
 - [Usage Examples & Walkthrough](docs/usage.md)
+- [API Reference](docs/api.md) — Non-interactive commands for editors and scripts
 - [Articles](docs/articles/)
 - [Protocol Reference](docs/protocol.md)
 - [Limitations & Supported Projects](docs/limitations.md)

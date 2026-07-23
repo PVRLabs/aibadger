@@ -55,6 +55,7 @@ type WriteError struct {
 
 type ExtractionCommandResult struct {
 	Commands []extractor.Command
+	Failures []string
 	Count    int
 	Empty    bool
 }
@@ -97,6 +98,18 @@ func (s *Session) ParseExtractionInput(input string) ExtractionCommandResult {
 		Commands: commands,
 		Count:    len(commands),
 		Empty:    len(commands) == 0,
+	}
+}
+
+// ParseExtractionInputDetailed preserves malformed selector diagnostics for
+// non-interactive callers while retaining every usable command.
+func (s *Session) ParseExtractionInputDetailed(input string) ExtractionCommandResult {
+	result := s.Engine.ParseCommandsDetailed(input)
+	return ExtractionCommandResult{
+		Commands: result.Commands,
+		Failures: result.Failures,
+		Count:    len(result.Commands),
+		Empty:    len(result.Commands) == 0,
 	}
 }
 

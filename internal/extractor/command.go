@@ -4,6 +4,7 @@ package extractor
 
 import (
 	"bufio"
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -16,23 +17,56 @@ type Command struct {
 	Pattern string
 }
 
+// CommandParseResult preserves valid literal selectors while reporting
+// malformed non-empty input lines separately.
+type CommandParseResult struct {
+	Commands []Command
+	Failures []string
+}
+
 // ParseCommands parses the AI's response into a list of Commands.
 func (e *Extractor) ParseCommands(input string) []Command {
-	var commands []Command
+	return e.parseCommands(input, false).Commands
+}
+
+// ParseCommandsDetailed parses selectors and reports malformed input lines
+// without discarding selectors that remain usable.
+func (e *Extractor) ParseCommandsDetailed(input string) CommandParseResult {
+	return e.parseCommands(input, true)
+}
+
+func (e *Extractor) parseCommands(input string, reportMalformed bool) CommandParseResult {
+	var result CommandParseResult
 	scanner := bufio.NewScanner(strings.NewReader(input))
+	lineNumber := 0
 	for scanner.Scan() {
+		lineNumber++
 		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
 		if shouldRecoverEmbeddedFiles(line) {
-			commands = append(commands, parseEmbeddedFileCommands(line)...)
+			result.Commands = append(result.Commands, parseEmbeddedFileCommands(line)...)
 			continue
 		}
 		if cmd, ok := parseCommandLine(line); ok {
-			commands = append(commands, cmd)
+			if reportMalformed && (cmd.Type == "PREFIX" || cmd.Type == "NEAR") && cmd.Pattern == "" {
+				result.Failures = append(result.Failures, fmt.Sprintf("line %d: %s requires path#pattern", lineNumber, cmd.Type))
+				continue
+			}
+			result.Commands = append(result.Commands, cmd)
 			continue
 		}
-		commands = append(commands, parseEmbeddedFileCommands(line)...)
+		embedded := parseEmbeddedFileCommands(line)
+		if len(embedded) > 0 {
+			result.Commands = append(result.Commands, embedded...)
+			continue
+		}
+		if reportMalformed {
+			result.Failures = append(result.Failures, fmt.Sprintf("line %d: invalid or unsupported selector: %s", lineNumber, strings.TrimSpace(line)))
+		}
 	}
-	return commands
+	return result
 }
 
 func parseCommandLine(line string) (Command, bool) {

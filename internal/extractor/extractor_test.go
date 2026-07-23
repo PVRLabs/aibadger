@@ -90,6 +90,28 @@ func TestParseCommandsIgnoresFileTypos(t *testing.T) {
 	}
 }
 
+func TestParseCommandsDetailedPreservesValidSelectorsAndReportsMalformedLines(t *testing.T) {
+	e := NewExtractor("", nil)
+	result := e.ParseCommandsDetailed(strings.Join([]string{
+		"FILE:main.go",
+		"PREFIX:main.go",
+		"UNKNOWN:other.go",
+		"NEAR:main.go#func main",
+	}, "\n"))
+
+	if len(result.Commands) != 2 {
+		t.Fatalf("commands = %+v, want two valid selectors", result.Commands)
+	}
+	if len(result.Failures) != 2 {
+		t.Fatalf("failures = %v, want two malformed selector diagnostics", result.Failures)
+	}
+	for _, want := range []string{"line 2: PREFIX requires path#pattern", "line 3: invalid or unsupported selector"} {
+		if !strings.Contains(strings.Join(result.Failures, "\n"), want) {
+			t.Fatalf("failures = %v, missing %q", result.Failures, want)
+		}
+	}
+}
+
 func TestParseCommandsDoesNotRecoverFileTokensInsidePrefixOrNearPatterns(t *testing.T) {
 	e := NewExtractor("", nil)
 	input := `PREFIX:src/service.go#literal FILE:example.FILE:other

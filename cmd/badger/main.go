@@ -139,10 +139,11 @@ func main() {
 }
 
 type apiConfig struct {
-	operation string
-	root      string
-	inputPath string
-	focus     protocol.Focus
+	operation    string
+	root         string
+	inputPath    string
+	goalFilePath string
+	focus        protocol.Focus
 }
 
 func runAPI(args []string, stdout, stderr io.Writer) error {
@@ -154,11 +155,12 @@ func runAPI(args []string, stdout, stderr io.Writer) error {
 	cfg := badger.DefaultConfig()
 	cfg.Root = api.root
 	return badger.RunAPI(cfg, badger.APIOptions{
-		Operation: api.operation,
-		InputPath: api.inputPath,
-		Focus:     api.focus,
-		Stdout:    stdout,
-		Stderr:    stderr,
+		Operation:    api.operation,
+		InputPath:    api.inputPath,
+		GoalFilePath: api.goalFilePath,
+		Focus:        api.focus,
+		Stdout:       stdout,
+		Stderr:       stderr,
 	})
 }
 
@@ -169,7 +171,7 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 
 	cfg := apiConfig{operation: args[0]}
 	switch cfg.operation {
-	case "topology", "prompt", "scan", "goal", "extraction", "write-plan":
+	case "topology", "prompt", "extract", "scan", "goal", "extraction", "write-plan":
 	default:
 		return apiConfig{}, fmt.Errorf("unknown api operation: %s", cfg.operation)
 	}
@@ -211,6 +213,12 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 			default:
 				return apiConfig{}, fmt.Errorf("api prompt supports --focus <code|design>; got %q", value)
 			}
+		case arg == "--goal-file" || strings.HasPrefix(arg, "--goal-file="):
+			value, err := nextValue("goal-file")
+			if err != nil {
+				return apiConfig{}, err
+			}
+			cfg.goalFilePath = value
 		default:
 			return apiConfig{}, fmt.Errorf("unknown api flag: %s", arg)
 		}
@@ -226,19 +234,37 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 		if cfg.focus != "" {
 			return apiConfig{}, fmt.Errorf("api %s does not accept --focus", cfg.operation)
 		}
+		if cfg.goalFilePath != "" {
+			return apiConfig{}, fmt.Errorf("api %s does not accept --goal-file", cfg.operation)
+		}
 		return cfg, nil
 	}
 	if cfg.inputPath == "" {
 		return apiConfig{}, fmt.Errorf("api %s requires --input <file>", cfg.operation)
 	}
 	if cfg.operation == "prompt" {
+		if cfg.goalFilePath != "" {
+			return apiConfig{}, fmt.Errorf("api prompt does not accept --goal-file")
+		}
 		if cfg.focus == "" {
 			return apiConfig{}, fmt.Errorf("api prompt requires --focus <code|design>")
 		}
 		return cfg, nil
 	}
+	if cfg.operation == "extract" {
+		if cfg.goalFilePath == "" {
+			return apiConfig{}, fmt.Errorf("api extract requires --goal-file <file>")
+		}
+		if cfg.focus != "" {
+			return apiConfig{}, fmt.Errorf("api extract does not accept --focus")
+		}
+		return cfg, nil
+	}
 	if cfg.focus != "" {
 		return apiConfig{}, fmt.Errorf("api %s does not accept --focus", cfg.operation)
+	}
+	if cfg.goalFilePath != "" {
+		return apiConfig{}, fmt.Errorf("api %s does not accept --goal-file", cfg.operation)
 	}
 	return cfg, nil
 }

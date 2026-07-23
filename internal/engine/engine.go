@@ -113,6 +113,12 @@ func (e *Engine) ParseCommands(input string) []extractor.Command {
 	return e.extractor.ParseCommands(input)
 }
 
+// ParseCommandsDetailed parses selectors and preserves malformed-line
+// diagnostics for non-interactive callers.
+func (e *Engine) ParseCommandsDetailed(input string) extractor.CommandParseResult {
+	return e.extractor.ParseCommandsDetailed(input)
+}
+
 // GenerateContext extracts requested source and builds the Schema B context.
 func (e *Engine) GenerateContext(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, error) {
 	extractions, err := e.extractor.Extract(commands)

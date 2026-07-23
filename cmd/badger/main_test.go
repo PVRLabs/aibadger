@@ -547,6 +547,11 @@ func TestParseAPIConfig(t *testing.T) {
 			want: apiConfig{operation: "prompt", root: "/project", inputPath: "goal.txt", focus: protocol.FocusDesign},
 		},
 		{
+			name: "extract",
+			args: []string{"extract", "--root", "/project", "--input", "selectors.txt", "--goal-file", "goal.txt"},
+			want: apiConfig{operation: "extract", root: "/project", inputPath: "selectors.txt", goalFilePath: "goal.txt"},
+		},
+		{
 			name:    "missing operation",
 			wantErr: "api operation is required",
 		},
@@ -584,6 +589,21 @@ func TestParseAPIConfig(t *testing.T) {
 			name:    "topology rejects focus",
 			args:    []string{"topology", "--root", "/project", "--focus", "design"},
 			wantErr: "api topology does not accept --focus",
+		},
+		{
+			name:    "extract requires goal file",
+			args:    []string{"extract", "--root", "/project", "--input", "selectors.txt"},
+			wantErr: "api extract requires --goal-file <file>",
+		},
+		{
+			name:    "extract rejects focus",
+			args:    []string{"extract", "--root", "/project", "--input", "selectors.txt", "--goal-file", "goal.txt", "--focus", "code"},
+			wantErr: "api extract does not accept --focus",
+		},
+		{
+			name:    "prompt rejects goal file",
+			args:    []string{"prompt", "--root", "/project", "--input", "goal.txt", "--focus", "code", "--goal-file", "other.txt"},
+			wantErr: "api prompt does not accept --goal-file",
 		},
 	}
 

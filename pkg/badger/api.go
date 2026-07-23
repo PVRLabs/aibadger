@@ -20,20 +20,22 @@ import (
 )
 
 // APIOptions describes one non-interactive API invocation. InputPath is read
-// exactly once and is never modified. Topology and prompt are the stable
-// text-first operations; the other current operations support certification.
+// exactly once and is never modified. Topology, prompt, and extract are the
+// stable text-first operations; the other current operations support
+// certification.
 type APIOptions struct {
-	Operation string
-	InputPath string
-	Focus     protocol.Focus
-	Stdout    io.Writer
-	Stderr    io.Writer
+	Operation    string
+	InputPath    string
+	GoalFilePath string
+	Focus        protocol.Focus
+	Stdout       io.Writer
+	Stderr       io.Writer
 }
 
 // RunAPI executes a non-interactive API operation. It never reads stdin,
 // changes settings, asks for confirmation, or accesses the clipboard.
 func RunAPI(cfg Config, opts APIOptions) error {
-	if err := validateAPIOperation(opts.Operation, opts.InputPath, opts.Focus); err != nil {
+	if err := validateAPIOperation(opts.Operation, opts.InputPath, opts.GoalFilePath, opts.Focus); err != nil {
 		return err
 	}
 
@@ -57,8 +59,20 @@ func RunAPI(cfg Config, opts APIOptions) error {
 	if err != nil {
 		return err
 	}
+	goal, err := readAPIFile(opts.GoalFilePath, "api goal file")
+	if err != nil {
+		return err
+	}
 	if opts.Operation == "prompt" && strings.TrimSpace(input) == "" {
 		return fmt.Errorf("api prompt input file is empty")
+	}
+	if opts.Operation == "extract" {
+		if strings.TrimSpace(input) == "" {
+			return fmt.Errorf("api extract input file is empty")
+		}
+		if strings.TrimSpace(goal) == "" {
+			return fmt.Errorf("api extract goal file is empty")
+		}
 	}
 	if err := engine.CheckDisabled(cfg.Root); err != nil {
 		if errors.Is(err, engine.ErrProjectDisabled) {
@@ -90,6 +104,20 @@ func RunAPI(cfg Config, opts APIOptions) error {
 		schemaA, warnings := session.GenerateMapDetailed(input)
 		printTaggedFileWarnings(stderr, warnings)
 		fmt.Fprint(stdout, schemaA)
+	case "extract":
+		parsed := session.ParseExtractionInputDetailed(input)
+		if parsed.Empty {
+			printExtractionWarnings(stderr, 0, parsed.Failures, nil)
+			return fmt.Errorf("no valid extraction selectors")
+		}
+		schemaB, metadata, extractedCount, failedCommands, safetyExclusions, err := session.GenerateContextDetailed(goal, parsed.Commands)
+		if err != nil {
+			return err
+		}
+		failedCommands = append(parsed.Failures, failedCommands...)
+		printExtractionWarnings(stderr, extractedCount, failedCommands, safetyExclusions)
+		printExtractionMetadata(stderr, metadata)
+		fmt.Fprint(stdout, schemaB)
 	case "goal":
 		fmt.Fprintf(stdout, "Dev goal: %s\n", input)
 	case "extraction":
@@ -100,7 +128,7 @@ func RunAPI(cfg Config, opts APIOptions) error {
 	return nil
 }
 
-func validateAPIOperation(operation, inputPath string, focus protocol.Focus) error {
+func validateAPIOperation(operation, inputPath, goalFilePath string, focus protocol.Focus) error {
 	switch operation {
 	case "scan", "topology":
 		if inputPath != "" {
@@ -109,6 +137,9 @@ func validateAPIOperation(operation, inputPath string, focus protocol.Focus) err
 		if focus != "" {
 			return fmt.Errorf("api %s does not accept --focus", operation)
 		}
+		if goalFilePath != "" {
+			return fmt.Errorf("api %s does not accept --goal-file", operation)
+		}
 	case "prompt":
 		if inputPath == "" {
 			return fmt.Errorf("api prompt requires --input <file>")
@@ -116,12 +147,28 @@ func validateAPIOperation(operation, inputPath string, focus protocol.Focus) err
 		if focus != protocol.FocusCode && focus != protocol.FocusDesign {
 			return fmt.Errorf("api prompt requires --focus <code|design>")
 		}
+		if goalFilePath != "" {
+			return fmt.Errorf("api prompt does not accept --goal-file")
+		}
+	case "extract":
+		if inputPath == "" {
+			return fmt.Errorf("api extract requires --input <file>")
+		}
+		if goalFilePath == "" {
+			return fmt.Errorf("api extract requires --goal-file <file>")
+		}
+		if focus != "" {
+			return fmt.Errorf("api extract does not accept --focus")
+		}
 	case "goal", "extraction", "write-plan":
 		if inputPath == "" {
 			return fmt.Errorf("api %s requires --input <file>", operation)
 		}
 		if focus != "" {
 			return fmt.Errorf("api %s does not accept --focus", operation)
+		}
+		if goalFilePath != "" {
+			return fmt.Errorf("api %s does not accept --goal-file", operation)
 		}
 	default:
 		return fmt.Errorf("unknown api operation: %s", operation)
@@ -148,15 +195,19 @@ func normalizeAPIRoot(root string) (string, error) {
 }
 
 func readAPIInput(path string) (string, error) {
+	return readAPIFile(path, "api input file")
+}
+
+func readAPIFile(path, label string) (string, error) {
 	if path == "" {
 		return "", nil
 	}
 	input, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("reading api input file: %w", err)
+		return "", fmt.Errorf("reading %s: %w", label, err)
 	}
 	if !utf8.Valid(input) {
-		return "", fmt.Errorf("reading api input file: invalid UTF-8: %s", path)
+		return "", fmt.Errorf("reading %s: invalid UTF-8: %s", label, path)
 	}
 	return string(input), nil
 }

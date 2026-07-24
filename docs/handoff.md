@@ -61,11 +61,34 @@ the full contents of your source files.
 
 Copy Prompt 1 and paste it into your browser AI chat.
 
+For example, an abbreviated Prompt 1 might look like this:
+
+```text
+[PROJECT TOPOLOGY]
+Languages: Go
+Stack: Go Modules
+Structure: Single Module
+
+[SOURCE TREE]
+Pkg: . [3 files] -> Top: go.mod (1KB), README.md (4KB)
+Pkg: internal/scanner [4 files] -> Top: scanner.go (8KB); Aux: scanner_test.go (12KB)
+
+[TASK]
+Explain how project scanning selects relevant files.
+
+[CONSTRAINT]
+Do not solve this yet. Reply only with FILE:, PREFIX:, or NEAR: selectors.
+```
+
+The generated prompt includes more detailed selection instructions, but the
+essential contents are the project topology, your task, and the response
+format the AI must use.
+
 The AI uses the map to ask for specific context:
 
 ```text
-FILE:internal/tui/tui.go
-PREFIX:internal/scanner#func Scan
+FILE:README.md
+PREFIX:internal/scanner/scanner.go#func (s *Scanner) Scan()
 NEAR:go.mod#module
 ```
 
@@ -112,11 +135,6 @@ Badger does not write files without an explicit confirmation.
 
 Nothing is sent automatically. Your browser AI provider receives only what you
 explicitly paste.
-
-## If the AI Does Not Return File Requests
-
-Ask it to reply with `FILE:`, `PREFIX:`, or `NEAR:` lines only. Do not invent
-paths or selectors yourself unless you already know the relevant files.
 
 For a complete command-line walkthrough, see [Usage](usage.md). For the prompt
 formats, see the [Protocol Reference](protocol.md).

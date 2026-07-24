@@ -228,6 +228,27 @@ func TestGenerateMapDetailedIncludesTaggedFilesAndWarnings(t *testing.T) {
 	}
 }
 
+func TestGenerateMapDetailedIgnoresTaggedSyntaxInFencedDiff(t *testing.T) {
+	root := t.TempDir()
+	eng := FromTopology(root, &model.ProjectTopology{
+		Languages: []string{"CSS"},
+	})
+	goal := "Review this change.\n\nAttached git diff:\n```diff\n" +
+		"+@import \"./theme.css\";\n+@keyframes pulse {}\n+@media (width > 1px) {}\n" +
+		"```"
+
+	schema, warnings := eng.GenerateMapDetailed(goal)
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %v, want none for fenced diff content", warnings)
+	}
+	if strings.Contains(schema, "[USER TAGGED FILES]") {
+		t.Fatalf("Prompt 1 unexpectedly included tagged files:\n%s", schema)
+	}
+	if !strings.Contains(schema, "[TASK]\n"+goal+"\n\n[CONSTRAINT]") {
+		t.Fatalf("Prompt 1 did not preserve fenced diff content:\n%s", schema)
+	}
+}
+
 func TestNewRejectsInvalidExternalContext(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, ".badger-context"), []byte("../missing/docs\n"), 0644); err != nil {

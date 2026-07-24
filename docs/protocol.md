@@ -15,6 +15,8 @@ The goal editor may carry separate removable attachments, such as large pasted d
   the normal project tree.
 - **USER TAGGED FILES** — optional user-selected files you pin into the goal
   with `@path/to/file`; the section appears only when those references resolve.
+  References inside fenced code, diffs, or attachment payloads are treated as
+  literal context rather than file tags.
 - **TASK** — your goal or question.
 - **CONSTRAINT** — instructs the AI to reply with selectors only.
 

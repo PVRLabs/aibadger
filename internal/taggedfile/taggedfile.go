@@ -81,6 +81,12 @@ func Parse(input string) ([]Reference, []error) {
 	var errs []error
 
 	for i := 0; i < len(input); {
+		if isLineStart(input, i) {
+			if end, ok := fencedBlockEnd(input, i); ok {
+				i = end
+				continue
+			}
+		}
 		if input[i] != '@' {
 			_, width := utf8.DecodeRuneInString(input[i:])
 			if width <= 0 {
@@ -105,6 +111,89 @@ func Parse(input string) ([]Reference, []error) {
 	}
 
 	return refs, errs
+}
+
+func isLineStart(input string, index int) bool {
+	return index == 0 || (index <= len(input) && input[index-1] == '\n')
+}
+
+func fencedBlockEnd(input string, start int) (int, bool) {
+	lineEnd := strings.IndexByte(input[start:], '\n')
+	if lineEnd < 0 {
+		lineEnd = len(input)
+	} else {
+		lineEnd += start
+	}
+
+	line := strings.TrimSuffix(input[start:lineEnd], "\r")
+	indent := 0
+	for indent < len(line) && indent < 3 && line[indent] == ' ' {
+		indent++
+	}
+	if indent >= len(line) {
+		return 0, false
+	}
+
+	marker := line[indent]
+	if marker != '`' && marker != '~' {
+		return 0, false
+	}
+	run := 0
+	for indent+run < len(line) && line[indent+run] == marker {
+		run++
+	}
+	if run < 3 {
+		return 0, false
+	}
+	if marker == '`' && strings.ContainsRune(line[indent+run:], '`') {
+		return 0, false
+	}
+
+	next := lineEnd
+	if next < len(input) {
+		next++
+	}
+	for next < len(input) {
+		closeEnd := strings.IndexByte(input[next:], '\n')
+		if closeEnd < 0 {
+			closeEnd = len(input)
+		} else {
+			closeEnd += next
+		}
+		closeLine := strings.TrimSuffix(input[next:closeEnd], "\r")
+		if isClosingFence(closeLine, marker, run) {
+			if closeEnd < len(input) {
+				closeEnd++
+			}
+			return closeEnd, true
+		}
+		next = closeEnd
+		if next < len(input) {
+			next++
+		}
+	}
+
+	return len(input), true
+}
+
+func isClosingFence(line string, marker byte, openingRun int) bool {
+	indent := 0
+	for indent < len(line) && indent < 3 && line[indent] == ' ' {
+		indent++
+	}
+	run := 0
+	for indent+run < len(line) && line[indent+run] == marker {
+		run++
+	}
+	if run < openingRun {
+		return false
+	}
+	for _, r := range line[indent+run:] {
+		if r != ' ' && r != '\t' {
+			return false
+		}
+	}
+	return true
 }
 
 // ActiveTokenAt finds the tagged-file token that is active at cursor.

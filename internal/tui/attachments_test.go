@@ -7,6 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-runewidth"
+
+	"github.com/PVRLabs/aibadger/internal/engine"
+	"github.com/PVRLabs/aibadger/internal/model"
 )
 
 func TestCountTextLines(t *testing.T) {
@@ -138,6 +141,38 @@ func TestSubmitGoalAssemblesAttachments(t *testing.T) {
 	}
 	if !strings.Contains(got.goal, "Attached text:") || !strings.Contains(got.goal, "attached context") {
 		t.Fatalf("assembled goal missing attachment payload:\n%s", got.goal)
+	}
+}
+
+func TestReviewDiffAttachmentDoesNotProduceTaggedFileWarnings(t *testing.T) {
+	root := t.TempDir()
+	m := NewModel(root, DefaultConfig())
+	m.goalInput.SetValue("Review this change.")
+	m.goalAttachments = []goalAttachment{
+		newGoalGitDiffAttachment("git diff", strings.Join([]string{
+			"diff --git a/styles.css b/styles.css",
+			"+@import \"./theme.css\";",
+			"+@keyframes pulse {}",
+			"+@media (width > 1px) {}",
+		}, "\n")),
+	}
+
+	next, _ := m.submitGoal()
+	submitted := next.(Model)
+	eng := engine.FromTopology(root, &model.ProjectTopology{
+		Languages: []string{"CSS"},
+	})
+	next, _ = submitted.Update(scanDoneMsg{eng: eng})
+	got := next.(Model)
+
+	if got.status.severity == messageWarning {
+		t.Fatalf("review attachment produced warning: %s", got.status.text)
+	}
+	if !strings.Contains(got.schemaA, "@keyframes pulse") {
+		t.Fatalf("Prompt 1 did not preserve review attachment:\n%s", got.schemaA)
+	}
+	if strings.Contains(got.schemaA, "[USER TAGGED FILES]") {
+		t.Fatalf("Prompt 1 unexpectedly included tagged files:\n%s", got.schemaA)
 	}
 }
 

@@ -39,6 +39,28 @@ func TestParseTaggedReferences(t *testing.T) {
 			want:    []string{},
 			wantErr: "missing closing quote",
 		},
+		{
+			name: "fenced code is literal context",
+			input: "review @cmd/badger/main.go\n\n```css\n" +
+				"@import \"theme.css\";\n@keyframes pulse {}\n@media (width > 1px) {}\n```\n" +
+				"and @docs/usage.md",
+			want: []string{"cmd/badger/main.go", "docs/usage.md"},
+		},
+		{
+			name:  "tilde fence is literal context",
+			input: "~~~\n@missing.txt\n~~~\nuse @README.md",
+			want:  []string{"README.md"},
+		},
+		{
+			name:  "long fence contains shorter fence",
+			input: "````diff\n+```\n+@keyframes pulse {}\n+```\n````\nuse @README.md",
+			want:  []string{"README.md"},
+		},
+		{
+			name:  "unclosed fence is literal through end",
+			input: "use @README.md\n```text\n@missing.txt",
+			want:  []string{"README.md"},
+		},
 	}
 
 	for _, tt := range tests {

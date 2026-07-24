@@ -378,7 +378,7 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 		"relevant Git-untracked paths",
 		"badger api topology --root <project>",
 		"badger api prompt --root <project> --focus <code|design> --input <goal-file>",
-		"badger api extract --root <project> --input <selector-file> --goal-file <goal-file>",
+		"badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>",
 		"The api commands are non-interactive and write directly usable prompt text to stdout.",
 	} {
 		if !strings.Contains(out, want) {
@@ -502,9 +502,9 @@ func TestParseAPIConfig(t *testing.T) {
 			want: apiConfig{operation: "prompt", root: "/project", inputPath: "goal.txt", focus: protocol.FocusDesign},
 		},
 		{
-			name: "extract",
-			args: []string{"extract", "--root", "/project", "--input", "selectors.txt", "--goal-file", "goal.txt"},
-			want: apiConfig{operation: "extract", root: "/project", inputPath: "selectors.txt", goalFilePath: "goal.txt"},
+			name: "design extract",
+			args: []string{"extract", "--root", "/project", "--focus", "design", "--input", "selectors.txt", "--goal-file", "goal.txt"},
+			want: apiConfig{operation: "extract", root: "/project", inputPath: "selectors.txt", goalFilePath: "goal.txt", focus: protocol.FocusDesign},
 		},
 		{
 			name:    "missing operation",
@@ -551,9 +551,9 @@ func TestParseAPIConfig(t *testing.T) {
 			wantErr: "api extract requires --goal-file <file>",
 		},
 		{
-			name:    "extract rejects focus",
-			args:    []string{"extract", "--root", "/project", "--input", "selectors.txt", "--goal-file", "goal.txt", "--focus", "code"},
-			wantErr: "api extract does not accept --focus",
+			name:    "extract rejects unsupported focus",
+			args:    []string{"extract", "--root", "/project", "--input", "selectors.txt", "--goal-file", "goal.txt", "--focus", "review"},
+			wantErr: `api extract supports --focus <code|design>; got "review"`,
 		},
 		{
 			name:    "prompt rejects goal file",

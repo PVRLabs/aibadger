@@ -318,6 +318,40 @@ func TestRunAPIExtractMatchesEngineSchemaB(t *testing.T) {
 	}
 }
 
+func TestRunAPIExtractFocusDefaultsToCodeAndSupportsDesign(t *testing.T) {
+	root := writeAPIExtractionProject(t)
+	selectorsPath := writeAPITestInput(t, "selectors.txt", "FILE:main.go")
+	goalPath := writeAPITestInput(t, "goal.txt", "Design the extraction API")
+
+	for _, tt := range []struct {
+		name  string
+		focus protocol.Focus
+		want  string
+		avoid string
+	}{
+		{name: "omitted defaults to code", want: "This is the final-answer step.", avoid: "This is the final-answer step for a design task."},
+		{name: "design", focus: protocol.FocusDesign, want: "This is the final-answer step for a design task.", avoid: "full updated file contents"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			err := RunAPI(Config{Root: root}, APIOptions{
+				Operation:    "extract",
+				InputPath:    selectorsPath,
+				GoalFilePath: goalPath,
+				Focus:        tt.focus,
+				Stdout:       &stdout,
+				Stderr:       &stderr,
+			})
+			if err != nil {
+				t.Fatalf("RunAPI() error = %v", err)
+			}
+			if !strings.Contains(stdout.String(), tt.want) || strings.Contains(stdout.String(), tt.avoid) {
+				t.Fatalf("extract focus output = %q, want %q and no %q", stdout.String(), tt.want, tt.avoid)
+			}
+		})
+	}
+}
+
 func TestRunAPIExtractEmitsPartialPromptAndWarnings(t *testing.T) {
 	root := writeAPIExtractionProject(t)
 	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("TOKEN=secret\n"), 0644); err != nil {

@@ -54,12 +54,16 @@ Print a complete Prompt 2 (Code Context) — topology, task, and extracted sourc
 code.
 
 ```bash
-badger api extract --root <project> --input <selector-file> --goal-file <goal-file>
+badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>
 ```
 
 `--input <selector-file>` is a UTF-8 file containing the AI's extraction
 selectors (`FILE:`, `PREFIX:`, `NEAR:`), one per line. `--goal-file
 <goal-file>` is the same original goal that was passed to `api prompt`.
+`--focus` selects the final-answer instruction set and accepts `code` or
+`design`. It is optional for backward compatibility; omitting it uses `code`.
+Callers that use a focus for `api prompt` should pass the same focus to
+`api extract`.
 
 If some selectors fail (file not found, ambiguous path, safety exclusion), the
 corresponding diagnostics go to stderr while any usable extracted content is

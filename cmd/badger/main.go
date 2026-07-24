@@ -189,7 +189,7 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 			case protocol.FocusCode, protocol.FocusDesign:
 				cfg.focus = protocol.Focus(value)
 			default:
-				return apiConfig{}, fmt.Errorf("api prompt supports --focus <code|design>; got %q", value)
+				return apiConfig{}, fmt.Errorf("api %s supports --focus <code|design>; got %q", cfg.operation, value)
 			}
 		case arg == "--goal-file" || strings.HasPrefix(arg, "--goal-file="):
 			value, err := nextValue("goal-file")
@@ -232,9 +232,6 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 	if cfg.operation == "extract" {
 		if cfg.goalFilePath == "" {
 			return apiConfig{}, fmt.Errorf("api extract requires --goal-file <file>")
-		}
-		if cfg.focus != "" {
-			return apiConfig{}, fmt.Errorf("api extract does not accept --focus")
 		}
 		return cfg, nil
 	}
@@ -517,7 +514,7 @@ func isFlagArg(arg, name string) bool {
 }
 
 func printUsage(cfg appConfig) {
-	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design|followup] [--help]\n  badger [code|review|design|followup] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger api topology --root <project>\n  badger api prompt --root <project> --focus <code|design> --input <goal-file>\n  badger api extract --root <project> --input <selector-file> --goal-file <goal-file>\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nThe api commands are non-interactive and write directly usable prompt text to stdout.\nStandard runs start the interactive BYOL workflow for the current directory.\nThe default focus is Code; use badger review, badger design, or badger followup to start in a different focus.\n`badger review` preloads an editable review prompt from the current Git working tree. Default mode includes staged and unstaged tracked changes plus up to 25 relevant Git-untracked paths in a separate section; it never includes untracked file contents, and untracked paths alone are valid review context. `--staged`, `--branch <ref>`, and `--commit <sha>` exclude working-tree untracked files. If no reviewable changes are available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
+	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design|followup] [--help]\n  badger [code|review|design|followup] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger api topology --root <project>\n  badger api prompt --root <project> --focus <code|design> --input <goal-file>\n  badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nThe api commands are non-interactive and write directly usable prompt text to stdout.\nStandard runs start the interactive BYOL workflow for the current directory.\nThe default focus is Code; use badger review, badger design, or badger followup to start in a different focus.\n`badger review` preloads an editable review prompt from the current Git working tree. Default mode includes staged and unstaged tracked changes plus up to 25 relevant Git-untracked paths in a separate section; it never includes untracked file contents, and untracked paths alone are valid review context. `--staged`, `--branch <ref>`, and `--commit <sha>` exclude working-tree untracked files. If no reviewable changes are available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
 
 	// Show note about dev flags in release builds
 	if releaseBuild {

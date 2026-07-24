@@ -157,8 +157,11 @@ func validateAPIOperation(operation, inputPath, goalFilePath string, focus proto
 		if goalFilePath == "" {
 			return fmt.Errorf("api extract requires --goal-file <file>")
 		}
-		if focus != "" {
-			return fmt.Errorf("api extract does not accept --focus")
+		// Extract predates focus-aware Prompt 2 generation. Keep callers that
+		// omit the flag on the code-focused contract, while allowing Prompt 1
+		// and Prompt 2 to use the same explicit focus.
+		if focus != "" && focus != protocol.FocusCode && focus != protocol.FocusDesign {
+			return fmt.Errorf("api extract supports --focus <code|design>")
 		}
 	case "goal", "extraction", "write-plan":
 		if inputPath == "" {

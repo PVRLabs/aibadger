@@ -9,6 +9,8 @@ badger
 ## Walkthrough
 
 This example traces a full session end-to-end using `badger review`.
+For a product-level explanation of what moves between Badger and the browser,
+see the [Browser Handoff Guide](handoff.md).
 
 ### Step 1: Start a review
 

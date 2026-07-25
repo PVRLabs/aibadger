@@ -80,6 +80,7 @@ Full usage: [docs/usage.md](docs/usage.md)
 - [Usage Examples & Walkthrough](docs/usage.md)
 - [Browser Handoff Guide](docs/handoff.md)
 - [API Reference](docs/api.md) — Non-interactive commands for editors and scripts
+- [Agent Integrations](docs/agents.md) — Compact repository orientation for coding agents
 - [Articles](docs/articles/)
 - [Protocol Reference](docs/protocol.md)
 - [Limitations & Supported Projects](docs/limitations.md)

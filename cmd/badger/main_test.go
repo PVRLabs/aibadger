@@ -376,6 +376,7 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 		"badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]",
 		"`badger review` preloads an editable review prompt from the current Git working tree.",
 		"relevant Git-untracked paths",
+		"badger api --help",
 		"badger api topology --root <project>",
 		"badger api prompt --root <project> --focus <code|design> --input <goal-file>",
 		"badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>",
@@ -576,6 +577,63 @@ func TestParseAPIConfig(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Fatalf("parseAPIConfig() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunAPIHelp(t *testing.T) {
+	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "api long help",
+			args: []string{"--help"},
+			want: []string{"Usage:", "Stable operations:", "topology", "prompt", "extract", "stdout", "stderr", "non-interactive", "read-only", "Examples:"},
+		},
+		{
+			name: "api short help",
+			args: []string{"-h"},
+			want: []string{"Usage:", "badger api topology --root <project>"},
+		},
+		{
+			name: "topology long help",
+			args: []string{"topology", "--help"},
+			want: []string{"Purpose:", "Required arguments:", "Optional arguments:", "--root <project>", "badger api topology --root .", "stdout", "stderr", "clipboard", "browser", "Failures:"},
+		},
+		{
+			name: "topology short help bypasses root validation and scan",
+			args: []string{"topology", "--root", missingRoot, "-h"},
+			want: []string{"Usage:", "badger api topology --root <project>"},
+		},
+		{
+			name: "prompt help",
+			args: []string{"prompt", "--help"},
+			want: []string{"--focus <code|design>", "--input <goal-file>", "first-stage", "Example:", "Failures:"},
+		},
+		{
+			name: "extract help",
+			args: []string{"extract", "-h"},
+			want: []string{"--input <selector-file>", "--goal-file <goal-file>", "[--focus <code|design>]", "second-stage", "Example:", "Failures:"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if err := runAPI(tt.args, &stdout, &stderr); err != nil {
+				t.Fatalf("runAPI(%v) error = %v", tt.args, err)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(stdout.String(), want) {
+					t.Fatalf("runAPI(%v) help missing %q:\n%s", tt.args, want, stdout.String())
+				}
+			}
+			if stderr.Len() != 0 {
+				t.Fatalf("runAPI(%v) stderr = %q, want empty", tt.args, stderr.String())
 			}
 		})
 	}

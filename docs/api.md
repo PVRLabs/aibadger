@@ -1,8 +1,11 @@
 # API Reference
 
-Badger provides a small, stable, non-interactive command surface for editor,
-script, and local-tool use. API commands write directly usable prompt text to
-stdout and use stderr plus exit status for diagnostics.
+Badger provides a supported, stable, non-interactive command surface for
+editors, scripts, coding agents, and other local tools. The stable operations
+are `topology`, `prompt`, and `extract`.
+
+Use `badger api --help` for an overview or add `--help` (or `-h`) to a stable
+operation for command-specific usage.
 
 Every API command requires `--root <project>`, which must be an absolute or
 relative path to an existing directory. Badger normalizes it to an absolute
@@ -12,27 +15,49 @@ Input files (`--input`, `--goal-file`) are UTF-8, caller-managed files. Badger
 reads them without modifying or retaining them. Caller-provided paths are
 resolved relative to the current working directory, not the `--root`.
 
-Errors and warnings go to stderr. A nonzero exit status means the operation
-could not produce usable output. A zero exit with content on stderr means
-usable output was produced alongside diagnostics (for example, partial
-extraction with some failed selectors).
+Usable output goes to stdout. Errors and warnings go only to stderr. A nonzero
+exit status means the operation could not produce usable output. A zero exit
+with content on stderr means usable output was produced alongside diagnostics
+(for example, partial extraction with some failed selectors).
 
 The API outputs only directly usable AI-facing text. It does not produce JSON,
 structured topology, or extraction metadata. All existing safety rules apply:
 `.badger-disable`, sensitive/binary file protection, external-context read-only
 behavior, and size limits.
 
-## Integration flow
+## Coding-agent usage
 
-A model integration normally uses two calls:
+For an unfamiliar or non-trivial repository, a coding agent can use topology
+near the beginning of a task:
+
+```bash
+badger api topology --root .
+```
+
+The agent should use the result to identify likely entrypoints, packages,
+tests, configuration, and documentation, then continue with its native search,
+file-reading, editing, and testing tools. Topology is a compact map, not a
+substitute for reading source code.
+
+Avoid rerunning topology during the same task unless the repository structure
+has materially changed. Coding agents with direct repository access do not
+normally need `prompt` or `extract`; those operations support Badger's existing
+human AI-chat handoff workflow.
+
+See [Agent Integrations](agents.md) for practical decision rules and usage
+guidance.
+
+## Human handoff integration flow
+
+A human AI-chat integration normally uses two calls:
 
 1. Run `api prompt` with the user's goal and send its complete stdout to the
    model.
 2. Save the model's selector-only response, run `api extract`, and send that
    command's complete stdout back to the same model conversation.
 
-Use `api topology` instead when the integration needs only Badger's compact
-project map and will manage its own prompting or extraction workflow.
+Use `api topology` instead when an integration needs only Badger's compact
+project map and will manage its own repository access.
 
 ## Commands
 
@@ -64,6 +89,23 @@ Pkg: internal/client [4 files] -> Top: client.go (8KB), config.go (2KB)
 
 The topology is AI-facing text rather than JSON. Callers can pass it directly
 to a model or embed it in their own prompt.
+
+#### Topology contract
+
+`api topology`:
+
+- is non-interactive and read-only;
+- does not access the clipboard, open a browser, access the network, or change
+  Badger settings;
+- accepts an explicit repository root through `--root`;
+- writes topology content to stdout and diagnostics only to stderr;
+- returns a nonzero exit status when it cannot produce usable output;
+- uses root-relative paths and does not expose the absolute repository root in
+  normal output; and
+- produces deterministic output for an unchanged repository.
+
+The command can fail when its arguments or root are invalid, the project is
+disabled with `.badger-disable`, or the repository cannot be scanned.
 
 ### `api prompt`
 
@@ -187,4 +229,5 @@ $ echo $?
 ```
 
 All errors follow the same pattern: an `Error:` prefix on stderr and a nonzero
-exit status.
+exit status. Help commands return zero, write help to stdout, and do not scan
+the repository.

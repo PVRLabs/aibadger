@@ -119,6 +119,37 @@ func TestRunAPITopologyMatchesEngineFormatter(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
+
+	var repeatedStdout, repeatedStderr bytes.Buffer
+	if err := RunAPI(cfg, APIOptions{Operation: "topology", Stdout: &repeatedStdout, Stderr: &repeatedStderr}); err != nil {
+		t.Fatalf("repeated RunAPI() error = %v", err)
+	}
+	if got, want := repeatedStdout.String(), stdout.String(); got != want {
+		t.Fatalf("topology changed for unchanged repository\nfirst:\n%s\nsecond:\n%s", want, got)
+	}
+	if repeatedStderr.Len() != 0 {
+		t.Fatalf("repeated stderr = %q, want empty", repeatedStderr.String())
+	}
+}
+
+func TestRunAPITopologyFailureProducesNoNormalOutput(t *testing.T) {
+	missingRoot := filepath.Join(t.TempDir(), "missing")
+	var stdout, stderr bytes.Buffer
+
+	err := RunAPI(Config{Root: missingRoot}, APIOptions{
+		Operation: "topology",
+		Stdout:    &stdout,
+		Stderr:    &stderr,
+	})
+	if err == nil {
+		t.Fatal("RunAPI() error = nil, want invalid-root failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on failure", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want command layer to report returned error", stderr.String())
+	}
 }
 
 func TestRunAPIPromptMatchesSchemaAAndSeparatesWarnings(t *testing.T) {

@@ -8,7 +8,7 @@ Get **precise, token-efficient context** on demand without uploading your entire
 
 [![GitHub stars](https://img.shields.io/github/stars/PVRLabs/aibadger.svg)](https://github.com/PVRLabs/aibadger/stargazers)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](go.mod)
+[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8.svg)](go.mod)
 [![Homebrew](https://img.shields.io/badge/Homebrew-available-brightgreen)](https://github.com/PVRLabs/homebrew-tap)
 
 **No cloud • No API keys • No telemetry • Fully local**

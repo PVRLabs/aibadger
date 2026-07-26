@@ -69,9 +69,14 @@ func (e *Engine) SetMaxContextFileBytes(limit int) {
 	e.formatter.MaxContextFileBytes = limit
 }
 
-// SetMaxTotalContextBytes configures total payload truncation in Schema B.
-func (e *Engine) SetMaxTotalContextBytes(limit int) {
-	e.formatter.MaxTotalContextBytes = limit
+// SetMaxTopologyPromptBytes configures Prompt 1 byte target.
+func (e *Engine) SetMaxTopologyPromptBytes(limit int) {
+	e.formatter.MaxTopologyPromptBytes = limit
+}
+
+// SetMaxPromptTwoBytes configures the Prompt 2 serialized byte target.
+func (e *Engine) SetMaxPromptTwoBytes(limit int) {
+	e.formatter.MaxPromptTwoBytes = limit
 }
 
 // SetPromptInstructions configures the LLM constraints used by the formatter.

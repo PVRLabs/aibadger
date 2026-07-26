@@ -26,7 +26,8 @@ type Config struct {
 	LargePromptByteThreshold  int
 	TruncatedMaxPackages      int
 	MaxContextFileBytes       int // 0 uses the default; negative disables per-file trimming.
-	MaxTotalContextBytes      int // 0 uses the default; negative disables total context trimming.
+	MaxTopologyPromptBytes    int // 0 uses the default; negative disables Prompt 1 byte target.
+	MaxPromptTwoBytes         int // 0 uses the default; negative disables Prompt 2 byte target.
 	SchemaAConstraint         string
 	SchemaBConstraint         string
 	WhitespaceMode            writer.WhitespaceMode
@@ -44,7 +45,8 @@ func DefaultConfig() Config {
 		LargePromptByteThreshold:  workflow.LargePromptBytes,
 		TruncatedMaxPackages:      workflow.TruncatedMaxPackages,
 		MaxContextFileBytes:       workflow.MaxContextFileBytes,
-		MaxTotalContextBytes:      workflow.MaxTotalContextBytes,
+		MaxTopologyPromptBytes:    workflow.MaxTopologyPromptBytes,
+		MaxPromptTwoBytes:         workflow.MaxPromptTwoBytes,
 		WhitespaceMode:            writer.DefaultWhitespaceMode,
 		MaxFilesPerDirectory:      workflow.MaxFilesPerDirectory,
 	}
@@ -77,8 +79,11 @@ func (c Config) withDefaults() Config {
 	if c.MaxContextFileBytes == 0 {
 		c.MaxContextFileBytes = defaults.MaxContextFileBytes
 	}
-	if c.MaxTotalContextBytes == 0 {
-		c.MaxTotalContextBytes = defaults.MaxTotalContextBytes
+	if c.MaxTopologyPromptBytes == 0 {
+		c.MaxTopologyPromptBytes = defaults.MaxTopologyPromptBytes
+	}
+	if c.MaxPromptTwoBytes == 0 {
+		c.MaxPromptTwoBytes = defaults.MaxPromptTwoBytes
 	}
 	if c.MaxFilesPerDirectory == 0 {
 		c.MaxFilesPerDirectory = defaults.MaxFilesPerDirectory
@@ -91,12 +96,13 @@ func (c Config) withDefaults() Config {
 
 func (m Model) engineOptions(maxPackages int) workflow.EngineOptions {
 	return workflow.EngineOptions{
-		MaxContextFileBytes:  m.cfg.MaxContextFileBytes,
-		MaxTotalContextBytes: m.cfg.MaxTotalContextBytes,
-		MaxPackages:          maxPackages,
-		Focus:                m.cfg.Focus,
-		SchemaAConstraint:    m.cfg.SchemaAConstraint,
-		SchemaBConstraint:    m.cfg.SchemaBConstraint,
+		MaxContextFileBytes:    m.cfg.MaxContextFileBytes,
+		MaxTopologyPromptBytes: m.cfg.MaxTopologyPromptBytes,
+		MaxPromptTwoBytes:      m.cfg.MaxPromptTwoBytes,
+		MaxPackages:            maxPackages,
+		Focus:                  m.cfg.Focus,
+		SchemaAConstraint:      m.cfg.SchemaAConstraint,
+		SchemaBConstraint:      m.cfg.SchemaBConstraint,
 	}
 }
 

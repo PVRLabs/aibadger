@@ -2885,15 +2885,19 @@ func TestSuccessStatusRendersMarkerOnly(t *testing.T) {
 func TestNewModelAllowsConfigToDisableContextTrimming(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.MaxContextFileBytes = -1
-	cfg.MaxTotalContextBytes = -1
+	cfg.MaxTopologyPromptBytes = -1
+	cfg.MaxPromptTwoBytes = -1
 
 	m := NewModel("/tmp/project", cfg)
 
 	if m.cfg.MaxContextFileBytes != -1 {
 		t.Fatalf("MaxContextFileBytes = %d, want disabled", m.cfg.MaxContextFileBytes)
 	}
-	if m.cfg.MaxTotalContextBytes != -1 {
-		t.Fatalf("MaxTotalContextBytes = %d, want disabled", m.cfg.MaxTotalContextBytes)
+	if m.cfg.MaxTopologyPromptBytes != -1 {
+		t.Fatalf("MaxTopologyPromptBytes = %d, want disabled", m.cfg.MaxTopologyPromptBytes)
+	}
+	if m.cfg.MaxPromptTwoBytes != -1 {
+		t.Fatalf("MaxPromptTwoBytes = %d, want disabled", m.cfg.MaxPromptTwoBytes)
 	}
 }
 
@@ -2903,8 +2907,11 @@ func TestNewModelZeroContextLimitsUseDefaults(t *testing.T) {
 	if m.cfg.MaxContextFileBytes != workflow.MaxContextFileBytes {
 		t.Fatalf("MaxContextFileBytes = %d, want %d", m.cfg.MaxContextFileBytes, workflow.MaxContextFileBytes)
 	}
-	if m.cfg.MaxTotalContextBytes != workflow.MaxTotalContextBytes {
-		t.Fatalf("MaxTotalContextBytes = %d, want %d", m.cfg.MaxTotalContextBytes, workflow.MaxTotalContextBytes)
+	if m.cfg.MaxTopologyPromptBytes != workflow.MaxTopologyPromptBytes {
+		t.Fatalf("MaxTopologyPromptBytes = %d, want %d", m.cfg.MaxTopologyPromptBytes, workflow.MaxTopologyPromptBytes)
+	}
+	if m.cfg.MaxPromptTwoBytes != workflow.MaxPromptTwoBytes {
+		t.Fatalf("MaxPromptTwoBytes = %d, want %d", m.cfg.MaxPromptTwoBytes, workflow.MaxPromptTwoBytes)
 	}
 }
 
@@ -2924,8 +2931,11 @@ func TestNewModelKeepsDefaultContextLimits(t *testing.T) {
 	if m.cfg.MaxContextFileBytes != cfg.MaxContextFileBytes {
 		t.Fatalf("MaxContextFileBytes = %d, want %d", m.cfg.MaxContextFileBytes, cfg.MaxContextFileBytes)
 	}
-	if m.cfg.MaxTotalContextBytes != cfg.MaxTotalContextBytes {
-		t.Fatalf("MaxTotalContextBytes = %d, want %d", m.cfg.MaxTotalContextBytes, cfg.MaxTotalContextBytes)
+	if m.cfg.MaxTopologyPromptBytes != cfg.MaxTopologyPromptBytes {
+		t.Fatalf("MaxTopologyPromptBytes = %d, want %d", m.cfg.MaxTopologyPromptBytes, cfg.MaxTopologyPromptBytes)
+	}
+	if m.cfg.MaxPromptTwoBytes != cfg.MaxPromptTwoBytes {
+		t.Fatalf("MaxPromptTwoBytes = %d, want %d", m.cfg.MaxPromptTwoBytes, cfg.MaxPromptTwoBytes)
 	}
 }
 
@@ -3378,13 +3388,13 @@ func TestLargeTopologyPromptShowsDeliveryMenu(t *testing.T) {
 
 	for _, want := range []string{
 		symbols.warning,
-		"Prompt 1: Topology is large (2KB).",
-		"Recommended: save it to a temp file and attach/upload it to your AI chat.",
-		"  [c] Copy anyway",
+		"This prompt is large (2KB).",
+		"Recommended: copy it to the clipboard and paste it into your AI chat.",
+		"  [c] Copy to clipboard",
 		"  [f] Save to temp file",
 		"  [p] Print to terminal",
 		"  [n] Cancel",
-		"Choice (recommended: f):",
+		"Choice (recommended: c):",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("large topology prompt view missing %q:\n%s", want, view)
@@ -3405,10 +3415,10 @@ func TestNormalTopologyPromptDoesNotShowLargeWarning(t *testing.T) {
 
 	view := m.viewScanComplete()
 
-	if strings.Contains(view, "Prompt 1: Topology is large") {
+	if strings.Contains(view, "This prompt is large") {
 		t.Fatalf("normal topology prompt showed large warning:\n%s", view)
 	}
-	if strings.Contains(view, "Save to temp file") || strings.Contains(view, "Copy anyway") {
+	if strings.Contains(view, "Save to temp file") || strings.Contains(view, "Copy to clipboard") {
 		t.Fatalf("normal topology prompt showed large-prompt options:\n%s", view)
 	}
 }
@@ -3588,11 +3598,11 @@ func TestLargeCodeContextPromptShowsDeliveryMenu(t *testing.T) {
 		"This WILL include the actual source code from:",
 		"  - internal/scanner/go.go",
 		symbols.warning,
-		"Prompt 2: Code Context is large (2KB).",
-		"  [c] Copy anyway",
+		"This prompt is large (2KB).",
+		"  [c] Copy to clipboard",
 		"  [f] Save to temp file",
 		"  [p] Print to terminal",
-		"Choice (recommended: f):",
+		"Choice (recommended: c):",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("large code context view missing %q:\n%s", want, view)
@@ -3621,16 +3631,124 @@ func TestNormalPromptAcceptsHiddenCopyShortcut(t *testing.T) {
 	}
 }
 
-func TestLargePromptCopyShortcutCopiesAnyway(t *testing.T) {
+func executeCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("expected a command, got nil")
+	}
+	return cmd()
+}
+
+func stubClipboard(t *testing.T) *string {
+	t.Helper()
+	original := copyToClipboard
+	var copied string
+	copyToClipboard = func(text string) error {
+		copied = text
+		return nil
+	}
+	t.Cleanup(func() { copyToClipboard = original })
+	return &copied
+}
+
+func TestLargePromptCopyShortcutCopiesToClipboard(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.LargePromptByteThreshold = 8
 	m := NewModel("/tmp/project", cfg)
 	m.state = stateContextReady
-	m.schemaB = strings.Repeat("x", 32)
+	payload := strings.Repeat("x", 32)
+	m.schemaB = payload
 
+	copied := stubClipboard(t)
 	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
-	if cmd == nil {
-		t.Fatal("large prompt c shortcut did not return copy command")
+	msg := executeCmd(t, cmd)
+	got, ok := msg.(copyDoneMsg)
+	if !ok {
+		t.Fatalf("c shortcut returned %T, want copyDoneMsg", msg)
+	}
+	if got.kind != codeContextPromptKind {
+		t.Fatalf("kind = %q, want %q", got.kind, codeContextPromptKind)
+	}
+	if got.text != payload {
+		t.Fatalf("text = %q, want %q", got.text, payload)
+	}
+	if *copied != payload {
+		t.Fatalf("clipboard stub received %q, want %q", *copied, payload)
+	}
+}
+
+func TestLargePromptEnterCopiesToClipboard(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.LargePromptByteThreshold = 8
+	m := NewModel("/tmp/project", cfg)
+	m.state = stateContextReady
+	payload := strings.Repeat("x", 32)
+	m.schemaB = payload
+
+	copied := stubClipboard(t)
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	msg := executeCmd(t, cmd)
+	got, ok := msg.(copyDoneMsg)
+	if !ok {
+		t.Fatalf("Enter returned %T, want copyDoneMsg", msg)
+	}
+	if got.kind != codeContextPromptKind {
+		t.Fatalf("kind = %q, want %q", got.kind, codeContextPromptKind)
+	}
+	if got.text != payload {
+		t.Fatalf("text = %q, want %q", got.text, payload)
+	}
+	if *copied != payload {
+		t.Fatalf("clipboard stub received %q, want %q", *copied, payload)
+	}
+}
+
+func TestLargePromptEnterStateScanCompleteCopiesTopology(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.LargePromptByteThreshold = 8
+	m := NewModel("/tmp/project", cfg)
+	m.state = stateScanComplete
+	payload := strings.Repeat("x", 32)
+	m.schemaA = payload
+	m.eng = engine.FromTopology("/tmp/project", &model.ProjectTopology{
+		Modules: []model.Module{{Name: "pkg", FileCount: 1}},
+	})
+
+	copied := stubClipboard(t)
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	msg := executeCmd(t, cmd)
+	got, ok := msg.(copyDoneMsg)
+	if !ok {
+		t.Fatalf("Enter returned %T, want copyDoneMsg", msg)
+	}
+	if got.kind != topologyPromptKind {
+		t.Fatalf("kind = %q, want %q", got.kind, topologyPromptKind)
+	}
+	if got.text != payload {
+		t.Fatalf("text = %q, want %q", got.text, payload)
+	}
+	if *copied != payload {
+		t.Fatalf("clipboard stub received %q, want %q", *copied, payload)
+	}
+}
+
+func TestNormalPromptEnterDoesNotCopyBelowThreshold(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.LargePromptByteThreshold = 128 * 1024
+	m := NewModel("/tmp/project", cfg)
+	m.state = stateContextReady
+	m.schemaB = "small payload"
+
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatal("normal prompt Enter returned unexpected command")
+	}
+}
+
+func TestLargePromptUsesSharedThresholdConstant(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	if m.cfg.LargePromptByteThreshold != workflow.LargePromptBytes {
+		t.Fatalf("LargePromptByteThreshold = %d, want %d", m.cfg.LargePromptByteThreshold, workflow.LargePromptBytes)
 	}
 }
 
@@ -3639,7 +3757,8 @@ func TestLargePromptFileShortcutReturnsSaveCommand(t *testing.T) {
 	cfg.LargePromptByteThreshold = 8
 	m := NewModel("/tmp/project", cfg)
 	m.state = stateScanComplete
-	m.schemaA = strings.Repeat("x", 32)
+	payload := strings.Repeat("x", 32)
+	m.schemaA = payload
 
 	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
 	if cmd == nil {

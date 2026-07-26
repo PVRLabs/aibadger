@@ -199,6 +199,21 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		next, cmd := m.submitPasteState()
 		return next, cmd, true
 
+	case stateScanComplete:
+		if m.largeProjectPending {
+			return m, nil, true
+		}
+		if m.promptDeliveryIsLarge(topologyPromptKind) {
+			return m, copyCmd(topologyPromptKind, m.schemaA), true
+		}
+		return m, nil, false
+
+	case stateContextReady:
+		if m.promptDeliveryIsLarge(workflow.PromptTwoKind(m.cfg.Focus)) {
+			return m, copyCmd(workflow.PromptTwoKind(m.cfg.Focus), m.schemaB), true
+		}
+		return m, nil, false
+
 	case stateContextWarning:
 		next, cmd := m.rejectPartialExtractionWarning()
 		return next, cmd, true

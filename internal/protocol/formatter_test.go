@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -818,7 +819,7 @@ func TestGenerateSchemaAByteBudgetTruncation(t *testing.T) {
 	// Set budget to 1 byte less than full — forces one package to be dropped.
 	formatter := NewFormatter()
 	formatter.SetPromptInstructions(shortFooter)
-	formatter.MaxTotalContextBytes = len(full) - 1
+	formatter.MaxTopologyPromptBytes = len(full) - 1
 	formatter.MaxPackages = 0
 
 	output := formatter.GenerateSchemaA(topology, "test")
@@ -852,7 +853,7 @@ func TestGenerateSchemaAByteBudgetExcludesFooterFromDropLoop(t *testing.T) {
 	// The footer must still appear even though nothing else fits.
 	formatter := NewFormatter()
 	formatter.SetPromptInstructions(shortFooter)
-	formatter.MaxTotalContextBytes = len(empty) - 1
+	formatter.MaxTopologyPromptBytes = len(empty) - 1
 	formatter.MaxPackages = 0
 	topology := &model.ProjectTopology{
 		Modules: []model.Module{
@@ -1010,7 +1011,7 @@ func TestGenerateSchemaBTrimming(t *testing.T) {
 func TestGenerateSchemaBPreservesNonTruncatedHeaders(t *testing.T) {
 	formatter := NewFormatter()
 	formatter.MaxContextFileBytes = 0
-	formatter.MaxTotalContextBytes = 0
+	formatter.MaxPromptTwoBytes = 0
 
 	out, _ := formatter.GenerateSchemaB(&model.ProjectTopology{}, []ExtractionResult{
 		{Path: "full.go", Content: "package full", FullFile: true},
@@ -1038,7 +1039,7 @@ func TestGenerateSchemaBPreservesNonTruncatedHeaders(t *testing.T) {
 func TestGenerateSchemaBMarksTruncatedFullFileHeader(t *testing.T) {
 	formatter := NewFormatter()
 	formatter.MaxContextFileBytes = 10
-	formatter.MaxTotalContextBytes = 0
+	formatter.MaxPromptTwoBytes = 0
 
 	out, meta := formatter.GenerateSchemaB(&model.ProjectTopology{}, []ExtractionResult{
 		{Path: "full.go", Content: "package full file content", FullFile: true},
@@ -1058,7 +1059,7 @@ func TestGenerateSchemaBMarksTruncatedFullFileHeader(t *testing.T) {
 func TestGenerateSchemaBUsesExtractionResultPathForExternalLabels(t *testing.T) {
 	formatter := NewFormatter()
 	formatter.MaxContextFileBytes = 0
-	formatter.MaxTotalContextBytes = 0
+	formatter.MaxPromptTwoBytes = 0
 
 	output, metadata := formatter.GenerateSchemaB(&model.ProjectTopology{}, []ExtractionResult{
 		{
@@ -1088,8 +1089,11 @@ func TestNewFormatterUsesDefaultContextLimits(t *testing.T) {
 	if formatter.MaxContextFileBytes != defaults.MaxContextFileBytes {
 		t.Fatalf("MaxContextFileBytes = %d, want %d", formatter.MaxContextFileBytes, defaults.MaxContextFileBytes)
 	}
-	if formatter.MaxTotalContextBytes != defaults.MaxTotalContextBytes {
-		t.Fatalf("MaxTotalContextBytes = %d, want %d", formatter.MaxTotalContextBytes, defaults.MaxTotalContextBytes)
+	if formatter.MaxTopologyPromptBytes != defaults.MaxTopologyPromptBytes {
+		t.Fatalf("MaxTopologyPromptBytes = %d, want %d", formatter.MaxTopologyPromptBytes, defaults.MaxTopologyPromptBytes)
+	}
+	if formatter.MaxPromptTwoBytes != defaults.MaxPromptTwoBytes {
+		t.Fatalf("MaxPromptTwoBytes = %d, want %d", formatter.MaxPromptTwoBytes, defaults.MaxPromptTwoBytes)
 	}
 }
 
@@ -1103,7 +1107,7 @@ func TestGenerateSchemaBTotalDropping(t *testing.T) {
 		{Path: "f1", Content: strings.Repeat("a", 600)},
 	}
 	firstSchema, _ := formatter.GenerateSchemaB(topology, firstOnly, query)
-	formatter.MaxTotalContextBytes = len(firstSchema)
+	formatter.MaxPromptTwoBytes = len(firstSchema)
 
 	extractions := []ExtractionResult{
 		{Path: "f1", Content: strings.Repeat("a", 600)},
@@ -1126,21 +1130,21 @@ func TestGenerateSchemaBTotalDropping(t *testing.T) {
 func TestGenerateSchemaBTotalDroppingRespectsFinalSize(t *testing.T) {
 	formatter := NewFormatter()
 	formatter.MaxContextFileBytes = 0
-	formatter.MaxTotalContextBytes = 0
+	formatter.MaxPromptTwoBytes = 0
 	topology := &model.ProjectTopology{}
 	query := "query"
 	firstOnly := []ExtractionResult{{Path: "f1", Content: strings.Repeat("a", 80)}}
 	firstSchema, _ := formatter.GenerateSchemaB(topology, firstOnly, query)
 
-	formatter.MaxTotalContextBytes = len(firstSchema)
+	formatter.MaxPromptTwoBytes = len(firstSchema)
 	extractions := []ExtractionResult{
 		{Path: "f1", Content: strings.Repeat("a", 80)},
 		{Path: "f2", Content: strings.Repeat("b", 80)},
 	}
 
 	out, meta := formatter.GenerateSchemaB(topology, extractions, query)
-	if len(out) > formatter.MaxTotalContextBytes {
-		t.Fatalf("schema size = %d, want <= %d", len(out), formatter.MaxTotalContextBytes)
+	if len(out) > formatter.MaxPromptTwoBytes {
+		t.Fatalf("schema size = %d, want <= %d", len(out), formatter.MaxPromptTwoBytes)
 	}
 	if !meta[1].Dropped {
 		t.Fatal("Expected second file to be dropped")
@@ -1150,13 +1154,13 @@ func TestGenerateSchemaBTotalDroppingRespectsFinalSize(t *testing.T) {
 func TestGenerateSchemaBTotalDroppingHandlesDuplicatePaths(t *testing.T) {
 	formatter := NewFormatter()
 	formatter.MaxContextFileBytes = 0
-	formatter.MaxTotalContextBytes = 0
+	formatter.MaxPromptTwoBytes = 0
 	topology := &model.ProjectTopology{}
 	query := "query"
 	firstOnly := []ExtractionResult{{Path: "same.go", Content: "keep me"}}
 	firstSchema, _ := formatter.GenerateSchemaB(topology, firstOnly, query)
 
-	formatter.MaxTotalContextBytes = len(firstSchema)
+	formatter.MaxPromptTwoBytes = len(firstSchema)
 	extractions := []ExtractionResult{
 		{Path: "same.go", Content: "keep me"},
 		{Path: "same.go", Content: strings.Repeat("drop me", 40)},
@@ -1177,7 +1181,7 @@ func TestGenerateSchemaBTotalDroppingHandlesDuplicatePaths(t *testing.T) {
 func TestGenerateSchemaBDisableTrimming(t *testing.T) {
 	formatter := NewFormatter()
 	formatter.MaxContextFileBytes = 0
-	formatter.MaxTotalContextBytes = 0
+	formatter.MaxPromptTwoBytes = 0
 	topology := &model.ProjectTopology{}
 
 	content := strings.Repeat("x", 20000)
@@ -1211,5 +1215,270 @@ func TestFormatterCustomInstructions(t *testing.T) {
 	outB, _ := formatter.GenerateSchemaB(topology, []ExtractionResult{{Path: "f1", Content: "c1"}}, query)
 	if !strings.Contains(outB, "CUSTOM B: hello") {
 		t.Errorf("Expected custom B constraint, got:\n%s", outB)
+	}
+}
+
+func TestTrimContentRetainsAtMostLimitBytes(t *testing.T) {
+	f := NewFormatter()
+	const limit = 50 * 1024
+	const inputSize = 60 * 1024
+
+	// Use a character that does not appear in framing or the marker.
+	input := strings.Repeat("z", inputSize)
+	trimmed := f.trimContent(input, limit)
+
+	if !strings.Contains(trimmed, "... [Truncated") {
+		t.Fatal("trimContent should include a truncation marker")
+	}
+	// Count the retained original content (the 'z' characters).
+	retained := strings.Count(trimmed, "z")
+	if retained > limit {
+		t.Fatalf("trimmed retains %d bytes of original content, want <= %d", retained, limit)
+	}
+	if retained == 0 {
+		t.Fatal("trimmed content should retain non-zero original content")
+	}
+	if len(trimmed) >= inputSize {
+		t.Fatal("trimmed output should be smaller than input")
+	}
+}
+
+func TestGenerateSchemaBPerFileTruncationMetadataAndHeaders(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.MaxContextFileBytes = 50 * 1024
+	formatter.MaxPromptTwoBytes = 0
+
+	large := strings.Repeat("a", 60*1024)
+	extractions := []ExtractionResult{{Path: "f1", Content: large}}
+
+	out, meta := formatter.GenerateSchemaB(&model.ProjectTopology{}, extractions, "query")
+
+	if !meta[0].Truncated {
+		t.Fatal("expected file above 50 KiB to be truncated")
+	}
+	if meta[0].OriginalSize != len(large) {
+		t.Fatalf("OriginalSize = %d, want %d", meta[0].OriginalSize, len(large))
+	}
+	if !strings.Contains(out, "--- File: f1 (Extracted Span, Truncated) ---") {
+		t.Fatal("expected truncated file header in output")
+	}
+	if !strings.Contains(out, "--- End File (TRUNCATED) ---") {
+		t.Fatal("expected TRUNCATED footer in output")
+	}
+	if !strings.Contains(out, "[Truncated") {
+		t.Fatal("expected truncation marker in output")
+	}
+	if len(out) >= len(large) {
+		t.Fatal("output should be smaller than original 60 KiB content")
+	}
+}
+
+func TestGenerateSchemaBTotalLimitNotExceeded(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.MaxContextFileBytes = 0
+	formatter.MaxPromptTwoBytes = 192 * 1024
+
+	content := strings.Repeat("a", 80*1024)
+	extractions := []ExtractionResult{
+		{Path: "f1", Content: content},
+		{Path: "f2", Content: content},
+	}
+
+	out, meta := formatter.GenerateSchemaB(&model.ProjectTopology{}, extractions, "query")
+
+	if len(out) > formatter.MaxPromptTwoBytes {
+		t.Fatalf("output size = %d, want <= %d", len(out), formatter.MaxPromptTwoBytes)
+	}
+	if meta[1].Dropped {
+		t.Fatal("expected both files to fit within total budget")
+	}
+}
+
+func TestGenerateSchemaBThreeLargeFilesDroppedWhenExceedBudget(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.MaxContextFileBytes = 0
+	formatter.MaxPromptTwoBytes = 130 * 1024
+
+	content := strings.Repeat("a", 60*1024)
+	extractions := []ExtractionResult{
+		{Path: "f1", Content: content},
+		{Path: "f2", Content: content},
+		{Path: "f3", Content: content},
+	}
+
+	out, meta := formatter.GenerateSchemaB(&model.ProjectTopology{}, extractions, "query")
+
+	if len(out) > formatter.MaxPromptTwoBytes {
+		t.Fatalf("output size = %d, want <= %d", len(out), formatter.MaxPromptTwoBytes)
+	}
+	if !meta[2].Dropped {
+		t.Fatal("expected at least the last file to be dropped")
+	}
+	if !strings.Contains(out, "f1") || strings.Contains(out, "f3") {
+		t.Fatal("expected f1 kept and f3 dropped")
+	}
+}
+
+// largeTopology returns a topology whose Prompt 1 output, when unbounded,
+// exceeds MaxTopologyPromptBytes (100,000 bytes). Packages use deliberately
+// long paths and filenames to generate a large output without creating many
+// entries. This is a pure formatter test helper — it creates no files and
+// runs no scanner.
+func largeTopology(pkgCount int) *model.ProjectTopology {
+	var pkgs []model.Package
+	for i := 0; i < pkgCount; i++ {
+		path := fmt.Sprintf("%s/%d", strings.Repeat("p", 500), i)
+		fn := func(suffix int) model.FileSummary {
+			return model.FileSummary{
+				Name: fmt.Sprintf("%s_%d.go", strings.Repeat("f", 250), suffix),
+				Path: fmt.Sprintf("%s/%s_%d.go", path, strings.Repeat("f", 250), suffix),
+				Size: 100,
+			}
+		}
+		pkgs = append(pkgs, model.Package{
+			Path:      path,
+			FileCount: 2,
+			TopFiles:  []model.FileSummary{fn(i), fn(i + 10000)},
+		})
+	}
+	return &model.ProjectTopology{
+		Languages: []string{"Go"},
+		Modules: []model.Module{
+			{SourceRoots: []model.SourceRoot{{Packages: pkgs}}},
+		},
+	}
+}
+
+// shortFooter is a minimal Prompt 1 constraint so fixed content overhead is
+// small and predictable.
+var shortFooter = PromptInstructions{
+	SchemaAConstraint: "[TASK]\n%s\n\n[CONSTRAINT]\nfooter\n",
+	SchemaBConstraint: "",
+}
+
+const promptOneBudget = 100000
+
+func TestGenerateSchemaAPromptOneBudgetObeysItsOwnLimit(t *testing.T) {
+	topology := largeTopology(100)
+
+	// 1. Unbounded output must exceed the budget.
+	noLimit := NewFormatter()
+	noLimit.SetPromptInstructions(shortFooter)
+	noLimit.MaxTopologyPromptBytes = 0
+	full := noLimit.GenerateSchemaA(topology, "test")
+	if len(full) <= promptOneBudget {
+		t.Fatalf("unbounded Prompt 1 output = %d bytes, want > %d", len(full), promptOneBudget)
+	}
+
+	// 2. With the budget applied, packages are dropped.
+	formatter := NewFormatter()
+	formatter.SetPromptInstructions(shortFooter)
+	formatter.MaxTopologyPromptBytes = promptOneBudget
+	output := formatter.GenerateSchemaA(topology, "test")
+
+	if !strings.Contains(output, "[TASK]") || !strings.Contains(output, "[CONSTRAINT]") {
+		t.Fatal("Prompt 1 must include task and constraint even when truncated")
+	}
+	if !strings.Contains(output, "... [Truncated due to size limit] ...") {
+		t.Fatal("expected truncation marker when Prompt 1 exceeds budget")
+	}
+	// The output must be smaller than the unbounded version.
+	if len(output) >= len(full) {
+		t.Fatal("truncated Prompt 1 must be smaller than unbounded output")
+	}
+	// At least some packages were dropped.
+	if strings.Count(output, "Pkg: ") >= 100 {
+		t.Fatal("expected some packages to be dropped")
+	}
+}
+
+func TestGenerateSchemaAPromptTwoBudgetDoesNotAffectPromptOne(t *testing.T) {
+	topology := largeTopology(100)
+
+	// Generate with MaxPromptTwoBytes = 1 (near-zero Prompt 2 budget).
+	f1 := NewFormatter()
+	f1.SetPromptInstructions(shortFooter)
+	f1.MaxTopologyPromptBytes = promptOneBudget
+	f1.MaxPromptTwoBytes = 1
+	out1 := f1.GenerateSchemaA(topology, "test")
+
+	// Generate with a very large Prompt 2 budget.
+	f2 := NewFormatter()
+	f2.SetPromptInstructions(shortFooter)
+	f2.MaxTopologyPromptBytes = promptOneBudget
+	f2.MaxPromptTwoBytes = 999 * 1024
+	out2 := f2.GenerateSchemaA(topology, "test")
+
+	if out1 != out2 {
+		t.Fatal("MaxPromptTwoBytes must not affect Prompt 1 output")
+	}
+	if !strings.Contains(out1, "... [Truncated due to size limit] ...") {
+		t.Fatal("Prompt 1 must be truncated at 100 KB regardless of Prompt 2 budget")
+	}
+}
+
+func TestGenerateSchemaAPromptOneBudgetControlsPromptOne(t *testing.T) {
+	topology := largeTopology(100)
+
+	smallBudget := NewFormatter()
+	smallBudget.SetPromptInstructions(shortFooter)
+	smallBudget.MaxTopologyPromptBytes = promptOneBudget
+	smallOut := smallBudget.GenerateSchemaA(topology, "test")
+
+	largeBudget := NewFormatter()
+	largeBudget.SetPromptInstructions(shortFooter)
+	largeBudget.MaxTopologyPromptBytes = 140000
+	largeOut := largeBudget.GenerateSchemaA(topology, "test")
+
+	// The larger budget must keep more packages or produce a larger output.
+	if len(largeOut) <= len(smallOut) {
+		t.Fatal("larger Prompt 1 budget should produce larger or equal output")
+	}
+	if !strings.Contains(smallOut, "... [Truncated due to size limit] ...") {
+		t.Fatal("100 KB budget output must contain truncation marker")
+	}
+	if strings.Contains(largeOut, "... [Truncated due to size limit] ...") {
+		t.Fatal("140 KB budget output should not be truncated")
+	}
+}
+
+func TestGenerateSchemaBFixedContentOverBudgetPreservesFraming(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.MaxContextFileBytes = 0
+	// Set a tiny Prompt 2 target that the fixed framing alone exceeds.
+	formatter.MaxPromptTwoBytes = 200
+
+	content := strings.Repeat("a", 100)
+	extractions := []ExtractionResult{
+		{Path: "f1", Content: content},
+	}
+
+	out, meta := formatter.GenerateSchemaB(&model.ProjectTopology{}, extractions, "query")
+
+	if len(out) <= formatter.MaxPromptTwoBytes {
+		t.Fatal("expected output to exceed the tiny target since fixed framing alone overflows")
+	}
+	// The extraction must be dropped since framing alone exceeds budget.
+	if !meta[0].Dropped {
+		t.Fatal("expected the extraction to be dropped when framing overflows")
+	}
+	// Fixed sections must remain.
+	if !strings.Contains(out, "[TASK]") || !strings.Contains(out, "[OUTPUT CONSTRAINT]") {
+		t.Fatal("fixed task and constraint must remain even when over budget")
+	}
+	if !strings.Contains(out, "[PROJECT TOPOLOGY]") {
+		t.Fatal("topology section must remain")
+	}
+	// The [CONTEXT] section header may still appear but must not contain
+	// any file blocks (since all extractions were dropped).
+	// Match the actual section header with newlines to avoid matching
+	// the word [CONTEXT] inside the constraint text.
+	ctxIdx := strings.Index(out, "\n[CONTEXT]\n")
+	if ctxIdx < 0 {
+		t.Fatal("expected [CONTEXT] section header")
+	}
+	rest := out[ctxIdx:]
+	if strings.Contains(rest, "--- File:") {
+		t.Fatal("no file blocks should appear in context when all extractions are dropped")
 	}
 }

@@ -17,21 +17,23 @@ import (
 
 // Formatter handles Schema A and B generation.
 type Formatter struct {
-	MaxPackages          int // 0 means no limit
-	MaxContextFileBytes  int // 0 means no limit
-	MaxTotalContextBytes int // 0 means no limit
-	Focus                Focus
-	Instructions         PromptInstructions
-	customInstructions   bool
+	MaxPackages            int // 0 means no limit
+	MaxContextFileBytes    int // 0 means no limit
+	MaxTopologyPromptBytes int // 0 means no limit
+	MaxPromptTwoBytes      int // 0 means no limit
+	Focus                  Focus
+	Instructions           PromptInstructions
+	customInstructions     bool
 }
 
 // NewFormatter creates a new Formatter instance.
 func NewFormatter() *Formatter {
 	return &Formatter{
-		MaxContextFileBytes:  defaults.MaxContextFileBytes,
-		MaxTotalContextBytes: defaults.MaxTotalContextBytes,
-		Focus:                FocusCode,
-		Instructions:         DefaultInstructions,
+		MaxContextFileBytes:    defaults.MaxContextFileBytes,
+		MaxTopologyPromptBytes: defaults.MaxTopologyPromptBytes,
+		MaxPromptTwoBytes:      defaults.MaxPromptTwoBytes,
+		Focus:                  FocusCode,
+		Instructions:           DefaultInstructions,
 	}
 }
 
@@ -105,9 +107,9 @@ func (f *Formatter) generateTopology(t *model.ProjectTopology, taggedFiles []Tag
 
 	keep := len(packages)
 
-	if f.MaxTotalContextBytes > 0 && keep > 0 {
+	if f.MaxTopologyPromptBytes > 0 && keep > 0 {
 		fixedSize := len(headerStr) + len(etcStr) + reservedBytes
-		available := f.MaxTotalContextBytes - fixedSize
+		available := f.MaxTopologyPromptBytes - fixedSize
 		if available < 0 {
 			available = 0
 		}
@@ -437,11 +439,14 @@ func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []Extr
 	instr := f.currentInstructions()
 	constraint := fmt.Sprintf(instr.SchemaBConstraint, query)
 
-	// 3. Total truncation (Drop Last File)
-	if f.MaxTotalContextBytes > 0 {
+	// 3. Total truncation (Drop Last File).
+	// Target is MaxPromptTwoBytes. Fixed prompt sections (topology, task,
+	// instructions) are never dropped; if they alone exceed the target the
+	// final output may exceed it.
+	if f.MaxPromptTwoBytes > 0 {
 		for {
 			body := f.buildSchemaBBody(t, processed, metadata, constraint)
-			if len(body) <= f.MaxTotalContextBytes || len(processed) == 0 {
+			if len(body) <= f.MaxPromptTwoBytes || len(processed) == 0 {
 				break
 			}
 			lastIdx := len(processed) - 1

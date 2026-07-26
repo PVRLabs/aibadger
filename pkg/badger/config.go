@@ -30,11 +30,16 @@ type Config struct {
 	LargePromptByteThreshold  int
 	TruncatedMaxPackages      int
 	MaxContextFileBytes       int    // 0 uses the default; negative disables per-file trimming.
-	MaxTotalContextBytes      int    // 0 uses the default; negative disables total context trimming.
+	MaxTopologyPromptBytes    int    // 0 uses the default; negative disables Prompt 1 byte target.
+	MaxPromptTwoBytes         int    // 0 falls back to MaxTotalContextBytes, then the default; negative disables Prompt 2 trimming.
 	SchemaAConstraint         string // Optional: overrides Prompt 1 instructions
 	SchemaBConstraint         string // Optional: overrides Prompt 2 instructions
 	WhitespaceMode            string // "smart" (default), "exact", or "ignore"
 	MaxFilesPerDirectory      int
+
+	// Deprecated: use MaxPromptTwoBytes.
+	// Used only when MaxPromptTwoBytes is zero.
+	MaxTotalContextBytes int
 }
 
 // DefaultConfig returns the OSS defaults used by the badger command.
@@ -54,7 +59,11 @@ func DefaultConfig() Config {
 		LargePromptByteThreshold:  workflow.LargePromptBytes,
 		TruncatedMaxPackages:      workflow.TruncatedMaxPackages,
 		MaxContextFileBytes:       workflow.MaxContextFileBytes,
-		MaxTotalContextBytes:      workflow.MaxTotalContextBytes,
+		MaxTopologyPromptBytes:    workflow.MaxTopologyPromptBytes,
+		// MaxPromptTwoBytes is intentionally 0 so that DefaultConfig
+		// callers who set the deprecated MaxTotalContextBytes still get
+		// the legacy override through withDefaults.
+		MaxTotalContextBytes:      workflow.MaxPromptTwoBytes,
 		WhitespaceMode:            string(writer.DefaultWhitespaceMode),
 		MaxFilesPerDirectory:      workflow.MaxFilesPerDirectory,
 	}
@@ -93,9 +102,20 @@ func (c Config) withDefaults() Config {
 	if c.MaxContextFileBytes == 0 {
 		c.MaxContextFileBytes = defaults.MaxContextFileBytes
 	}
-	if c.MaxTotalContextBytes == 0 {
-		c.MaxTotalContextBytes = defaults.MaxTotalContextBytes
+	if c.MaxTopologyPromptBytes == 0 {
+		c.MaxTopologyPromptBytes = defaults.MaxTopologyPromptBytes
 	}
+	// Prompt 2 resolution: MaxPromptTwoBytes != 0 wins,
+	// then MaxTotalContextBytes != 0, then the workflow default.
+	resolved := c.MaxPromptTwoBytes
+	if resolved == 0 {
+		resolved = c.MaxTotalContextBytes
+	}
+	if resolved == 0 {
+		resolved = workflow.MaxPromptTwoBytes
+	}
+	c.MaxPromptTwoBytes = resolved
+	c.MaxTotalContextBytes = resolved
 	if c.MaxFilesPerDirectory == 0 {
 		c.MaxFilesPerDirectory = defaults.MaxFilesPerDirectory
 	}
@@ -121,7 +141,8 @@ func (c Config) tuiConfig() tui.Config {
 		LargePromptByteThreshold:  c.LargePromptByteThreshold,
 		TruncatedMaxPackages:      c.TruncatedMaxPackages,
 		MaxContextFileBytes:       c.MaxContextFileBytes,
-		MaxTotalContextBytes:      c.MaxTotalContextBytes,
+		MaxTopologyPromptBytes:    c.MaxTopologyPromptBytes,
+		MaxPromptTwoBytes:         c.MaxPromptTwoBytes,
 		SchemaAConstraint:         c.SchemaAConstraint,
 		SchemaBConstraint:         c.SchemaBConstraint,
 		MaxFilesPerDirectory:      c.MaxFilesPerDirectory,

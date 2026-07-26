@@ -136,7 +136,7 @@ func TestRunHeadlessContextStepMarksTruncatedPrompt2Header(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Root = tmpDir
 	cfg.MaxContextFileBytes = 40
-	cfg.MaxTotalContextBytes = -1
+	cfg.MaxPromptTwoBytes = -1
 
 	var output bytes.Buffer
 	if err := RunHeadless(cfg, HeadlessOptions{

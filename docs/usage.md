@@ -47,6 +47,9 @@ Copy those lines, paste them into Badger, and press Enter. Badger fetches only t
 
 Copy Prompt 2 and paste it into your AI chat. The AI now has both the project structure and the actual source code. It responds with its analysis and any suggested changes.
 
+> [!NOTE]
+> Most prompts can be copied directly. When Prompt 2 is unusually large (≈128 KB or more), Badger shows a delivery menu with clipboard, temp-file, and manual-copy options. Clipboard is recommended. Saving to a temp file is available when you prefer to attach the file rather than paste it.
+
 ### Step 5: Apply the AI's changes
 
 Paste the AI's full response into Badger. Badger parses any file changes, shows you a write plan listing what will be written to each file, and asks for confirmation. Review the plan and confirm to apply.

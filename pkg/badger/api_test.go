@@ -544,7 +544,7 @@ func TestRunAPIExtractPreservesLimitsAndExternalContext(t *testing.T) {
 	}
 	selectorsPath := writeAPITestInput(t, "selectors.txt", "FILE:unique.md\nFILE:duplicate.md\nFILE:main.go")
 	goalPath := writeAPITestInput(t, "goal.txt", "Inspect external context")
-	cfg := Config{Root: root, MaxContextFileBytes: 40, MaxTotalContextBytes: 1100}
+	cfg := Config{Root: root, MaxContextFileBytes: 40, MaxPromptTwoBytes: 1100}
 
 	var stdout, stderr bytes.Buffer
 	err := RunAPI(cfg, APIOptions{

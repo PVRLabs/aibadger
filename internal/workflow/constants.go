@@ -13,7 +13,8 @@ const (
 	LargePromptBytes          = defaults.LargePromptBytes
 	TruncatedMaxPackages      = defaults.TruncatedMaxPackages
 	MaxContextFileBytes       = defaults.MaxContextFileBytes
-	MaxTotalContextBytes      = defaults.MaxTotalContextBytes
+	MaxTopologyPromptBytes    = defaults.MaxTopologyPromptBytes
+	MaxPromptTwoBytes         = defaults.MaxPromptTwoBytes
 	MaxFilesPerDirectory      = defaults.MaxFilesPerDirectory
 	StepNames                 = defaults.StepNames
 	TopologyPromptKind        = "Prompt 1: Topology"

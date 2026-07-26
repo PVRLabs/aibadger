@@ -18,6 +18,11 @@ import (
 
 var fetchStargazersFunc = github.FetchStargazers
 
+// copyToClipboard is the function used by copyCmd to copy text to the
+// system clipboard. It is a package-level variable so that unit tests can
+// replace it with a stub that does not execute the real clipboard.
+var copyToClipboard = clipboard.Copy
+
 func scanProjectCmd(root string, maxFilesPerDir int) tea.Cmd {
 	return func() tea.Msg {
 		eng, err := engine.New(root, maxFilesPerDir)
@@ -33,7 +38,7 @@ func scanTick() tea.Cmd {
 
 func copyCmd(kind, text string) tea.Cmd {
 	return func() tea.Msg {
-		return copyDoneMsg{kind: kind, text: text, err: clipboard.Copy(text)}
+		return copyDoneMsg{kind: kind, text: text, err: copyToClipboard(text)}
 	}
 }
 

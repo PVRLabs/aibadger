@@ -89,11 +89,12 @@ func RunHeadless(cfg Config, opts HeadlessOptions) error {
 
 func headlessEngineOptions(cfg Config, opts HeadlessOptions) workflow.EngineOptions {
 	engOpts := workflow.EngineOptions{
-		MaxContextFileBytes:  cfg.MaxContextFileBytes,
-		MaxTotalContextBytes: cfg.MaxTotalContextBytes,
-		SchemaAConstraint:    cfg.SchemaAConstraint,
-		SchemaBConstraint:    cfg.SchemaBConstraint,
-		Focus:                opts.Focus,
+		MaxContextFileBytes:    cfg.MaxContextFileBytes,
+		MaxTopologyPromptBytes: cfg.MaxTopologyPromptBytes,
+		MaxPromptTwoBytes:      cfg.MaxPromptTwoBytes,
+		SchemaAConstraint:      cfg.SchemaAConstraint,
+		SchemaBConstraint:      cfg.SchemaBConstraint,
+		Focus:                  opts.Focus,
 	}
 	if opts.TruncateTopology {
 		engOpts.MaxPackages = cfg.TruncatedMaxPackages

@@ -38,8 +38,14 @@ func TestDefaultConfigUsesOSSDefaults(t *testing.T) {
 	if cfg.MaxContextFileBytes != workflow.MaxContextFileBytes {
 		t.Fatalf("MaxContextFileBytes = %d, want %d", cfg.MaxContextFileBytes, workflow.MaxContextFileBytes)
 	}
-	if cfg.MaxTotalContextBytes != workflow.MaxTotalContextBytes {
-		t.Fatalf("MaxTotalContextBytes = %d, want %d", cfg.MaxTotalContextBytes, workflow.MaxTotalContextBytes)
+	if cfg.MaxTopologyPromptBytes != workflow.MaxTopologyPromptBytes {
+		t.Fatalf("MaxTopologyPromptBytes = %d, want %d", cfg.MaxTopologyPromptBytes, workflow.MaxTopologyPromptBytes)
+	}
+	if cfg.MaxPromptTwoBytes != 0 {
+		t.Fatalf("MaxPromptTwoBytes = %d, want 0 (DefaultConfig leaves this zero so legacy callers can override)", cfg.MaxPromptTwoBytes)
+	}
+	if cfg.MaxTotalContextBytes != workflow.MaxPromptTwoBytes {
+		t.Fatalf("MaxTotalContextBytes = %d, want %d (legacy default)", cfg.MaxTotalContextBytes, workflow.MaxPromptTwoBytes)
 	}
 	if cfg.WhitespaceMode != string(writer.DefaultWhitespaceMode) {
 		t.Fatalf("WhitespaceMode = %q, want %q", cfg.WhitespaceMode, writer.DefaultWhitespaceMode)
@@ -49,14 +55,18 @@ func TestDefaultConfigUsesOSSDefaults(t *testing.T) {
 func TestConfigCanDisableContextLimits(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.MaxContextFileBytes = -1
-	cfg.MaxTotalContextBytes = -1
+	cfg.MaxTopologyPromptBytes = -1
+	cfg.MaxPromptTwoBytes = -1
 
 	tuiCfg := cfg.tuiConfig()
 	if tuiCfg.MaxContextFileBytes != -1 {
 		t.Fatalf("MaxContextFileBytes = %d, want disabled", tuiCfg.MaxContextFileBytes)
 	}
-	if tuiCfg.MaxTotalContextBytes != -1 {
-		t.Fatalf("MaxTotalContextBytes = %d, want disabled", tuiCfg.MaxTotalContextBytes)
+	if tuiCfg.MaxTopologyPromptBytes != -1 {
+		t.Fatalf("MaxTopologyPromptBytes = %d, want disabled", tuiCfg.MaxTopologyPromptBytes)
+	}
+	if tuiCfg.MaxPromptTwoBytes != -1 {
+		t.Fatalf("MaxPromptTwoBytes = %d, want disabled", tuiCfg.MaxPromptTwoBytes)
 	}
 }
 
@@ -68,8 +78,11 @@ func TestConfigZeroContextLimitsUseDefaults(t *testing.T) {
 	if tuiCfg.MaxContextFileBytes != workflow.MaxContextFileBytes {
 		t.Fatalf("MaxContextFileBytes = %d, want %d", tuiCfg.MaxContextFileBytes, workflow.MaxContextFileBytes)
 	}
-	if tuiCfg.MaxTotalContextBytes != workflow.MaxTotalContextBytes {
-		t.Fatalf("MaxTotalContextBytes = %d, want %d", tuiCfg.MaxTotalContextBytes, workflow.MaxTotalContextBytes)
+	if tuiCfg.MaxTopologyPromptBytes != workflow.MaxTopologyPromptBytes {
+		t.Fatalf("MaxTopologyPromptBytes = %d, want %d", tuiCfg.MaxTopologyPromptBytes, workflow.MaxTopologyPromptBytes)
+	}
+	if tuiCfg.MaxPromptTwoBytes != workflow.MaxPromptTwoBytes {
+		t.Fatalf("MaxPromptTwoBytes = %d, want %d", tuiCfg.MaxPromptTwoBytes, workflow.MaxPromptTwoBytes)
 	}
 	if tuiCfg.WhitespaceMode != writer.DefaultWhitespaceMode {
 		t.Fatalf("WhitespaceMode = %q, want %q", tuiCfg.WhitespaceMode, writer.DefaultWhitespaceMode)
@@ -115,5 +128,88 @@ func TestConfigPassesCustomMetadataToTUI(t *testing.T) {
 	}
 	if tuiCfg.Focus != protocol.FocusDesign {
 		t.Fatalf("Focus = %q, want %q", tuiCfg.Focus, protocol.FocusDesign)
+	}
+}
+
+func TestLegacyMaxTotalContextBytesZeroValueStruct(t *testing.T) {
+	// Old caller style: zero-value Config with only the legacy field set.
+	root := t.TempDir()
+	cfg := Config{
+		Root:                 root,
+		MaxTotalContextBytes: 999,
+	}
+
+	tuiCfg := cfg.tuiConfig()
+	if tuiCfg.MaxPromptTwoBytes != 999 {
+		t.Fatalf("MaxPromptTwoBytes = %d, want 999 (legacy from zero-value struct)", tuiCfg.MaxPromptTwoBytes)
+	}
+}
+
+func TestLegacyMaxTotalContextBytesFromDefaultConfig(t *testing.T) {
+	// Old caller style: DefaultConfig then mutate only the legacy field.
+	cfg := DefaultConfig()
+	cfg.MaxTotalContextBytes = 999
+
+	tuiCfg := cfg.tuiConfig()
+	if tuiCfg.MaxPromptTwoBytes != 999 {
+		t.Fatalf("MaxPromptTwoBytes = %d, want 999 (legacy after DefaultConfig)", tuiCfg.MaxPromptTwoBytes)
+	}
+}
+
+func TestLegacyMaxTotalContextBytesNewFieldWinsExplicit(t *testing.T) {
+	// Both fields non-zero — new field must win.
+	cfg := Config{
+		MaxPromptTwoBytes:    111,
+		MaxTotalContextBytes: 999,
+	}
+
+	tuiCfg := cfg.tuiConfig()
+	if tuiCfg.MaxPromptTwoBytes != 111 {
+		t.Fatalf("MaxPromptTwoBytes = %d, want 111 (new field wins both non-zero)", tuiCfg.MaxPromptTwoBytes)
+	}
+}
+
+func TestLegacyMaxTotalContextBytesNewFieldWinsDefaultValue(t *testing.T) {
+	// New field set to exactly the default must still win.
+	cfg := DefaultConfig()
+	cfg.MaxPromptTwoBytes = workflow.MaxPromptTwoBytes
+	cfg.MaxTotalContextBytes = 999
+
+	tuiCfg := cfg.tuiConfig()
+	if tuiCfg.MaxPromptTwoBytes != workflow.MaxPromptTwoBytes {
+		t.Fatalf("MaxPromptTwoBytes = %d, want %d (new field wins even when equal to default)", tuiCfg.MaxPromptTwoBytes, workflow.MaxPromptTwoBytes)
+	}
+}
+
+func TestLegacyMaxTotalContextBytesBothZeroUsesDefault(t *testing.T) {
+	tuiCfg := Config{}.tuiConfig()
+	if tuiCfg.MaxPromptTwoBytes != workflow.MaxPromptTwoBytes {
+		t.Fatalf("MaxPromptTwoBytes = %d, want %d (default when both zero)", tuiCfg.MaxPromptTwoBytes, workflow.MaxPromptTwoBytes)
+	}
+}
+
+func TestLegacyMaxTotalContextBytesNegativeNewField(t *testing.T) {
+	cfg := Config{MaxPromptTwoBytes: -1}
+	tuiCfg := cfg.tuiConfig()
+	if tuiCfg.MaxPromptTwoBytes != -1 {
+		t.Fatalf("MaxPromptTwoBytes = %d, want -1 (disabled via new field)", tuiCfg.MaxPromptTwoBytes)
+	}
+}
+
+func TestLegacyMaxTotalContextBytesNegativeLegacyField(t *testing.T) {
+	cfg := Config{MaxTotalContextBytes: -1}
+	tuiCfg := cfg.tuiConfig()
+	if tuiCfg.MaxPromptTwoBytes != -1 {
+		t.Fatalf("MaxPromptTwoBytes = %d, want -1 (disabled via legacy)", tuiCfg.MaxPromptTwoBytes)
+	}
+}
+
+func TestLegacyMaxTotalContextBytesDoesNotAffectPromptOne(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MaxTotalContextBytes = 999
+
+	tuiCfg := cfg.tuiConfig()
+	if tuiCfg.MaxTopologyPromptBytes != workflow.MaxTopologyPromptBytes {
+		t.Fatalf("MaxTopologyPromptBytes = %d, want %d (Prompt 1 unaffected)", tuiCfg.MaxTopologyPromptBytes, workflow.MaxTopologyPromptBytes)
 	}
 }

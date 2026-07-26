@@ -149,18 +149,17 @@ func (m Model) promptDeliveryIsLarge(kind string) bool {
 
 func (m Model) viewLargePromptDelivery(kind, text string) string {
 	return strings.Join([]string{
-		renderWarningLine(fmt.Sprintf("%s is large (%s).", kind, protocol.FormatFileSize(int64(len(text))))),
+		renderWarningLine(fmt.Sprintf("This prompt is large (%s).", protocol.FormatFileSize(int64(len(text))))),
 		"",
-		"Some AI chats may reject or truncate large pasted text.",
-		"Recommended: save it to a temp file and attach/upload it to your AI chat.",
+		"Recommended: copy it to the clipboard and paste it into your AI chat.",
 		"",
 		renderLabel("Options:"),
-		"  [c] Copy anyway",
+		"  [c] Copy to clipboard",
 		"  [f] Save to temp file",
 		"  [p] Print to terminal",
 		"  [n] Cancel",
 		"",
-		renderBold("Choice (recommended: f):"),
+		renderBold("Choice (recommended: c):"),
 	}, "\n")
 }
 

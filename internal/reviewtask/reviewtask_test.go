@@ -132,6 +132,9 @@ func TestBuildDefaultTrackedChangesOnly(t *testing.T) {
 	if strings.Contains(task.Prompt, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
 		t.Fatalf("Prompt unexpectedly included untracked section:\n%s", task.Prompt)
 	}
+	if strings.Contains(task.Prompt, "Untracked files are provided for reference") {
+		t.Fatalf("Prompt unexpectedly included untracked note:\n%s", task.Prompt)
+	}
 	if !strings.Contains(task.Prompt, "println(\"updated\")") {
 		t.Fatalf("Prompt missing tracked diff body:\n%s", task.Prompt)
 	}
@@ -307,6 +310,9 @@ func TestBuildDefaultUntrackedOnly(t *testing.T) {
 	if !strings.Contains(task.Prompt, "- internal/api/new_client.go") {
 		t.Fatalf("Prompt missing untracked path:\n%s", task.Prompt)
 	}
+	if !strings.Contains(task.Prompt, "Untracked files are provided for reference") {
+		t.Fatalf("Prompt missing untracked reference note:\n%s", task.Prompt)
+	}
 	if _, err := task.HeadlessGoal(); err != nil {
 		t.Fatalf("HeadlessGoal() error = %v, want nil", err)
 	}
@@ -399,8 +405,8 @@ func TestBuildDefaultEscapesUntrackedPathControlCharacters(t *testing.T) {
 		t.Fatalf("Prompt missing escaped path %q:\n%q", escaped, task.Prompt)
 	}
 	ctx := task.StartupContext()
-	if len(ctx.Attachments) != 1 || ctx.Attachments[0].Lines != 2 {
-		t.Fatalf("StartupContext attachments = %+v, want one two-line untracked attachment", ctx.Attachments)
+	if len(ctx.Attachments) != 1 || ctx.Attachments[0].Lines != 4 {
+		t.Fatalf("StartupContext attachments = %+v, want one four-line untracked attachment", ctx.Attachments)
 	}
 	if strings.Contains(ctx.Attachments[0].Text, normalized) {
 		t.Fatalf("attachment included raw path control characters:\n%q", ctx.Attachments[0].Text)
@@ -674,11 +680,23 @@ func TestUntrackedOmittedFormattingSingularAndPlural(t *testing.T) {
 	if got := formatUntrackedSection([]string{"internal/api/new_client.go"}, 2); !strings.Contains(got, "2 additional Git-untracked files omitted.") {
 		t.Fatalf("plural omitted formatting = %q", got)
 	}
-	if got := formatUntrackedSection(nil, 1); !strings.Contains(got, "1 Git-untracked file omitted.") {
-		t.Fatalf("omission-only singular formatting = %q", got)
+	{
+		got := formatUntrackedSection(nil, 1)
+		if !strings.Contains(got, "1 Git-untracked file omitted.") {
+			t.Fatalf("omission-only singular formatting = %q", got)
+		}
+		if strings.Contains(got, "Note:") {
+			t.Fatalf("omission-only section should not include reference note:\n%s", got)
+		}
 	}
-	if got := formatUntrackedSection(nil, 2); !strings.Contains(got, "2 Git-untracked files omitted.") {
-		t.Fatalf("omission-only plural formatting = %q", got)
+	{
+		got := formatUntrackedSection(nil, 2)
+		if !strings.Contains(got, "2 Git-untracked files omitted.") {
+			t.Fatalf("omission-only plural formatting = %q", got)
+		}
+		if strings.Contains(got, "Note:") {
+			t.Fatalf("omission-only section should not include reference note:\n%s", got)
+		}
 	}
 }
 
@@ -690,12 +708,12 @@ func TestFormatUntrackedSectionEscapesPathControlCharacters(t *testing.T) {
 	if strings.Contains(got, path) {
 		t.Fatalf("formatUntrackedSection() included raw control characters:\n%q", got)
 	}
-	want := "[REVIEW CONTEXT: GIT-UNTRACKED FILES]\n- notes/line\\n- injected\\rDiff:\\tvalue.go"
+	want := "[REVIEW CONTEXT: GIT-UNTRACKED FILES]\nNote: Untracked files are provided for reference and are not necessarily missing from the commit.\n\n- notes/line\\n- injected\\rDiff:\\tvalue.go"
 	if got != want {
 		t.Fatalf("formatUntrackedSection() = %q, want %q", got, want)
 	}
-	if lines := countReviewTextLines(got); lines != 2 {
-		t.Fatalf("countReviewTextLines() = %d, want heading and one path line", lines)
+	if lines := countReviewTextLines(got); lines != 4 {
+		t.Fatalf("countReviewTextLines() = %d, want heading, note, blank, and one path line", lines)
 	}
 }
 
@@ -942,8 +960,14 @@ func TestBuildUntrackedGoTestFileReviewEligibility(t *testing.T) {
 		t.Fatalf("UntrackedFiles = %v, want [%q]", task.UntrackedFiles, path)
 	}
 	untrackedSection := formatUntrackedSection(task.UntrackedFiles, task.UntrackedOmitted)
-	if !strings.Contains(untrackedSection, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]\n- "+path) {
+	if !strings.Contains(untrackedSection, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") {
+		t.Fatalf("untracked section missing heading:\n%s", untrackedSection)
+	}
+	if !strings.Contains(untrackedSection, "- "+path) {
 		t.Fatalf("untracked section missing path:\n%s", untrackedSection)
+	}
+	if !strings.Contains(untrackedSection, "Note: Untracked files are provided for reference and are not necessarily missing from the commit.") {
+		t.Fatalf("untracked section missing reference note:\n%s", untrackedSection)
 	}
 	if strings.Contains(untrackedSection, "hiddenTopologyValue") || strings.Contains(task.Prompt, "hiddenTopologyValue") {
 		t.Fatalf("untracked review context leaked file contents:\n%s", task.Prompt)

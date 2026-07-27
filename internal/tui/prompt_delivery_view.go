@@ -36,15 +36,12 @@ func (m Model) viewScanComplete() string {
 
 func (m Model) viewContextReady() string {
 	var lines []string
-	hasTruncation := false
 	for _, meta := range m.metadata {
 		status := ""
 		if meta.Dropped {
 			status = " [DROPPED - EXCEEDS TOTAL LIMIT]"
-			hasTruncation = true
 		} else if meta.Truncated {
 			status = " [TRUNCATED]"
-			hasTruncation = true
 		}
 		lines = append(lines, fmt.Sprintf("  - %s%s", meta.Path, status))
 	}
@@ -53,10 +50,7 @@ func (m Model) viewContextReady() string {
 	}
 
 	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
-	warning := ""
-	if hasTruncation {
-		warning = "\n" + renderWarningLine("Note: Some files were truncated or dropped to fit context limits.") + "\n"
-	}
+	warning := renderTruncationNotes(m.metadata)
 
 	if m.promptDeliveryIsLarge(promptTwoKind) {
 		return fmt.Sprintf(
@@ -176,4 +170,31 @@ func (m Model) viewLargeProjectDelivery() string {
 
 func (m Model) viewPromptFileReveal() string {
 	return fmt.Sprintf("Open containing folder? (y/N)\n\n%s", helpStyle.Render("The saved path above stays visible if opening fails or is skipped."))
+}
+
+func renderTruncationNotes(metadata []protocol.ExtractionMetadata) string {
+	truncated := 0
+	dropped := 0
+	for _, meta := range metadata {
+		if meta.Dropped {
+			dropped++
+		} else if meta.Truncated {
+			truncated++
+		}
+	}
+	var lines []string
+	if truncated == 1 {
+		lines = append(lines, renderWarningLine("Note: 1 included file was truncated by the per-file limit."))
+	} else if truncated > 1 {
+		lines = append(lines, renderWarningLine(fmt.Sprintf("Note: %d included files were truncated by the per-file limit.", truncated)))
+	}
+	if dropped == 1 {
+		lines = append(lines, renderWarningLine("Note: 1 file was dropped to fit the total prompt limit."))
+	} else if dropped > 1 {
+		lines = append(lines, renderWarningLine(fmt.Sprintf("Note: %d files were dropped to fit the total prompt limit.", dropped)))
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "\n" + strings.Join(lines, "\n") + "\n"
 }

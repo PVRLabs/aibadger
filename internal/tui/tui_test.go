@@ -3494,7 +3494,8 @@ func TestCopyCodeContextDialogShowsPayloadSize(t *testing.T) {
 		"  - internal/scanner/go.go",
 		"  - internal/models/order.go [TRUNCATED]",
 		"  - internal/models/user.go [DROPPED - EXCEEDS TOTAL LIMIT]",
-		"Note: Some files were truncated or dropped to fit context limits.",
+		"Note: 1 included file was truncated by the per-file limit.",
+		"Note: 1 file was dropped to fit the total prompt limit.",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("code context view missing %q:\n%s", want, view)
@@ -4528,4 +4529,93 @@ func runReviewGitCmd(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(output))
 	}
 	return string(output)
+}
+
+func TestRenderTruncationNotesNoTruncation(t *testing.T) {
+	got := renderTruncationNotes([]protocol.ExtractionMetadata{
+		{Path: "a.go"},
+		{Path: "b.go"},
+	})
+	if got != "" {
+		t.Fatalf("expected empty string, got: %q", got)
+	}
+}
+
+func TestRenderTruncationNotesOneTruncated(t *testing.T) {
+	got := renderTruncationNotes([]protocol.ExtractionMetadata{
+		{Path: "a.go"},
+		{Path: "b.go", Truncated: true},
+	})
+	if !strings.Contains(got, "Note: 1 included file was truncated by the per-file limit.") {
+		t.Fatalf("expected truncated message, got: %q", got)
+	}
+	if strings.Contains(got, "dropped") {
+		t.Fatalf("unexpected dropped message, got: %q", got)
+	}
+}
+
+func TestRenderTruncationNotesMultipleTruncated(t *testing.T) {
+	got := renderTruncationNotes([]protocol.ExtractionMetadata{
+		{Path: "a.go", Truncated: true},
+		{Path: "b.go", Truncated: true},
+		{Path: "c.go"},
+	})
+	if !strings.Contains(got, "Note: 2 included files were truncated by the per-file limit.") {
+		t.Fatalf("expected truncated message, got: %q", got)
+	}
+	if strings.Contains(got, "dropped") {
+		t.Fatalf("unexpected dropped message, got: %q", got)
+	}
+}
+
+func TestRenderTruncationNotesOneDropped(t *testing.T) {
+	got := renderTruncationNotes([]protocol.ExtractionMetadata{
+		{Path: "a.go", Dropped: true},
+		{Path: "b.go"},
+	})
+	if !strings.Contains(got, "Note: 1 file was dropped to fit the total prompt limit.") {
+		t.Fatalf("expected dropped message, got: %q", got)
+	}
+	if strings.Contains(got, "truncated") {
+		t.Fatalf("unexpected truncated message, got: %q", got)
+	}
+}
+
+func TestRenderTruncationNotesBoth(t *testing.T) {
+	got := renderTruncationNotes([]protocol.ExtractionMetadata{
+		{Path: "a.go", Truncated: true},
+		{Path: "b.go", Dropped: true},
+	})
+	if !strings.Contains(got, "Note: 1 included file was truncated by the per-file limit.") {
+		t.Fatalf("expected truncated message, got: %q", got)
+	}
+	if !strings.Contains(got, "Note: 1 file was dropped to fit the total prompt limit.") {
+		t.Fatalf("expected dropped message, got: %q", got)
+	}
+}
+
+func TestRenderTruncationNotesDroppedTruncatedSameFileCountsAsDropped(t *testing.T) {
+	got := renderTruncationNotes([]protocol.ExtractionMetadata{
+		{Path: "a.go", Truncated: true, Dropped: true},
+	})
+	if !strings.Contains(got, "Note: 1 file was dropped to fit the total prompt limit.") {
+		t.Fatalf("expected dropped message, got: %q", got)
+	}
+	if strings.Contains(got, "truncated by the per-file") {
+		t.Fatalf("unexpected truncated message for a file that was also dropped, got: %q", got)
+	}
+}
+
+func TestRenderTruncationNotesMultipleDropped(t *testing.T) {
+	got := renderTruncationNotes([]protocol.ExtractionMetadata{
+		{Path: "a.go", Dropped: true},
+		{Path: "b.go", Dropped: true},
+		{Path: "c.go"},
+	})
+	if !strings.Contains(got, "Note: 2 files were dropped to fit the total prompt limit.") {
+		t.Fatalf("expected dropped message, got: %q", got)
+	}
+	if strings.Contains(got, "truncated") {
+		t.Fatalf("unexpected truncated message, got: %q", got)
+	}
 }

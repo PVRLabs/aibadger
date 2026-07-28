@@ -525,52 +525,126 @@ func TestRunAPIExtractRejectsInvalidCallerFiles(t *testing.T) {
 }
 
 func TestRunAPIExtractPreservesLimitsAndExternalContext(t *testing.T) {
-	root := writeAPIExtractionProject(t)
-	externalOne := t.TempDir()
-	externalTwo := t.TempDir()
-	externalContent := []byte(strings.Repeat("external context ", 20))
-	uniquePath := filepath.Join(externalOne, "unique.md")
-	if err := os.WriteFile(uniquePath, externalContent, 0644); err != nil {
-		t.Fatalf("WriteFile(unique) error = %v", err)
-	}
-	for _, externalRoot := range []string{externalOne, externalTwo} {
-		if err := os.WriteFile(filepath.Join(externalRoot, "duplicate.md"), []byte("ambiguous\n"), 0644); err != nil {
-			t.Fatalf("WriteFile(duplicate) error = %v", err)
+	const (
+		perFileLimit   = 8 * 1024
+		promptTwoLimit = 12 * 1024
+		sourceSize     = 16 * 1024
+	)
+	// The aggregate limit fits one truncated file but not two.
+	// The multi-KiB margin keeps the test independent of path and formatter
+	// overhead.
+
+	// Layout:
+	//   <sandbox>/
+	//     project/          ← root for RunAPI
+	//     external-one/     ← sibling, referenced via relative .badger-context
+	//     external-two/
+	sandbox := t.TempDir()
+	root := filepath.Join(sandbox, "project")
+	ext1 := filepath.Join(sandbox, "external-one")
+	ext2 := filepath.Join(sandbox, "external-two")
+	for _, dir := range []string{root, ext1, ext2} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", dir, err)
 		}
 	}
-	contextConfig := externalOne + "\n" + externalTwo + "\n"
-	if err := os.WriteFile(filepath.Join(root, ".badger-context"), []byte(contextConfig), 0644); err != nil {
-		t.Fatalf("WriteFile(.badger-context) error = %v", err)
+
+	// Populate project root.
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module ex\n\ngo 1.24\n"), 0644); err != nil {
+		t.Fatal(err)
 	}
-	selectorsPath := writeAPITestInput(t, "selectors.txt", "FILE:unique.md\nFILE:duplicate.md\nFILE:main.go")
+	mainBody := "package main\n" + strings.Repeat("var _ = 0\n", (sourceSize-len("package main\n"))/len("var _ = 0\n"))
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(mainBody), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "preview.png"), []byte("not a decoded image"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Populate external context directories.
+	extContent := bytes.Repeat([]byte("x"), sourceSize)
+	uniquePath := filepath.Join(ext1, "unique.md")
+	if err := os.WriteFile(uniquePath, extContent, 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{ext1, ext2} {
+		if err := os.WriteFile(filepath.Join(dir, "duplicate.md"), []byte("ambiguous\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// External context is configured via relative paths (siblings).
+	ctxCfg := "../external-one\n../external-two\n"
+	if err := os.WriteFile(filepath.Join(root, ".badger-context"), []byte(ctxCfg), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	selectorsPath := writeAPITestInput(t, "selectors.txt",
+		"FILE:unique.md\nFILE:duplicate.md\nFILE:main.go")
 	goalPath := writeAPITestInput(t, "goal.txt", "Inspect external context")
-	cfg := Config{Root: root, MaxContextFileBytes: 40, MaxPromptTwoBytes: 1100}
+	cfg := Config{
+		Root:                root,
+		MaxContextFileBytes: perFileLimit,
+		MaxPromptTwoBytes:   promptTwoLimit,
+	}
 
 	var stdout, stderr bytes.Buffer
-	err := RunAPI(cfg, APIOptions{
+	if err := RunAPI(cfg, APIOptions{
 		Operation:    "extract",
 		InputPath:    selectorsPath,
 		GoalFilePath: goalPath,
 		Stdout:       &stdout,
 		Stderr:       &stderr,
-	})
-	if err != nil {
-		t.Fatalf("RunAPI() error = %v", err)
+	}); err != nil {
+		t.Fatalf("RunAPI: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "unique.md") || !strings.Contains(stdout.String(), "Truncated") {
-		t.Fatalf("stdout missing external truncated context:\n%s", stdout.String())
+
+	stdoutText := stdout.String()
+	stderrText := stderr.String()
+
+	// --- Ambiguous file diagnostics ----------------------------------------
+	if !strings.Contains(stderrText, "Ambiguous file reference: duplicate.md") {
+		t.Fatalf("stderr missing ambiguity:\n%s", stderrText)
 	}
-	if !strings.Contains(stderr.String(), "Ambiguous file reference: duplicate.md") {
-		t.Fatalf("stderr missing external ambiguity:\n%s", stderr.String())
+
+	// --- Per-file truncation metadata (both valid files exceed perFileLimit) -
+	if !strings.Contains(stderrText, "TRUNCATED") {
+		t.Fatalf("stderr missing truncation:\n%s", stderrText)
 	}
-	if !strings.Contains(stderr.String(), "TRUNCATED") {
-		t.Fatalf("stderr missing size-limit metadata:\n%s", stderr.String())
+
+	// --- Total-limit drop metadata -----------------------------------------
+	if !strings.Contains(stderrText, "DROPPED - EXCEEDS TOTAL LIMIT") {
+		t.Fatalf("stderr missing total-limit drop:\n%s", stderrText)
 	}
-	if !strings.Contains(stderr.String(), "DROPPED - EXCEEDS TOTAL LIMIT") {
-		t.Fatalf("stderr missing total-limit metadata:\n%s", stderr.String())
+	dropped := strings.Count(stderrText, "DROPPED - EXCEEDS TOTAL LIMIT")
+	if dropped != 1 {
+		t.Fatalf("expected 1 dropped file, got %d:\n%s", dropped, stderrText)
 	}
-	if got, err := os.ReadFile(uniquePath); err != nil || !bytes.Equal(got, externalContent) {
-		t.Fatalf("external context after RunAPI() = %q, %v; want unchanged", got, err)
+
+	// The ambiguous request must not be counted as a total-limit drop.
+	for _, line := range strings.Split(stderrText, "\n") {
+		if strings.Contains(line, "duplicate.md") && strings.Contains(line, "DROPPED") {
+			t.Fatalf("ambiguous file must not appear as dropped:\n%s", line)
+		}
+	}
+
+	// --- Surviving file present in stdout ----------------------------------
+	extDisplayPath := "../external-one/unique.md"
+	if !strings.Contains(stdoutText, extDisplayPath) {
+		t.Fatalf("stdout missing surviving file %q:\n%s", extDisplayPath, stdoutText)
+	}
+	if !strings.Contains(stdoutText, "Truncated") {
+		t.Fatalf("stdout missing Truncated label:\n%s", stdoutText)
+	}
+
+	// --- Dropped file absent from stdout (no file block) -------------------
+	if strings.Contains(stdoutText, "--- File: main.go ") {
+		t.Fatalf("stdout contains dropped file section:\n%s", stdoutText)
+	}
+
+	// --- External context file not modified --------------------------------
+	if got, err := os.ReadFile(uniquePath); err != nil || !bytes.Equal(got, extContent) {
+		t.Fatalf("external content after RunAPI = %q, %v; want unchanged", got, err)
 	}
 }
 

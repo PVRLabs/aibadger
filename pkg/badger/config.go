@@ -63,9 +63,9 @@ func DefaultConfig() Config {
 		// MaxPromptTwoBytes is intentionally 0 so that DefaultConfig
 		// callers who set the deprecated MaxTotalContextBytes still get
 		// the legacy override through withDefaults.
-		MaxTotalContextBytes:      workflow.MaxPromptTwoBytes,
-		WhitespaceMode:            string(writer.DefaultWhitespaceMode),
-		MaxFilesPerDirectory:      workflow.MaxFilesPerDirectory,
+		MaxTotalContextBytes: workflow.MaxPromptTwoBytes,
+		WhitespaceMode:       string(writer.DefaultWhitespaceMode),
+		MaxFilesPerDirectory: workflow.MaxFilesPerDirectory,
 	}
 }
 

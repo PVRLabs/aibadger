@@ -90,7 +90,7 @@ const reviewSchemaBConstraint = "\n[TASK]\n%s\n\n[OUTPUT CONSTRAINT]\n" +
 	"2. If no issues are found, state that clearly.\n" +
 	"3. Do not invent patches unless the user explicitly asks for a fix.\n"
 
-const DefaultDesignPrompt = "Design: brainstorm options, tradeoffs, and open questions conversationally.\n\nDescription: "
+const DefaultExplorationTask = "Explore this project with an open mind. Explain what stands out, how its main parts fit together, and surface any interesting opportunities, risks, or improvements worth investigating."
 
 const DefaultFollowupPrompt = "Follow-up for an existing AI chat.\n\nDescription: "
 

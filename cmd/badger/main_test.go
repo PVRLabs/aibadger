@@ -71,6 +71,7 @@ func TestLoadConfigFocusCommand(t *testing.T) {
 		args  []string
 		focus protocol.Focus
 	}{
+		{name: "code", args: []string{"code"}, focus: protocol.FocusCode},
 		{name: "design", args: []string{"design"}, focus: protocol.FocusDesign},
 		{name: "review", args: []string{"review", "--headless"}, focus: protocol.FocusReview},
 		{name: "followup", args: []string{"followup"}, focus: protocol.FocusFollowup},
@@ -82,8 +83,76 @@ func TestLoadConfigFocusCommand(t *testing.T) {
 			if cfg.focus != tt.focus {
 				t.Fatalf("focus = %q, want %q", cfg.focus, tt.focus)
 			}
+			if !cfg.focusExplicit {
+				t.Fatal("focusExplicit = false, want true")
+			}
 		})
 	}
+}
+
+func TestLoadConfigBareFocusIsImplicit(t *testing.T) {
+	cfg := loadConfig(nil)
+	if cfg.focus != "" {
+		t.Fatalf("focus = %q, want empty before interactive default resolution", cfg.focus)
+	}
+	if cfg.focusExplicit {
+		t.Fatal("focusExplicit = true, want false")
+	}
+}
+
+func TestLoadConfigRejectsUnknownCommand(t *testing.T) {
+	cfg := loadConfig([]string{"cod"})
+	if cfg.parseErr == nil {
+		t.Fatal("parseErr = nil, want unknown command error")
+	}
+	if !strings.Contains(cfg.parseErr.Error(), "unknown command: cod") {
+		t.Fatalf("parseErr = %q, want unknown command detail", cfg.parseErr)
+	}
+}
+
+func TestInteractiveFocusDefaultsToDesign(t *testing.T) {
+	if got := interactiveFocus(""); got != protocol.FocusDesign {
+		t.Fatalf("interactiveFocus(\"\") = %q, want %q", got, protocol.FocusDesign)
+	}
+	if got := interactiveFocus(protocol.FocusCode); got != protocol.FocusCode {
+		t.Fatalf("interactiveFocus(code) = %q, want %q", got, protocol.FocusCode)
+	}
+}
+
+func TestApplyInteractiveFocusDistinguishesBareAndExplicitDesign(t *testing.T) {
+	t.Run("bare preserves onboarding", func(t *testing.T) {
+		app := loadConfig(nil)
+		cfg := badger.DefaultConfig()
+
+		applyInteractiveFocus(&cfg, &app)
+
+		if cfg.Focus != protocol.FocusDesign {
+			t.Fatalf("Focus = %q, want %q", cfg.Focus, protocol.FocusDesign)
+		}
+		if cfg.SkipOnboarding {
+			t.Fatal("SkipOnboarding = true, want false for bare startup")
+		}
+		if cfg.Startup.Status.Text != "" {
+			t.Fatalf("Startup.Status.Text = %q, want empty for bare startup", cfg.Startup.Status.Text)
+		}
+	})
+
+	t.Run("explicit design applies startup", func(t *testing.T) {
+		app := loadConfig([]string{"design"})
+		cfg := badger.DefaultConfig()
+
+		applyInteractiveFocus(&cfg, &app)
+
+		if cfg.Focus != protocol.FocusDesign {
+			t.Fatalf("Focus = %q, want %q", cfg.Focus, protocol.FocusDesign)
+		}
+		if !cfg.SkipOnboarding {
+			t.Fatal("SkipOnboarding = false, want true for explicit Design startup")
+		}
+		if cfg.Startup.Status.Text != "Focus set to Design." {
+			t.Fatalf("Startup.Status.Text = %q, want explicit Design status", cfg.Startup.Status.Text)
+		}
+	})
 }
 
 func TestLoadConfigBadgeCommand(t *testing.T) {
@@ -144,8 +213,8 @@ func TestApplyDesignStartupInteractive(t *testing.T) {
 	if !cfg.SkipOnboarding {
 		t.Fatal("SkipOnboarding = false, want true")
 	}
-	if cfg.Startup.Goal != protocol.DefaultDesignPrompt {
-		t.Fatalf("Startup.Goal = %q, want %q", cfg.Startup.Goal, protocol.DefaultDesignPrompt)
+	if cfg.Startup.Goal != "" {
+		t.Fatalf("Startup.Goal = %q, want empty", cfg.Startup.Goal)
 	}
 	if cfg.Startup.Status.Severity != "success" {
 		t.Fatalf("Startup.Status.Severity = %q, want %q", cfg.Startup.Status.Severity, "success")
@@ -158,7 +227,7 @@ func TestApplyDesignStartupInteractive(t *testing.T) {
 	}
 }
 
-func TestApplyDesignStartupHeadless(t *testing.T) {
+func TestApplyDesignStartupAlwaysStartsEmpty(t *testing.T) {
 	cfg := badger.DefaultConfig()
 	cfg.Root = t.TempDir()
 	app := appConfig{
@@ -167,11 +236,8 @@ func TestApplyDesignStartupHeadless(t *testing.T) {
 	}
 
 	applyDesignStartup(&cfg, app)
-	if cfg.Startup.Goal == "" {
-		t.Fatal("headless design startup goal is empty")
-	}
-	if !strings.Contains(cfg.Startup.Goal, "Design") {
-		t.Fatalf("headless design startup goal missing design template:\n%s", cfg.Startup.Goal)
+	if cfg.Startup.Goal != "" {
+		t.Fatalf("Startup.Goal = %q, want empty", cfg.Startup.Goal)
 	}
 }
 

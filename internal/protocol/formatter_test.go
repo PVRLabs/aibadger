@@ -11,6 +11,13 @@ import (
 	"github.com/PVRLabs/aibadger/internal/model"
 )
 
+func TestDefaultExplorationTaskExactWording(t *testing.T) {
+	const want = "Explore this project with an open mind. Explain what stands out, how its main parts fit together, and surface any interesting opportunities, risks, or improvements worth investigating."
+	if DefaultExplorationTask != want {
+		t.Fatalf("DefaultExplorationTask = %q, want %q", DefaultExplorationTask, want)
+	}
+}
+
 func TestGenerateSchemaA(t *testing.T) {
 	formatter := NewFormatter()
 	topology := &model.ProjectTopology{

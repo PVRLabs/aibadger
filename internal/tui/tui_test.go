@@ -82,6 +82,9 @@ func TestNewModelStartsAtHomeWithoutScanning(t *testing.T) {
 	if got := m.goalInput.Height(); got != goalEditorMinHeight {
 		t.Fatalf("goal input height = %d, want %d", got, goalEditorMinHeight)
 	}
+	if got := m.goalInput.Placeholder; got != "Describe the task..." {
+		t.Fatalf("goal input placeholder = %q, want %q", got, "Describe the task...")
+	}
 }
 
 func TestNewModelShowsOnboardingForMissingSettings(t *testing.T) {
@@ -231,7 +234,7 @@ func TestNewModelAppliesStartupReviewGoalAndSkipsOnboarding(t *testing.T) {
 func TestNewModelAppliesStartupDesignGoalWithEnoughHeight(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SettingsPath = filepath.Join(t.TempDir(), ".badger", "settings.json")
-	cfg.Startup.Goal = protocol.DefaultDesignPrompt
+	cfg.Startup.Goal = "design startup goal"
 	cfg.Startup.Status = startup.Status{
 		Text:     "Focus set to Design. Edit the goal before submitting.",
 		Severity: "success",
@@ -246,8 +249,26 @@ func TestNewModelAppliesStartupDesignGoalWithEnoughHeight(t *testing.T) {
 	if got := m.goalInput.Value(); got != cfg.Startup.Goal {
 		t.Fatalf("goal input = %q, want %q", got, cfg.Startup.Goal)
 	}
-	if got := m.goalInput.Height(); got != 4 {
-		t.Fatalf("goal input height = %d, want 4", got)
+	if got := m.goalInput.Height(); got != 2 {
+		t.Fatalf("goal input height = %d, want 2", got)
+	}
+}
+
+func TestNewModelAppliesEmptyDesignStartupStatus(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusDesign
+	cfg.SkipOnboarding = true
+	cfg.Startup.Status = startup.Status{Text: "Focus set to Design.", Severity: "success"}
+
+	m := NewModel("/tmp/project", cfg)
+	if m.state != stateHome {
+		t.Fatalf("state = %v, want %v", m.state, stateHome)
+	}
+	if m.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty", m.goalInput.Value())
+	}
+	if m.status.text != cfg.Startup.Status.Text {
+		t.Fatalf("status = %q, want %q", m.status.text, cfg.Startup.Status.Text)
 	}
 }
 
@@ -881,8 +902,8 @@ func TestHomeViewRendersLargePastedGoalCompactly(t *testing.T) {
 		}
 	}
 	for _, unwanted := range []string{
-		"Type a goal, paste a diff, or use /review, /design, /followup, or /badge, then press Enter.",
-		"Commands: /help, /review, /design, /followup, /badge, /exit",
+		"Type a goal, paste a diff, or use /code, /review, /design, /followup, or /badge, then press Enter.",
+		"Commands: /help, /code, /review, /design, /followup, /badge, /exit",
 		"Tag files with @path/to/file, then press Tab.",
 		"Preview:",
 	} {
@@ -1139,6 +1160,126 @@ func TestSubmitGoalTreatsModelCommandAsGoal(t *testing.T) {
 	}
 }
 
+func TestSubmitGoalEmptyDesignStartsExploration(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusDesign
+	m := NewModel("/tmp/project", cfg)
+	m.status = successMessage("Focus set to Design.")
+
+	next, cmd := m.submitGoal()
+	got := next.(Model)
+	if got.state != stateScanning {
+		t.Fatalf("state = %v, want %v", got.state, stateScanning)
+	}
+	if got.goal != protocol.DefaultExplorationTask {
+		t.Fatalf("goal = %q, want %q", got.goal, protocol.DefaultExplorationTask)
+	}
+	if !got.status.empty() {
+		t.Fatalf("status = %#v, want empty", got.status)
+	}
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty", got.goalInput.Value())
+	}
+	if cmd == nil {
+		t.Fatal("empty Design submission returned nil scan command")
+	}
+}
+
+func TestSubmitGoalEmptyCodeIsNoOp(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+
+	next, cmd := m.submitGoal()
+	got := next.(Model)
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if cmd != nil {
+		t.Fatal("empty Code submission returned a command")
+	}
+}
+
+func TestSubmitGoalEmptyReviewAndFollowupAreNoOps(t *testing.T) {
+	for _, focus := range []protocol.Focus{protocol.FocusReview, protocol.FocusFollowup} {
+		t.Run(focus.String(), func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Focus = focus
+			m := NewModel("/tmp/project", cfg)
+
+			next, cmd := m.submitGoal()
+			got := next.(Model)
+			if got.state != stateHome {
+				t.Fatalf("state = %v, want %v", got.state, stateHome)
+			}
+			if got.goal != "" {
+				t.Fatalf("goal = %q, want empty", got.goal)
+			}
+			if cmd != nil {
+				t.Fatal("empty submission returned a command")
+			}
+		})
+	}
+}
+
+func TestSubmitGoalTypedDesignInputIsUnchanged(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusDesign
+	m := NewModel("/tmp/project", cfg)
+	m.setGoalInputValue("Design a cache with bounded memory.")
+
+	next, cmd := m.submitGoal()
+	got := next.(Model)
+	if got.goal != "Design a cache with bounded memory." {
+		t.Fatalf("goal = %q, want typed Design input unchanged", got.goal)
+	}
+	if strings.Contains(got.goal, protocol.DefaultExplorationTask) {
+		t.Fatalf("goal unexpectedly contains exploration task: %q", got.goal)
+	}
+	if cmd == nil {
+		t.Fatal("typed Design submission returned nil scan command")
+	}
+}
+
+func TestSubmitGoalAttachmentOnlyDesignDoesNotExplore(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusDesign
+	m := NewModel("/tmp/project", cfg)
+	m.setGoalAttachments([]goalAttachment{newGoalTextAttachment("paste", "context")})
+
+	next, cmd := m.submitGoal()
+	got := next.(Model)
+	if got.state != stateScanning {
+		t.Fatalf("state = %v, want %v", got.state, stateScanning)
+	}
+	if got.goal == protocol.DefaultExplorationTask || strings.Contains(got.goal, protocol.DefaultExplorationTask) {
+		t.Fatalf("goal unexpectedly contains exploration task: %q", got.goal)
+	}
+	if !strings.Contains(got.goal, "context") {
+		t.Fatalf("goal = %q, want attachment context", got.goal)
+	}
+	if cmd == nil {
+		t.Fatal("attachment-only Design submission returned nil scan command")
+	}
+}
+
+func TestSubmitGoalCodeCommandClearsEditorAndAttachments(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.setGoalInputValue("old goal")
+	m.setGoalAttachments([]goalAttachment{newGoalTextAttachment("paste", "context")})
+
+	m.setGoalInputValue(codeCommand)
+	next, cmd := m.submitGoal()
+	got := next.(Model)
+	if got.cfg.Focus != protocol.FocusCode {
+		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusCode)
+	}
+	if got.goalInput.Value() != "" || len(got.goalAttachments) != 0 {
+		t.Fatalf("editor/attachments not cleared: goal=%q attachments=%d", got.goalInput.Value(), len(got.goalAttachments))
+	}
+	if cmd == nil {
+		t.Fatal("/code returned nil blink command")
+	}
+}
+
 func TestSubmitGoalExitCommandQuits(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/exit")
@@ -1182,6 +1323,7 @@ func TestSubmitGoalHelpCommandShowsHelp(t *testing.T) {
 	for _, want := range []string{
 		"Tab            Complete / commands and @ files.",
 		"@path/to/file",
+		"/code     - Start code mode",
 		"/review   - Start review mode",
 		"/followup - Start follow-up mode",
 		"/badge    - Show GitHub stargazer scoreboard",
@@ -1680,8 +1822,8 @@ func TestSubmitGoalDesignCommandSwitchesFocus(t *testing.T) {
 	if got.state != stateHome {
 		t.Fatalf("state = %v, want %v", got.state, stateHome)
 	}
-	if got.goalInput.Value() != protocol.DefaultDesignPrompt {
-		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), protocol.DefaultDesignPrompt)
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty", got.goalInput.Value())
 	}
 	if !strings.Contains(got.status.text, "Focus set to Design.") {
 		t.Fatalf("status = %q, want focus confirmation", got.status.text)
@@ -1752,10 +1894,10 @@ func TestHomeViewSurfacesReviewUseCase(t *testing.T) {
 
 	view := m.View()
 
-	if !strings.Contains(view, "Type a goal, paste a diff, or use /review, /design, /followup, or /badge, then press Enter.") {
+	if !strings.Contains(view, "Type a goal, paste a diff, or use /code, /review, /design, /followup, or /badge, then press Enter.") {
 		t.Fatalf("home view missing review goal guidance:\n%s", view)
 	}
-	if !strings.Contains(view, "Commands: /help, /review, /design, /followup, /badge, /exit") {
+	if !strings.Contains(view, "Commands: /help, /code, /review, /design, /followup, /badge, /exit") {
 		t.Fatalf("home view missing review command:\n%s", view)
 	}
 	for _, want := range []string{
@@ -1778,6 +1920,8 @@ func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 	for _, want := range []string{
 		"/help",
 		"Show commands and keyboard shortcuts.",
+		"/code",
+		"Switch the active focus to Code.",
 		"/review",
 		"Seed an editable review prompt from the current Git working tree.",
 		"/design",
@@ -1792,6 +1936,30 @@ func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Fatalf("home view missing slash suggestion %q:\n%s", want, view)
 		}
+	}
+}
+
+func TestCodeSlashCommandSuggestionFiltersAndExecutes(t *testing.T) {
+	m := NewModel("/tmp/project", DefaultConfig())
+	m.cfg.Focus = protocol.FocusDesign
+	m.goalInput.SetValue("/c")
+	m.refreshCompletionCandidate()
+
+	suggestions := m.viewSlashCommandSuggestions()
+	if !strings.Contains(suggestions, "/code") {
+		t.Fatalf("filtered suggestions missing /code:\n%s", suggestions)
+	}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	got := next.(Model)
+	if got.cfg.Focus != protocol.FocusCode {
+		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusCode)
+	}
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty", got.goalInput.Value())
+	}
+	if cmd == nil {
+		t.Fatal("code completion returned nil blink command")
 	}
 }
 
@@ -1892,8 +2060,8 @@ func TestDesignCompletionTabThenEnterSwitchesFocus(t *testing.T) {
 	if !strings.Contains(got.status.text, "Focus set to Design.") {
 		t.Fatalf("status = %q, want focus confirmation", got.status.text)
 	}
-	if got.goalInput.Value() != protocol.DefaultDesignPrompt {
-		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), protocol.DefaultDesignPrompt)
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty", got.goalInput.Value())
 	}
 	if cmd == nil {
 		t.Fatal("design action returned unexpected nil command")
@@ -1918,8 +2086,8 @@ func TestDesignCompletionEnterThenEnterSwitchesFocus(t *testing.T) {
 	if !strings.Contains(got.status.text, "Focus set to Design.") {
 		t.Fatalf("status = %q, want focus confirmation", got.status.text)
 	}
-	if got.goalInput.Value() != protocol.DefaultDesignPrompt {
-		t.Fatalf("goal input = %q, want %q", got.goalInput.Value(), protocol.DefaultDesignPrompt)
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty", got.goalInput.Value())
 	}
 	if cmd == nil {
 		t.Fatal("design action returned unexpected nil command")

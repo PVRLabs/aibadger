@@ -111,8 +111,8 @@ func (m Model) viewHome() string {
 	}
 
 	var lines []string
-	lines = append(lines, "Type a goal, paste a diff, or use /review, /design, /followup, or /badge, then press Enter.")
-	lines = append(lines, "Commands: /help, /review, /design, /followup, /badge, /exit")
+	lines = append(lines, "Type a goal, paste a diff, or use /code, /review, /design, /followup, or /badge, then press Enter.")
+	lines = append(lines, "Commands: /help, /code, /review, /design, /followup, /badge, /exit")
 	lines = append(lines, "Tag files with @path/to/file, then press Tab.")
 	lines = append(lines, "")
 	lines = append(lines, m.viewGoalInputSection())
@@ -190,6 +190,7 @@ func (m Model) renderCompletionSuggestions(candidate completionCandidate) string
 func (m Model) slashCommandSuggestions() []slashCommandSuggestion {
 	suggestions := []slashCommandSuggestion{
 		{command: helpCommand, description: "Show commands and keyboard shortcuts."},
+		{command: codeCommand, description: "Switch the active focus to Code."},
 		{command: reviewCommand, description: "Seed an editable review prompt from the current Git working tree."},
 		{command: designCommand, description: "Switch the active focus to Design."},
 		{command: followupCommand, description: "Switch the active focus to Follow-up."},
@@ -381,6 +382,7 @@ func (m Model) viewHelp() string {
 		"Commands",
 		"",
 		"/help     - Show this help",
+		"/code     - Start code mode",
 		"/review   - Start review mode",
 		"/design   - Start design mode",
 		"/followup - Start follow-up mode",

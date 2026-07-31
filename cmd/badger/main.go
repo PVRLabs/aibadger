@@ -16,6 +16,7 @@ type appConfig struct {
 	headless         bool
 	showBadge        bool
 	focus            protocol.Focus
+	focusExplicit    bool
 	reviewMode       reviewtask.Mode
 	reviewRef        string
 	reviewExtraFocus string
@@ -65,7 +66,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-
 	// Profile mode: start CPU profiling if --cpuprofile flag provided
 	var cpuprofile *os.File
 	if profileBuild && cfg.cpuprofile != "" {
@@ -85,7 +85,7 @@ func main() {
 
 	badgerCfg := badger.DefaultConfig()
 	badgerCfg.BuildInfo = buildInfoLine()
-	badgerCfg.Focus = protocol.NormalizeFocus(cfg.focus)
+	applyInteractiveFocus(&badgerCfg, &cfg)
 	if cfg.showBadge {
 		if err := applyBadgeStartup(&cfg, &badgerCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -104,9 +104,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-	}
-	if cfg.focus == protocol.FocusDesign {
-		applyDesignStartup(&badgerCfg, cfg)
 	}
 	if cfg.focus == protocol.FocusFollowup {
 		applyFollowupStartup(&badgerCfg, cfg)
@@ -257,6 +254,21 @@ func loadConfig(args []string) appConfig {
 	return cfg
 }
 
+func interactiveFocus(focus protocol.Focus) protocol.Focus {
+	if focus == "" {
+		return protocol.FocusDesign
+	}
+	return focus
+}
+
+func applyInteractiveFocus(cfg *badger.Config, app *appConfig) {
+	app.focus = interactiveFocus(app.focus)
+	cfg.Focus = protocol.NormalizeFocus(app.focus)
+	if app.focus == protocol.FocusDesign && app.focusExplicit {
+		applyDesignStartup(cfg, *app)
+	}
+}
+
 func stripFocusCommand(args []string, cfg *appConfig) []string {
 	for i, arg := range args {
 		if arg == "--" {
@@ -268,6 +280,7 @@ func stripFocusCommand(args []string, cfg *appConfig) []string {
 		switch arg {
 		case string(protocol.FocusCode), string(protocol.FocusReview), string(protocol.FocusDesign), string(protocol.FocusFollowup):
 			cfg.focus = protocol.Focus(arg)
+			cfg.focusExplicit = true
 			return append(append([]string(nil), args[:i]...), args[i+1:]...)
 		case "badge":
 			cfg.showBadge = true
@@ -386,6 +399,9 @@ func parseArgs(args []string, cfg *appConfig) error {
 	if cfg.showBadge && len(positional) > 0 {
 		return fmt.Errorf("badge command does not accept arguments")
 	}
+	if cfg.focus != protocol.FocusReview && len(positional) > 0 {
+		return fmt.Errorf("unknown command: %s", positional[0])
+	}
 
 	return nil
 }
@@ -445,9 +461,9 @@ func validateHeadlessMode(cfg appConfig) error {
 func applyDesignStartup(cfg *badger.Config, app appConfig) {
 	cfg.SkipOnboarding = true
 	cfg.Startup = badger.StartupContext{
-		Goal: protocol.DefaultDesignPrompt,
+		Goal: "",
 		Status: badger.StartupStatus{
-			Text:     "Focus set to Design. Edit the goal before submitting.",
+			Text:     "Focus set to Design.",
 			Severity: "success",
 		},
 	}
@@ -519,7 +535,7 @@ func isFlagArg(arg, name string) bool {
 }
 
 func printUsage(cfg appConfig) {
-	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design|followup] [--help]\n  badger [code|review|design|followup] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger api --help\n  badger api topology --root <project>\n  badger api prompt --root <project> --focus <code|design> --input <goal-file>\n  badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nThe api commands are non-interactive and write directly usable prompt text to stdout.\nStandard runs start the interactive BYOL workflow for the current directory.\nThe default focus is Code; use badger review, badger design, or badger followup to start in a different focus.\n`badger review` preloads an editable review prompt from the current Git working tree. Default mode includes staged and unstaged tracked changes plus up to 25 relevant Git-untracked paths in a separate section; it never includes untracked file contents, and untracked paths alone are valid review context. `--staged`, `--branch <ref>`, and `--commit <sha>` exclude working-tree untracked files. If no reviewable changes are available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
+	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design|followup] [--help]\n  badger [code|review|design|followup] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger api --help\n  badger api topology --root <project>\n  badger api prompt --root <project> --focus <code|design> --input <goal-file>\n  badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nThe api commands are non-interactive and write directly usable prompt text to stdout.\nStandard runs start the interactive BYOL workflow for the current directory.\nDesign is the default interactive focus; use badger code, badger review, badger design, or badger followup to start explicitly.\n`badger review` preloads an editable review prompt from the current Git working tree. Default mode includes staged and unstaged tracked changes plus up to 25 relevant Git-untracked paths in a separate section; it never includes untracked file contents, and untracked paths alone are valid review context. `--staged`, `--branch <ref>`, and `--commit <sha>` exclude working-tree untracked files. If no reviewable changes are available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
 
 	// Show note about dev flags in release builds
 	if releaseBuild {

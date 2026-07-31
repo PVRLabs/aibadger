@@ -57,6 +57,7 @@ const (
 	tuiRendererFPS  = 10
 	helpCommand     = "/help"
 	reviewCommand   = "/review"
+	codeCommand     = "/code"
 	designCommand   = "/design"
 	followupCommand = "/followup"
 	badgeCommand    = "/badge"
@@ -228,7 +229,7 @@ func NewModel(root string, cfg Config) Model {
 		m.session.WhitespaceMode = cfg.WhitespaceMode
 	}
 	m.onboardingCompletionSaved = onboardingCompleted
-	if m.cfg.Startup.Goal != "" {
+	if m.cfg.Startup.Goal != "" || m.cfg.Startup.Status.Text != "" || len(m.cfg.Startup.Attachments) > 0 {
 		m.applyStartupGoal()
 	}
 	if showOnboarding && !m.cfg.SkipOnboarding && m.cfg.Startup.Goal == "" {
@@ -594,7 +595,10 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 	instruction := strings.TrimSpace(m.goalInput.Value())
 	goal := assembleGoalSubmission(instruction, m.goalAttachments)
 	if goal == "" {
-		return m, nil
+		if protocol.NormalizeFocus(m.cfg.Focus) != protocol.FocusDesign || instruction != "" || len(m.goalAttachments) != 0 {
+			return m, nil
+		}
+		goal = protocol.DefaultExplorationTask
 	}
 	if instruction == m.cfg.ExitCommand {
 		return m, tea.Quit
@@ -610,6 +614,9 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 	}
 	if instruction == designCommand {
 		return m.handleDesignCommand()
+	}
+	if instruction == codeCommand {
+		return m.handleCodeCommand()
 	}
 	if instruction == followupCommand {
 		return m.handleFollowupCommand()
@@ -631,7 +638,19 @@ func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
 	m.cfg.Focus = protocol.FocusDesign
 	m.status = successMessage("Focus set to Design.")
 	m.err = nil
-	m.setGoalInputValue(protocol.DefaultDesignPrompt)
+	m.setGoalInputValue("")
+	m.setGoalAttachments(nil)
+	m.resizeGoalEditor()
+	m.completion.suppressedKey = ""
+	m.focusGoalEditor()
+	return m, textarea.Blink
+}
+
+func (m Model) handleCodeCommand() (tea.Model, tea.Cmd) {
+	m.cfg.Focus = protocol.FocusCode
+	m.status = successMessage("Focus set to Code.")
+	m.err = nil
+	m.setGoalInputValue("")
 	m.setGoalAttachments(nil)
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""

@@ -4,6 +4,19 @@ Badger bridges your local project and an AI chat in a three-step exchange: **Map
 
 The goal editor may carry separate removable attachments, such as large pasted diffs or supporting notes. Those attachments stay outside the typed instruction surface and are assembled only when the goal is submitted.
 
+Bare/default interactive startup selects Design focus. When an interactive
+Design submission is empty, with no attachments, Badger uses this internal
+exploratory task and proceeds through the normal Map → Extract flow:
+
+```text
+Explore this project with an open mind. Explain what stands out, how its main parts fit together, and surface any interesting opportunities, risks, or improvements worth investigating.
+```
+
+The exploratory task is not displayed in the editor beforehand. Code remains
+explicit through `badger code` or `/code`; non-interactive API callers continue
+to select `--focus <code|design>` explicitly. Typed goals and attachment-only
+submissions retain their supplied content.
+
 ## Step 1: Map
 
 **Prompt 1 (Map)** — the project topology — has this structure:

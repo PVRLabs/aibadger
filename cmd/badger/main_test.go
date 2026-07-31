@@ -447,6 +447,8 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 		"badger api prompt --root <project> --focus <code|design> --input <goal-file>",
 		"badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>",
 		"The api commands are non-interactive and write directly usable prompt text to stdout.",
+		"Design is the default interactive focus; use badger code, badger review, badger design, or badger followup to start explicitly.",
+		"/code switches an interactive session to Code focus and /design switches it to Design focus.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("printUsage output missing %q:\n%s", want, out)

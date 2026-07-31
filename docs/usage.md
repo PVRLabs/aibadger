@@ -54,16 +54,35 @@ Copy Prompt 2 and paste it into your AI chat. The AI now has both the project st
 
 Paste the AI's full response into Badger. Badger parses any file changes, shows you a write plan listing what will be written to each file, and asks for confirmation. Review the plan and confirm to apply.
 
+## Explore a project with no initial goal
+
+Run `badger` without arguments to start in Design focus. Leave the editor empty
+and press Enter. Badger silently uses this internal exploratory task and enters
+the normal Map → Extract flow:
+
+```text
+Explore this project with an open mind. Explain what stands out, how its main parts fit together, and surface any interesting opportunities, risks, or improvements worth investigating.
+```
+
+The task is not shown in the editor before submission. The editor remains
+visually empty and keeps the placeholder `Describe the task...`.
+
 ## Manual mode
 
-If you're not doing a code review, run `badger` without arguments:
+If you want an open-ended project exploration, run `badger` without arguments.
+For an implementation-oriented task, start in Code focus with `badger code` or
+enter `/code` at the home screen:
 
 ```bash
 cd your-project
-badger
+badger code
 ```
 
-Type a goal at the prompt. You can also paste a git diff or other supporting text if you want to provide details of the change; large pasted context may be kept as a removable attachment so the goal stays readable.
+Type a goal at the prompt. You can also paste a git diff or other supporting
+text if you want to provide details of the change; large pasted context may be
+kept as a removable attachment so the goal stays readable. To use the
+zero-input Design exploration, return home, enter `/design`, and leave the
+editor empty before pressing Enter.
 
 > [!TIP]
 > Badger never reads your source code ahead of time — you explicitly provide context (like a diff or error output) so only what's needed leaves your machine.
@@ -91,6 +110,10 @@ Type or paste one of these as the initial goal in Badger.
 
 ### Find Bugs Or Performance Issues
 
+```bash
+badger code
+```
+
 ```text
 Look for correctness bugs, edge cases, and performance issues in the request extraction flow.
 Start from the relevant entrypoints and ask for only the files or spans needed.
@@ -108,6 +131,10 @@ and concurrency model. See @docs/api-spec.md for the current client contract.
 ```
 
 ### Troubleshoot Build Errors
+
+```bash
+badger code
+```
 
 ```text
 Help me fix this Maven test output.
@@ -128,6 +155,10 @@ Start with the main entrypoints and request only the files needed to trace the l
 
 ### Make A Focused Implementation Request
 
+```bash
+badger code
+```
+
 ```text
 Add validation so empty project names are rejected before saving.
 Keep the change small and include any tests that should change.
@@ -136,8 +167,9 @@ Keep the change small and include any tests that should change.
 ## Commands
 
 - `/help`: show the interactive command reference.
+- `/code`: switch the active focus to Code and clear the current goal and attachments.
 - `/review`: seed an editable review prompt from the current Git working tree. It reuses the same review flow as `badger review`.
-- `/design`: switch the active focus to Design. The active focus appears in the status bar as `Focus: Design` and the prompt seeds a short, conversational brainstorm.
+- `/design`: switch the active focus to Design and clear the current goal and attachments. Press Enter with the empty editor to start the zero-input exploration.
 - `/followup`: switch the active focus to Follow-up. The active focus appears in the status bar as `Focus: Follow-up` and the prompt seeds a short follow-up framing.
 - `/exit`: quit Badger.
 
@@ -145,8 +177,9 @@ To start in a specific focus from the command line, pass the focus name as the
 first argument:
 
 ```bash
-badger            # Code focus (default)
-badger design     # Design focus — prompt seeds a short, conversational brainstorm
+badger            # Design focus (default); empty Enter starts exploration
+badger code       # Code focus
+badger design     # Design focus — starts with an empty editor
 badger review     # Review focus — prompt is prefilled from the current Git working tree
 badger followup   # Follow-up focus — prompt seeds a short follow-up framing
 ```

@@ -62,16 +62,17 @@ See [docs/install.md](docs/install.md) for Windows, source builds, and more.
 
 ## Quick Start
 
-1. Run `badger` in your project root.
-2. Type your goal (or paste a git diff).
+1. Run `badger` in your project root. Interactive sessions start in Design focus.
+2. Type your goal (or leave the editor empty and press Enter to explore the project).
 3. Copy **Prompt 1** → paste into your AI chat.
 4. When the AI asks for files, copy its response → paste back into Badger.
 5. Copy **Prompt 2** → paste back to the AI.
 6. Paste the AI’s response into Badger → review and apply changes.
 
 ### Specialized Modes
+- `badger code` — explicitly start in Code focus
 - `badger review` — Git diff pre-loaded for code reviews
-- `badger design` — Architecture and planning focus
+- `badger design` — explicitly start in Design focus with an empty editor
 
 Full usage: [docs/usage.md](docs/usage.md)
 

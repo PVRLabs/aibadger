@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "initial_payload": {
+    "mandatory_diff": true,
+    "topology": "omitted",
+    "max_payload_bytes": 524288,
+    "max_optional_file_bytes": 65536,
+    "mandatory_overflow": "fail",
+    "optional_overflow": "diff_only"
+  },
+  "modes": [
+    {
+      "mode": "default",
+      "authoritative_diff": "HEAD_to_worktree",
+      "includes_untracked_full_additions": true,
+      "accepts_selected_paths": true
+    },
+    {
+      "mode": "staged",
+      "authoritative_diff": "HEAD_to_index",
+      "includes_untracked_full_additions": false,
+      "accepts_selected_paths": false
+    },
+    {
+      "mode": "branch",
+      "authoritative_diff": "merge_base_to_HEAD",
+      "includes_untracked_full_additions": false,
+      "accepts_selected_paths": false
+    },
+    {
+      "mode": "commit",
+      "authoritative_diff": "requested_commit",
+      "includes_untracked_full_additions": false,
+      "accepts_selected_paths": false
+    }
+  ],
+  "optional_file_policy": [
+    {
+      "change": "modified_text",
+      "full_file": "eligible"
+    },
+    {
+      "change": "renamed_text_destination",
+      "full_file": "eligible"
+    },
+    {
+      "change": "added",
+      "full_file": "diff_only_complete_in_patch"
+    },
+    {
+      "change": "untracked",
+      "full_file": "diff_only_complete_in_patch"
+    },
+    {
+      "change": "deleted",
+      "full_file": "diff_only_deleted"
+    },
+    {
+      "change": "binary",
+      "full_file": "diff_only_binary"
+    },
+    {
+      "change": "sensitive",
+      "full_file": "diff_only_sensitive"
+    },
+    {
+      "change": "oversized",
+      "full_file": "diff_only_oversized"
+    },
+    {
+      "change": "unreadable_or_non_regular",
+      "full_file": "diff_only_unavailable"
+    },
+    {
+      "change": "changed_during_read",
+      "full_file": "diff_only_changed_during_read"
+    },
+    {
+      "change": "total_budget_exhausted",
+      "full_file": "diff_only_budget"
+    }
+  ],
+  "selected_paths": {
+    "form": "repository_relative_literal",
+    "ordering": "normalized_lexical",
+    "deduplicate": true,
+    "deleted_changed_path": "accept",
+    "missing_unchanged_path": "reject_stale",
+    "absolute_path": "reject",
+    "empty_or_root_path": "reject",
+    "traversal": "reject",
+    "cross_repository": "reject"
+  },
+  "supporting_content_source": "current_checked_out_worktree",
+  "generation": "one_repository_inspection_per_explicit_request",
+  "prompt_intent": "report_findings_now_request_selectors_only_if_needed"
+}

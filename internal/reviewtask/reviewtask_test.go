@@ -150,6 +150,86 @@ func TestBuildDefaultTrackedChangesOnly(t *testing.T) {
 	}
 }
 
+func TestBuildDefaultUsesCurrentWorktreeAcrossStagedAndUnstagedChanges(t *testing.T) {
+	repo := newGitRepo(t)
+	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"staged\") }\n")
+	runGitCmd(t, repo, "add", "app.go")
+	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"current worktree\") }\n")
+
+	task := buildTask(t, repo, Options{Mode: ModeDefault})
+
+	if task.FailureClassification != FailureNone {
+		t.Fatalf("FailureClassification = %q, want %q", task.FailureClassification, FailureNone)
+	}
+	if !strings.Contains(task.Diff, `println("current worktree")`) {
+		t.Fatalf("default diff missing current worktree content:\n%s", task.Diff)
+	}
+	if strings.Contains(task.Diff, `println("staged")`) {
+		t.Fatalf("default diff stopped at the staged image:\n%s", task.Diff)
+	}
+}
+
+func TestBuildStagedUsesIndexAndIgnoresLaterWorktreeContent(t *testing.T) {
+	repo := newGitRepo(t)
+	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"staged\") }\n")
+	runGitCmd(t, repo, "add", "app.go")
+	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"unstaged\") }\n")
+
+	task := buildTask(t, repo, Options{Mode: ModeStaged})
+
+	if task.FailureClassification != FailureNone {
+		t.Fatalf("FailureClassification = %q, want %q", task.FailureClassification, FailureNone)
+	}
+	if !strings.Contains(task.Diff, `println("staged")`) {
+		t.Fatalf("staged diff missing index content:\n%s", task.Diff)
+	}
+	if strings.Contains(task.Diff, `println("unstaged")`) {
+		t.Fatalf("staged diff included later worktree content:\n%s", task.Diff)
+	}
+}
+
+func TestBuildBranchUsesMergeBaseToHeadAndIgnoresWorktreeContent(t *testing.T) {
+	repo := newGitRepo(t)
+	runGitCmd(t, repo, "checkout", "-b", "feature")
+	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"feature commit\") }\n")
+	runGitCmd(t, repo, "add", "app.go")
+	runGitCmd(t, repo, "commit", "-m", "feature change")
+	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"dirty worktree\") }\n")
+
+	task := buildTask(t, repo, Options{Mode: ModeBranch, Ref: "main"})
+
+	if task.FailureClassification != FailureNone {
+		t.Fatalf("FailureClassification = %q, want %q", task.FailureClassification, FailureNone)
+	}
+	if !strings.Contains(task.Diff, `println("feature commit")`) {
+		t.Fatalf("branch diff missing committed HEAD content:\n%s", task.Diff)
+	}
+	if strings.Contains(task.Diff, `println("dirty worktree")`) {
+		t.Fatalf("branch diff included worktree content:\n%s", task.Diff)
+	}
+}
+
+func TestBuildCommitUsesOnlyRequestedCommitAndIgnoresWorktreeContent(t *testing.T) {
+	repo := newGitRepo(t)
+	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"reviewed commit\") }\n")
+	runGitCmd(t, repo, "add", "app.go")
+	runGitCmd(t, repo, "commit", "-m", "reviewed change")
+	reviewedCommit := strings.TrimSpace(runGitCmd(t, repo, "rev-parse", "HEAD"))
+	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"later worktree\") }\n")
+
+	task := buildTask(t, repo, Options{Mode: ModeCommit, Ref: reviewedCommit})
+
+	if task.FailureClassification != FailureNone {
+		t.Fatalf("FailureClassification = %q, want %q", task.FailureClassification, FailureNone)
+	}
+	if !strings.Contains(task.Diff, `println("reviewed commit")`) {
+		t.Fatalf("commit diff missing requested commit content:\n%s", task.Diff)
+	}
+	if strings.Contains(task.Diff, `println("later worktree")`) {
+		t.Fatalf("commit diff included worktree content:\n%s", task.Diff)
+	}
+}
+
 func TestBuildDefaultTrackedDiffSurvivesUntrackedDiscoveryFailure(t *testing.T) {
 	repo := newGitRepo(t)
 	writeTrackedFile(t, repo, "app.go", "package main\n\nfunc main() { println(\"tracked\") }\n")

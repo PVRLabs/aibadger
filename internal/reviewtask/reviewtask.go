@@ -62,6 +62,9 @@ type Options struct {
 	Mode       Mode
 	Ref        string
 	ExtraFocus string
+	// SelectedPaths narrows default working-tree review to literal,
+	// repository-relative changed paths. Other modes reject selected paths.
+	SelectedPaths []string
 }
 
 // Task is the editable review prompt payload prepared for the caller.
@@ -183,6 +186,9 @@ func (t Task) HeadlessGoal() (string, error) {
 
 // Build prepares a review prompt from the requested diff mode.
 func Build(root string, opts Options) (Task, error) {
+	if len(opts.SelectedPaths) > 0 {
+		return Task{}, errors.New("selected paths require structured review context")
+	}
 	return build(root, opts, discoverUntrackedFiles)
 }
 
@@ -251,6 +257,9 @@ func build(root string, opts Options, discoverUntracked untrackedDiscoverer) (Ta
 }
 
 func validateOptions(opts Options) error {
+	if len(opts.SelectedPaths) > 0 && opts.Mode != ModeDefault {
+		return fmt.Errorf("review mode %s does not accept selected paths", opts.Mode)
+	}
 	switch opts.Mode {
 	case ModeDefault, ModeStaged:
 		if strings.TrimSpace(opts.Ref) != "" {

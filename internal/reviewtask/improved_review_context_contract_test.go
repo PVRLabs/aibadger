@@ -26,6 +26,12 @@ type improvedReviewContextContract struct {
 		MissingUnchangedPath string `json:"missing_unchanged_path"`
 		Traversal            string `json:"traversal"`
 	} `json:"selected_paths"`
+	RepositoryUntracked struct {
+		Content           string `json:"content"`
+		MaxPaths          int    `json:"max_paths"`
+		OmittedCount      bool   `json:"omitted_count"`
+		ExplicitSelection string `json:"explicit_selection"`
+	} `json:"repository_untracked"`
 	SupportingContentSource string `json:"supporting_content_source"`
 	Generation              string `json:"generation"`
 	PromptIntent            string `json:"prompt_intent"`
@@ -42,8 +48,8 @@ func TestImprovedReviewContextContractFixture(t *testing.T) {
 		t.Fatalf("parse contract fixture: %v", err)
 	}
 
-	if contract.Version != 1 {
-		t.Fatalf("contract version = %d, want 1", contract.Version)
+	if contract.Version != 2 {
+		t.Fatalf("contract version = %d, want 2", contract.Version)
 	}
 	if !contract.InitialPayload.MandatoryDiff || contract.InitialPayload.MandatoryOverflow != "fail" {
 		t.Fatalf("mandatory diff policy = %+v, want complete-or-fail", contract.InitialPayload)
@@ -86,6 +92,12 @@ func TestImprovedReviewContextContractFixture(t *testing.T) {
 		contract.SelectedPaths.MissingUnchangedPath != "reject_stale" ||
 		contract.SelectedPaths.Traversal != "reject" {
 		t.Fatalf("selected-path policy is incomplete: %+v", contract.SelectedPaths)
+	}
+	if contract.RepositoryUntracked.Content != "paths_only" ||
+		contract.RepositoryUntracked.MaxPaths != 25 ||
+		!contract.RepositoryUntracked.OmittedCount ||
+		contract.RepositoryUntracked.ExplicitSelection != "paths_only" {
+		t.Fatalf("repository-untracked policy is incomplete: %+v", contract.RepositoryUntracked)
 	}
 	if contract.SupportingContentSource != "current_checked_out_worktree" {
 		t.Fatalf("supporting content source = %q", contract.SupportingContentSource)

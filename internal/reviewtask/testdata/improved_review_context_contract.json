@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "initial_payload": {
     "mandatory_diff": true,
     "topology": "omitted",
@@ -12,7 +12,9 @@
     {
       "mode": "default",
       "authoritative_diff": "HEAD_to_worktree",
-      "includes_untracked_full_additions": true,
+      "includes_untracked_full_additions": false,
+      "selected_untracked": "paths_only",
+      "repository_untracked": "ranked_paths_only",
       "accepts_selected_paths": true
     },
     {
@@ -90,6 +92,13 @@
     "empty_or_root_path": "reject",
     "traversal": "reject",
     "cross_repository": "reject"
+  },
+  "repository_untracked": {
+    "content": "paths_only",
+    "ordering": "review_priority_then_modification_time_then_path",
+    "max_paths": 25,
+    "omitted_count": true,
+    "explicit_selection": "paths_only"
   },
   "supporting_content_source": "current_checked_out_worktree",
   "generation": "one_repository_inspection_per_explicit_request",

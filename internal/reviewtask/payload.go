@@ -94,7 +94,7 @@ const (
 type stableFileReader func(string, int) ([]byte, stableFileOutcome)
 
 func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, readFile stableFileReader) InitialReviewResult {
-	if len(set.Changes) == 0 {
+	if len(set.Changes) == 0 && len(set.UntrackedPaths) == 0 {
 		return InitialReviewResult{Failure: PayloadFailureNoChanges}
 	}
 
@@ -150,7 +150,7 @@ func initialContextStatus(change Change) ContextStatus {
 		return ContextBinary
 	case promptpolicy.IsSensitivePath(change.Path):
 		return ContextSensitive
-	case change.Kind == ChangeAdded || change.Kind == ChangeUntracked:
+	case change.Kind == ChangeAdded:
 		return ContextAddedPatch
 	case change.Kind == ChangeDeleted:
 		return ContextDeleted
@@ -169,18 +169,33 @@ func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileConte
 		out.WriteString(guidance)
 		out.WriteByte('\n')
 	}
-	out.WriteString("\nFile context status:\n")
-	for _, file := range files {
-		fmt.Fprintf(&out, "%s\t%s\n", file.Path, file.Status)
-	}
-	out.WriteString("\nAuthoritative Git diff:\n```diff\n")
-	for i, change := range set.Changes {
-		if i > 0 {
-			out.WriteString("\n\n")
+	if len(files) > 0 {
+		out.WriteString("\nTracked file context status:\n")
+		for _, file := range files {
+			fmt.Fprintf(&out, "%s\t%s\n", file.Path, file.Status)
 		}
-		out.WriteString(change.Patch)
 	}
-	out.WriteString("\n```\n")
+	if len(set.Changes) > 0 {
+		out.WriteString("\nAuthoritative tracked Git diff:\n```diff\n")
+		for i, change := range set.Changes {
+			if i > 0 {
+				out.WriteString("\n\n")
+			}
+			out.WriteString(change.Patch)
+		}
+		out.WriteString("\n```\n")
+	}
+	if len(set.UntrackedPaths) > 0 {
+		out.WriteString("\nGit-untracked reference paths (contents not included):\n")
+		for _, path := range set.UntrackedPaths {
+			out.WriteString("- ")
+			out.WriteString(escapeReviewPath(path))
+			out.WriteByte('\n')
+		}
+		if set.UntrackedOmitted > 0 {
+			fmt.Fprintf(&out, "%d additional relevant Git-untracked paths omitted.\n", set.UntrackedOmitted)
+		}
+	}
 	for _, file := range files {
 		if file.Status != ContextIncluded {
 			continue

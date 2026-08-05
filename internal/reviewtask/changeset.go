@@ -14,11 +14,10 @@ import (
 type ChangeKind string
 
 const (
-	ChangeModified  ChangeKind = "modified"
-	ChangeAdded     ChangeKind = "added"
-	ChangeUntracked ChangeKind = "untracked"
-	ChangeDeleted   ChangeKind = "deleted"
-	ChangeRenamed   ChangeKind = "renamed"
+	ChangeModified ChangeKind = "modified"
+	ChangeAdded    ChangeKind = "added"
+	ChangeDeleted  ChangeKind = "deleted"
+	ChangeRenamed  ChangeKind = "renamed"
 )
 
 // Change is one structured, repository-relative review change. Patch is the
@@ -34,14 +33,22 @@ type Change struct {
 // ChangeSet describes the authoritative diff scope without rendering a prompt
 // or reading optional complete-file content.
 type ChangeSet struct {
-	Mode    Mode
-	Ref     string
-	Changes []Change
+	Mode             Mode
+	Ref              string
+	Changes          []Change
+	UntrackedPaths   []string
+	UntrackedOmitted int
 }
 
 // BuildChangeSet inspects one Git repository and returns a deterministic,
 // structured representation of the requested review diff.
 func BuildChangeSet(root string, opts Options) (ChangeSet, error) {
+	return buildChangeSet(root, opts, buildChangePatch, discoverUntrackedFiles)
+}
+
+type changePatchBuilder func(string, []string, changeMetadata) (string, bool, error)
+
+func buildChangeSet(root string, opts Options, buildPatch changePatchBuilder, discoverUntracked untrackedDiscoverer) (ChangeSet, error) {
 	if err := validateOptions(opts); err != nil {
 		return ChangeSet{}, err
 	}
@@ -62,12 +69,19 @@ func BuildChangeSet(root string, opts Options) (ChangeSet, error) {
 	if err != nil {
 		return ChangeSet{}, err
 	}
-	if opts.Mode == ModeDefault {
+	var untrackedPaths []string
+	var untrackedOmitted int
+	if opts.Mode == ModeDefault && len(selected) > 0 {
 		untracked, err := readUntrackedMetadata(repoRoot)
 		if err != nil {
 			return ChangeSet{}, err
 		}
 		metadata = append(metadata, untracked...)
+	} else if opts.Mode == ModeDefault {
+		untrackedPaths, untrackedOmitted, err = discoverUntracked(repoRoot)
+		if err != nil {
+			return ChangeSet{}, err
+		}
 	}
 
 	byPath := make(map[string]changeMetadata, len(metadata))
@@ -80,6 +94,10 @@ func BuildChangeSet(root string, opts Options) (ChangeSet, error) {
 			item, ok := byPath[path]
 			if !ok {
 				return ChangeSet{}, fmt.Errorf("selected path %q is not a current change", path)
+			}
+			if item.untracked {
+				untrackedPaths = append(untrackedPaths, path)
+				continue
 			}
 			filtered = append(filtered, item)
 		}
@@ -94,13 +112,19 @@ func BuildChangeSet(root string, opts Options) (ChangeSet, error) {
 	})
 	changes := make([]Change, 0, len(metadata))
 	for _, item := range metadata {
-		patch, binary, err := buildChangePatch(repoRoot, baseArgs, item)
+		patch, binary, err := buildPatch(repoRoot, baseArgs, item)
 		if err != nil {
 			return ChangeSet{}, err
 		}
 		changes = append(changes, Change{Path: item.path, PreviousPath: item.previousPath, Kind: item.kind, Binary: binary, Patch: strings.TrimRight(patch, "\n")})
 	}
-	return ChangeSet{Mode: opts.Mode, Ref: strings.TrimSpace(opts.Ref), Changes: changes}, nil
+	return ChangeSet{
+		Mode:             opts.Mode,
+		Ref:              strings.TrimSpace(opts.Ref),
+		Changes:          changes,
+		UntrackedPaths:   untrackedPaths,
+		UntrackedOmitted: untrackedOmitted,
+	}, nil
 }
 
 type changeMetadata struct {
@@ -108,6 +132,7 @@ type changeMetadata struct {
 	previousPath string
 	kind         ChangeKind
 	untracked    bool
+	binary       bool
 }
 
 func validateRepositoryRoot(root string) (string, error) {
@@ -179,6 +204,10 @@ func readTrackedMetadata(root string, baseArgs []string) ([]changeMetadata, erro
 	if err != nil {
 		return nil, err
 	}
+	binaryPaths, err := readTrackedBinaryPaths(root, baseArgs)
+	if err != nil {
+		return nil, err
+	}
 	fields := strings.Split(out, "\x00")
 	var result []changeMetadata
 	for i := 0; i < len(fields) && fields[i] != ""; {
@@ -206,8 +235,51 @@ func readTrackedMetadata(root string, baseArgs []string) ([]changeMetadata, erro
 		}
 		item.kind = kind
 		item.path = normalizeReviewPath(fields[i])
+		item.binary = binaryPaths[item.path]
 		i++
 		result = append(result, item)
+	}
+	return result, nil
+}
+
+func readTrackedBinaryPaths(root string, baseArgs []string) (map[string]bool, error) {
+	args := append([]string{}, baseArgs...)
+	for i, arg := range args {
+		if arg == "--binary" {
+			args[i] = "--numstat"
+			break
+		}
+	}
+	args = append(args, "-z")
+	out, err := runGit(root, args...)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]bool)
+	fields := strings.Split(out, "\x00")
+	for i := 0; i < len(fields) && fields[i] != ""; i++ {
+		record := fields[i]
+		firstTab := strings.IndexByte(record, '\t')
+		secondRelative := -1
+		if firstTab >= 0 {
+			secondRelative = strings.IndexByte(record[firstTab+1:], '\t')
+		}
+		if firstTab < 0 || secondRelative < 0 {
+			return nil, errors.New("Git returned incomplete numstat metadata")
+		}
+		secondTab := firstTab + 1 + secondRelative
+		binary := record[:firstTab] == "-" && record[firstTab+1:secondTab] == "-"
+		path := record[secondTab+1:]
+		if path == "" {
+			// With -z, rename records put old and new paths in the following
+			// two NUL-delimited fields.
+			if i+2 >= len(fields) {
+				return nil, errors.New("Git returned incomplete rename numstat metadata")
+			}
+			i += 2
+			path = fields[i]
+		}
+		result[normalizeReviewPath(path)] = binary
 	}
 	return result, nil
 }
@@ -220,40 +292,32 @@ func readUntrackedMetadata(root string) ([]changeMetadata, error) {
 	var result []changeMetadata
 	for _, path := range strings.Split(out, "\x00") {
 		if path != "" {
-			result = append(result, changeMetadata{path: normalizeReviewPath(path), kind: ChangeUntracked, untracked: true})
+			result = append(result, changeMetadata{path: normalizeReviewPath(path), untracked: true})
 		}
 	}
 	return result, nil
 }
 
 func buildChangePatch(root string, baseArgs []string, item changeMetadata) (string, bool, error) {
-	var args []string
+	return buildChangePatchWithRunner(root, baseArgs, item, runGitAllowDiffExit)
+}
+
+type diffGitRunner func(string, ...string) (string, error)
+
+func buildChangePatchWithRunner(root string, baseArgs []string, item changeMetadata, runDiff diffGitRunner) (string, bool, error) {
 	if item.untracked {
-		args = []string{"diff", "--no-ext-diff", "--binary", "--no-index", "--", "/dev/null", item.path}
-	} else {
-		args = append([]string{}, baseArgs...)
-		args = append(args, "--", item.path)
-		if item.previousPath != "" {
-			args = append(args, item.previousPath)
-		}
+		return "", false, errors.New("untracked paths do not have authoritative Git patches")
 	}
-	patch, err := runGitAllowDiffExit(root, args...)
+	args := append([]string{}, baseArgs...)
+	args = append(args, "--", item.path)
+	if item.previousPath != "" {
+		args = append(args, item.previousPath)
+	}
+	patch, err := runDiff(root, args...)
 	if err != nil {
 		return "", false, err
 	}
-	numArgs := append([]string{}, args...)
-	for i, arg := range numArgs {
-		if arg == "--binary" {
-			numArgs[i] = "--numstat"
-			break
-		}
-	}
-	numstat, err := runGitAllowDiffExit(root, numArgs...)
-	if err != nil {
-		return "", false, err
-	}
-	binary := strings.HasPrefix(numstat, "-\t-")
-	return patch, binary, nil
+	return patch, item.binary, nil
 }
 
 func runGitAllowDiffExit(root string, args ...string) (string, error) {
@@ -261,19 +325,7 @@ func runGitAllowDiffExit(root string, args ...string) (string, error) {
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 || !containsArg(args, "--no-index") {
-			return "", fmt.Errorf("git %s failed: %w", args[0], err)
-		}
+		return "", fmt.Errorf("git %s failed: %w", args[0], err)
 	}
 	return string(out), nil
-}
-
-func containsArg(args []string, want string) bool {
-	for _, arg := range args {
-		if arg == want {
-			return true
-		}
-	}
-	return false
 }

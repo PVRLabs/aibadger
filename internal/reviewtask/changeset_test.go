@@ -1,6 +1,7 @@
 package reviewtask
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -26,9 +27,12 @@ func TestBuildChangeSetDefaultClassifiesAndOrdersChanges(t *testing.T) {
 		t.Fatalf("BuildChangeSet() error = %v", err)
 	}
 	got := changeSummaries(set.Changes)
-	want := []string{"added file.txt:added", "app.go:modified", "delete.txt:deleted", "untracked[1].txt:untracked"}
+	want := []string{"added file.txt:added", "app.go:modified", "delete.txt:deleted"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("changes = %v, want %v", got, want)
+	}
+	if !reflect.DeepEqual(set.UntrackedPaths, []string{"untracked[1].txt"}) || set.UntrackedOmitted != 0 {
+		t.Fatalf("untracked = %v omitted=%d", set.UntrackedPaths, set.UntrackedOmitted)
 	}
 	for _, change := range set.Changes {
 		if change.Patch == "" || !strings.Contains(change.Patch, "diff --git") {
@@ -73,8 +77,11 @@ func TestBuildChangeSetSelectedPathsAreLiteralDeduplicatedAndSorted(t *testing.T
 	if err != nil {
 		t.Fatalf("BuildChangeSet() error = %v", err)
 	}
-	if got, want := changeSummaries(set.Changes), []string{"app.go:modified", "literal[1].txt:untracked"}; !reflect.DeepEqual(got, want) {
+	if got, want := changeSummaries(set.Changes), []string{"app.go:modified"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("changes = %v, want %v", got, want)
+	}
+	if !reflect.DeepEqual(set.UntrackedPaths, []string{"literal[1].txt"}) {
+		t.Fatalf("selected untracked paths = %v", set.UntrackedPaths)
 	}
 }
 
@@ -131,8 +138,116 @@ func TestBuildChangeSetSupportsModesAndUnbornHead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unborn BuildChangeSet() error = %v", err)
 	}
-	if len(set.Changes) != 1 || set.Changes[0].Kind != ChangeUntracked {
-		t.Fatalf("unborn changes = %+v", set.Changes)
+	if len(set.Changes) != 0 || !reflect.DeepEqual(set.UntrackedPaths, []string{"first.go"}) {
+		t.Fatalf("unborn set = %+v", set)
+	}
+}
+
+func TestBuildChangeSetRepositoryWideRanksCapsAndFiltersUntrackedPaths(t *testing.T) {
+	repo := newGitRepo(t)
+	for i := 0; i < 30; i++ {
+		writeTrackedFile(t, repo, fmt.Sprintf("src/file_%02d.go", i), "package src\n")
+	}
+	writeTrackedFile(t, repo, "build/generated.go", "package build\n")
+	writeTrackedFile(t, repo, ".env", "TOKEN=private\n")
+
+	patchCalls := 0
+	set, err := buildChangeSet(repo, Options{Mode: ModeDefault}, func(root string, args []string, item changeMetadata) (string, bool, error) {
+		patchCalls++
+		return buildChangePatch(root, args, item)
+	}, discoverUntrackedFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(set.Changes) != 0 || len(set.UntrackedPaths) != maxUntrackedReviewFiles || set.UntrackedOmitted != 5 {
+		t.Fatalf("set = %+v", set)
+	}
+	if patchCalls != 0 {
+		t.Fatalf("per-entry patch calls = %d, want 0 for repository-wide untracked paths", patchCalls)
+	}
+	for _, path := range set.UntrackedPaths {
+		if path == ".env" || strings.HasPrefix(path, "build/") {
+			t.Fatalf("filtered path surfaced: %q", path)
+		}
+	}
+}
+
+func TestBuildChangeSetSelectedUntrackedBypassesFilteringWithoutSynthesizingPatch(t *testing.T) {
+	repo := newGitRepo(t)
+	writeTrackedFile(t, repo, "build/literal[1].go", "package generated\n")
+
+	set, err := BuildChangeSet(repo, Options{Mode: ModeDefault, SelectedPaths: []string{"build/literal[1].go"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(set.Changes) != 0 || !reflect.DeepEqual(set.UntrackedPaths, []string{"build/literal[1].go"}) {
+		t.Fatalf("set = %+v", set)
+	}
+}
+
+func TestBuildChangeSetSelectedUntrackedBinaryIsPathOnly(t *testing.T) {
+	repo := newGitRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, "new.bin"), []byte{0, 1, 2, 3}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	set, err := BuildChangeSet(repo, Options{Mode: ModeDefault, SelectedPaths: []string{"new.bin"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(set.Changes) != 0 || !reflect.DeepEqual(set.UntrackedPaths, []string{"new.bin"}) {
+		t.Fatalf("set = %+v", set)
+	}
+}
+
+func TestBuildChangeSetSelectedEmptyUntrackedFileIsPathOnly(t *testing.T) {
+	repo := newGitRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, "empty.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	set, err := BuildChangeSet(repo, Options{Mode: ModeDefault, SelectedPaths: []string{"empty.txt"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(set.Changes) != 0 || !reflect.DeepEqual(set.UntrackedPaths, []string{"empty.txt"}) {
+		t.Fatalf("set = %+v", set)
+	}
+}
+
+func TestChangePatchGitProcessCostIsBoundedByChangeKind(t *testing.T) {
+	baseArgs := []string{"diff", "--no-ext-diff", "--binary", "HEAD"}
+	for _, tc := range []struct {
+		name  string
+		item  changeMetadata
+		calls int
+	}{
+		{name: "tracked", item: changeMetadata{path: "app.go", kind: ChangeModified}, calls: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			_, _, err := buildChangePatchWithRunner("/repo", baseArgs, tc.item, func(_ string, args ...string) (string, error) {
+				calls++
+				return "diff --git", nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != tc.calls {
+				t.Fatalf("Git process calls = %d, want %d", calls, tc.calls)
+			}
+		})
+	}
+}
+
+func TestUntrackedPatchConstructionIsRejectedWithoutGitProcess(t *testing.T) {
+	calls := 0
+	_, _, err := buildChangePatchWithRunner("/repo", nil, changeMetadata{path: "new.go", untracked: true}, func(string, ...string) (string, error) {
+		calls++
+		return "", nil
+	})
+	if err == nil || calls != 0 {
+		t.Fatalf("error=%v calls=%d, want rejection before Git", err, calls)
 	}
 }
 

@@ -22,8 +22,11 @@ func TestBuildInitialReviewPayloadIncludesEligibleCurrentFilesAndStatuses(t *tes
 		t.Fatalf("Failure = %q", result.Failure)
 	}
 	statuses := payloadStatuses(result.Payload.Files)
-	if statuses["app.go"] != ContextIncluded || statuses["added.go"] != ContextAddedPatch || statuses[".env"] != ContextSensitive {
+	if statuses["app.go"] != ContextIncluded || statuses["added.go"] != ContextAddedPatch {
 		t.Fatalf("statuses = %v", statuses)
+	}
+	if _, ok := statuses[".env"]; ok {
+		t.Fatalf("repository-wide untracked file received tracked status: %v", statuses)
 	}
 	if !strings.Contains(result.Payload.Prompt, "Check concurrency.") || !strings.Contains(result.Payload.Prompt, "current supporting content") {
 		t.Fatalf("prompt missing guidance or supporting content:\n%s", result.Payload.Prompt)
@@ -33,6 +36,56 @@ func TestBuildInitialReviewPayloadIncludesEligibleCurrentFilesAndStatuses(t *tes
 	}
 	if strings.Contains(result.Payload.Prompt, "Current working-tree supporting file: .env") {
 		t.Fatalf("sensitive file was duplicated as supporting context:\n%s", result.Payload.Prompt)
+	}
+}
+
+func TestBuildInitialReviewPayloadRendersUntrackedPathsWithoutContents(t *testing.T) {
+	repo := newGitRepo(t)
+	writeTrackedFile(t, repo, "notes/new.go", "package notes\nconst hidden = 42\n")
+
+	result, err := BuildInitialReviewPayload(repo, Options{Mode: ModeDefault})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Failure != PayloadFailureNone || len(result.Payload.ChangeSet.Changes) != 0 {
+		t.Fatalf("result = %+v", result)
+	}
+	if !strings.Contains(result.Payload.Prompt, "Git-untracked reference paths") || !strings.Contains(result.Payload.Prompt, "notes/new.go") {
+		t.Fatalf("prompt missing untracked path section:\n%s", result.Payload.Prompt)
+	}
+	if strings.Contains(result.Payload.Prompt, "const hidden") || strings.Contains(result.Payload.Prompt, "Authoritative tracked Git diff") {
+		t.Fatalf("untracked contents or synthetic diff leaked:\n%s", result.Payload.Prompt)
+	}
+}
+
+func TestBuildInitialReviewPayloadSelectedUntrackedIsPathOnly(t *testing.T) {
+	repo := newGitRepo(t)
+	writeTrackedFile(t, repo, "scratch/new.go", "package scratch\nconst selected = true\n")
+
+	result, err := BuildInitialReviewPayload(repo, Options{Mode: ModeDefault, SelectedPaths: []string{"scratch/new.go"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Failure != PayloadFailureNone || !strings.Contains(result.Payload.Prompt, "scratch/new.go") {
+		t.Fatalf("result = %+v", result)
+	}
+	if strings.Contains(result.Payload.Prompt, "const selected = true") || len(result.Payload.ChangeSet.Changes) != 0 {
+		t.Fatalf("selected untracked contents became authoritative changes: %+v", result.Payload)
+	}
+}
+
+func TestPayloadUntrackedOmissionTextParticipatesInMandatoryBudget(t *testing.T) {
+	set := ChangeSet{Mode: ModeDefault, UntrackedPaths: []string{"new.go"}, UntrackedOmitted: 7}
+	baseline := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: 4096, maxFileBytes: 100}, readStableReviewFile)
+	if baseline.Failure != PayloadFailureNone || !strings.Contains(baseline.Payload.Prompt, "7 additional relevant Git-untracked paths omitted") {
+		t.Fatalf("baseline = %+v", baseline)
+	}
+	exact := len(baseline.Payload.Prompt)
+	if got := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: exact, maxFileBytes: 100}, readStableReviewFile); got.Failure != PayloadFailureNone {
+		t.Fatalf("exact boundary = %+v", got)
+	}
+	if got := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: exact - 1, maxFileBytes: 100}, readStableReviewFile); got.Failure != PayloadFailureMandatoryOverflow {
+		t.Fatalf("overflow boundary = %+v", got)
 	}
 }
 

@@ -3,7 +3,9 @@ package badger
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +16,171 @@ import (
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
+
+func TestRunAPIReviewContextProducesStablePrompt(t *testing.T) {
+	root := writeAPIReviewRepo(t)
+	guidance := writeAPITestInput(t, "guidance.txt", "Check concurrency and error handling.\n")
+	var stdout, stderr bytes.Buffer
+	err := RunAPI(Config{Root: root}, APIOptions{
+		Operation: "review-context", InputPath: guidance,
+		Stdout: &stdout, Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("RunAPI() error = %v", err)
+	}
+	for _, want := range []string{"Review guidance:\nCheck concurrency", "Authoritative tracked Git diff:", "+const changed = true"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String(), root) {
+		t.Fatalf("stdout leaked absolute root %q", root)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunAPIReviewContextReturnsStdoutWriteFailure(t *testing.T) {
+	root := writeAPIReviewRepo(t)
+	stdout := &failAfterWriter{remaining: 32, err: io.ErrClosedPipe}
+	err := RunAPI(Config{Root: root}, APIOptions{
+		Operation: "review-context",
+		Stdout:    stdout,
+	})
+	if err == nil {
+		t.Fatal("RunAPI() error = nil, want stdout write failure")
+	}
+	if !errors.Is(err, io.ErrClosedPipe) || !strings.Contains(err.Error(), "writing review context") {
+		t.Fatalf("RunAPI() error = %v, want wrapped closed-pipe write error", err)
+	}
+	if got := stdout.written; got != 32 {
+		t.Fatalf("stdout bytes written = %d, want 32-byte partial prefix", got)
+	}
+}
+
+type failAfterWriter struct {
+	remaining int
+	written   int
+	err       error
+}
+
+func (w *failAfterWriter) Write(p []byte) (int, error) {
+	if w.remaining <= 0 {
+		return 0, w.err
+	}
+	n := len(p)
+	if n > w.remaining {
+		n = w.remaining
+	}
+	w.remaining -= n
+	w.written += n
+	if n < len(p) {
+		return n, w.err
+	}
+	return n, nil
+}
+
+func TestRunAPIReviewContextSelectedPathsAndFailures(t *testing.T) {
+	root := writeAPIReviewRepo(t)
+	if err := os.WriteFile(filepath.Join(root, "other.go"), []byte("package main\nconst other = true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "gone.go"), []byte("package main\nconst gone = true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runAPIGit(t, root, "add", "gone.go")
+	runAPIGit(t, root, "commit", "-m", "add deleted fixture")
+	if err := os.Remove(filepath.Join(root, "gone.go")); err != nil {
+		t.Fatal(err)
+	}
+	paths := writeAPITestInput(t, "paths.json", `["main.go","main.go"]`)
+	var stdout, stderr bytes.Buffer
+	if err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", PathsFilePath: paths, Stdout: &stdout, Stderr: &stderr}); err != nil {
+		t.Fatalf("RunAPI(selected) error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "main.go") || strings.Contains(stdout.String(), "other.go") {
+		t.Fatalf("selected stdout has wrong scope:\n%s", stdout.String())
+	}
+	deletedPaths := writeAPITestInput(t, "deleted-paths.json", `["gone.go"]`)
+	stdout.Reset()
+	if err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", PathsFilePath: deletedPaths, Stdout: &stdout, Stderr: &stderr}); err != nil {
+		t.Fatalf("RunAPI(deleted) error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "gone.go\tdiff-only-deleted") {
+		t.Fatalf("deleted stdout missing disposition:\n%s", stdout.String())
+	}
+
+	badPaths := writeAPITestInput(t, "bad-paths.json", `["../escape.go"]`)
+	stdout.Reset()
+	err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", PathsFilePath: badPaths, Stdout: &stdout, Stderr: &stderr})
+	if err == nil || !strings.Contains(err.Error(), "invalid selected path") || stdout.Len() != 0 {
+		t.Fatalf("escaping selection result = error %v, stdout %q", err, stdout.String())
+	}
+
+	stdout.Reset()
+	err = RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", MaxReviewPayloadBytes: 10, Stdout: &stdout, Stderr: &stderr})
+	if err == nil || !strings.Contains(err.Error(), "mandatory content exceeds") || stdout.Len() != 0 {
+		t.Fatalf("overflow result = error %v, stdout %q", err, stdout.String())
+	}
+}
+
+func TestRunAPIReviewContextNoChangesAndNotGitProduceNoOutput(t *testing.T) {
+	clean := writeAPIReviewRepo(t)
+	runAPIGit(t, clean, "add", "main.go")
+	runAPIGit(t, clean, "commit", "-m", "changed")
+	for name, root := range map[string]string{"clean": clean, "not git": t.TempDir()} {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", Stdout: &stdout, Stderr: &stderr})
+			if err == nil || stdout.Len() != 0 || stderr.Len() != 0 {
+				t.Fatalf("RunAPI() = error %v, stdout %q, stderr %q", err, stdout.String(), stderr.String())
+			}
+			if strings.Contains(err.Error(), root) {
+				t.Fatalf("error leaked absolute root: %v", err)
+			}
+		})
+	}
+}
+
+func TestRunAPIReviewContextModesAndInvalidRef(t *testing.T) {
+	root := writeAPIReviewRepo(t)
+	runAPIGit(t, root, "add", "main.go")
+	for _, tt := range []struct {
+		name string
+		mode string
+		ref  string
+	}{
+		{name: "staged", mode: "staged"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			if err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", ReviewMode: tt.mode, ReviewRef: tt.ref, Stdout: &stdout}); err != nil {
+				t.Fatalf("RunAPI() error = %v", err)
+			}
+			if !strings.Contains(stdout.String(), "+const changed = true") {
+				t.Fatalf("stdout missing staged change:\n%s", stdout.String())
+			}
+		})
+	}
+	runAPIGit(t, root, "commit", "-m", "changed")
+	for _, tt := range []struct{ mode, ref string }{{"commit", "HEAD"}, {"branch", "HEAD~1"}} {
+		t.Run(tt.mode, func(t *testing.T) {
+			var stdout bytes.Buffer
+			if err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", ReviewMode: tt.mode, ReviewRef: tt.ref, Stdout: &stdout}); err != nil {
+				t.Fatalf("RunAPI() error = %v", err)
+			}
+			if !strings.Contains(stdout.String(), "+const changed = true") {
+				t.Fatalf("stdout missing %s change:\n%s", tt.mode, stdout.String())
+			}
+		})
+	}
+	var stdout bytes.Buffer
+	err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", ReviewMode: "commit", ReviewRef: "missing-ref", Stdout: &stdout})
+	if err == nil || stdout.Len() != 0 {
+		t.Fatalf("invalid ref = error %v, stdout %q", err, stdout.String())
+	}
+}
 
 func TestRunAPIReadsInputWithoutModifyingIt(t *testing.T) {
 	root := t.TempDir()
@@ -689,4 +856,30 @@ func writeAPITestProject(t *testing.T) string {
 		t.Fatalf("WriteFile(main.go) error = %v", err)
 	}
 	return root
+}
+
+func writeAPIReviewRepo(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	runAPIGit(t, root, "init")
+	runAPIGit(t, root, "config", "user.email", "test@example.com")
+	runAPIGit(t, root, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nconst changed = false\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runAPIGit(t, root, "add", "main.go")
+	runAPIGit(t, root, "commit", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nconst changed = true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func runAPIGit(t *testing.T, root string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v: %s", args, err, out)
+	}
 }

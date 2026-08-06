@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
@@ -114,11 +115,16 @@ func main() {
 }
 
 type apiConfig struct {
-	operation    string
-	root         string
-	inputPath    string
-	goalFilePath string
-	focus        protocol.Focus
+	operation             string
+	root                  string
+	inputPath             string
+	goalFilePath          string
+	focus                 protocol.Focus
+	reviewMode            string
+	reviewRef             string
+	pathsFilePath         string
+	maxReviewPayloadBytes int
+	maxReviewFileBytes    int
 }
 
 func runAPI(args []string, stdout, stderr io.Writer) error {
@@ -135,12 +141,17 @@ func runAPI(args []string, stdout, stderr io.Writer) error {
 	cfg := badger.DefaultConfig()
 	cfg.Root = api.root
 	return badger.RunAPI(cfg, badger.APIOptions{
-		Operation:    api.operation,
-		InputPath:    api.inputPath,
-		GoalFilePath: api.goalFilePath,
-		Focus:        api.focus,
-		Stdout:       stdout,
-		Stderr:       stderr,
+		Operation:             api.operation,
+		InputPath:             api.inputPath,
+		GoalFilePath:          api.goalFilePath,
+		Focus:                 api.focus,
+		ReviewMode:            api.reviewMode,
+		ReviewRef:             api.reviewRef,
+		PathsFilePath:         api.pathsFilePath,
+		MaxReviewPayloadBytes: api.maxReviewPayloadBytes,
+		MaxReviewFileBytes:    api.maxReviewFileBytes,
+		Stdout:                stdout,
+		Stderr:                stderr,
 	})
 }
 
@@ -151,7 +162,7 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 
 	cfg := apiConfig{operation: args[0]}
 	switch cfg.operation {
-	case "topology", "prompt", "extract", "scan", "goal", "extraction", "write-plan":
+	case "topology", "prompt", "extract", "review-context", "scan", "goal", "extraction", "write-plan":
 	default:
 		return apiConfig{}, fmt.Errorf("unknown api operation: %s", cfg.operation)
 	}
@@ -199,6 +210,42 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 				return apiConfig{}, err
 			}
 			cfg.goalFilePath = value
+		case arg == "--mode" || strings.HasPrefix(arg, "--mode="):
+			value, err := nextValue("mode")
+			if err != nil {
+				return apiConfig{}, err
+			}
+			cfg.reviewMode = value
+		case arg == "--ref" || strings.HasPrefix(arg, "--ref="):
+			value, err := nextValue("ref")
+			if err != nil {
+				return apiConfig{}, err
+			}
+			cfg.reviewRef = value
+		case arg == "--paths-file" || strings.HasPrefix(arg, "--paths-file="):
+			value, err := nextValue("paths-file")
+			if err != nil {
+				return apiConfig{}, err
+			}
+			cfg.pathsFilePath = value
+		case arg == "--max-payload-bytes" || strings.HasPrefix(arg, "--max-payload-bytes="):
+			value, err := nextValue("max-payload-bytes")
+			if err != nil {
+				return apiConfig{}, err
+			}
+			cfg.maxReviewPayloadBytes, err = parsePositiveAPIBytes("max-payload-bytes", value)
+			if err != nil {
+				return apiConfig{}, err
+			}
+		case arg == "--max-file-bytes" || strings.HasPrefix(arg, "--max-file-bytes="):
+			value, err := nextValue("max-file-bytes")
+			if err != nil {
+				return apiConfig{}, err
+			}
+			cfg.maxReviewFileBytes, err = parsePositiveAPIBytes("max-file-bytes", value)
+			if err != nil {
+				return apiConfig{}, err
+			}
 		default:
 			return apiConfig{}, fmt.Errorf("unknown api flag: %s", arg)
 		}
@@ -206,6 +253,33 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 
 	if cfg.root == "" {
 		return apiConfig{}, fmt.Errorf("api %s requires --root <project>", cfg.operation)
+	}
+	if cfg.operation == "review-context" {
+		if cfg.focus != "" || cfg.goalFilePath != "" {
+			return apiConfig{}, fmt.Errorf("api review-context does not accept --focus or --goal-file")
+		}
+		if cfg.reviewMode == "" {
+			cfg.reviewMode = "default"
+		}
+		switch cfg.reviewMode {
+		case "default", "staged":
+			if cfg.reviewRef != "" {
+				return apiConfig{}, fmt.Errorf("api review-context mode %s does not accept --ref", cfg.reviewMode)
+			}
+		case "branch", "commit":
+			if cfg.reviewRef == "" {
+				return apiConfig{}, fmt.Errorf("api review-context mode %s requires --ref <revision>", cfg.reviewMode)
+			}
+		default:
+			return apiConfig{}, fmt.Errorf("api review-context supports --mode <default|staged|branch|commit>; got %q", cfg.reviewMode)
+		}
+		if cfg.pathsFilePath != "" && cfg.reviewMode != "default" {
+			return apiConfig{}, fmt.Errorf("api review-context mode %s does not accept --paths-file", cfg.reviewMode)
+		}
+		return cfg, nil
+	}
+	if cfg.reviewMode != "" || cfg.reviewRef != "" || cfg.pathsFilePath != "" || cfg.maxReviewPayloadBytes != 0 || cfg.maxReviewFileBytes != 0 {
+		return apiConfig{}, fmt.Errorf("api %s does not accept review-context options", cfg.operation)
 	}
 	if cfg.operation == "scan" || cfg.operation == "topology" {
 		if cfg.inputPath != "" {
@@ -244,6 +318,14 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 		return apiConfig{}, fmt.Errorf("api %s does not accept --goal-file", cfg.operation)
 	}
 	return cfg, nil
+}
+
+func parsePositiveAPIBytes(flag, value string) (int, error) {
+	n, err := strconv.Atoi(value)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("api --%s requires a positive integer", flag)
+	}
+	return n, nil
 }
 
 func loadConfig(args []string) appConfig {
@@ -536,6 +618,7 @@ func isFlagArg(arg, name string) bool {
 
 func printUsage(cfg appConfig) {
 	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design|followup] [--help]\n  badger [code|review|design|followup] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger api --help\n  badger api topology --root <project>\n  badger api prompt --root <project> --focus <code|design> --input <goal-file>\n  badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nThe api commands are non-interactive and write directly usable prompt text to stdout.\nStandard runs start the interactive BYOL workflow for the current directory.\nDesign is the default interactive focus; use badger code, badger review, badger design, or badger followup to start explicitly.\n`badger review` preloads an editable review prompt from the current Git working tree. Default mode includes staged and unstaged tracked changes plus up to 25 relevant Git-untracked paths in a separate section; it never includes untracked file contents, and untracked paths alone are valid review context. `--staged`, `--branch <ref>`, and `--commit <sha>` exclude working-tree untracked files. If no reviewable changes are available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
+	fmt.Print("Stable Deep Review API: badger api review-context --root <repository> [--mode <default|staged|branch|commit>]\n")
 
 	// Show note about dev flags in release builds
 	fmt.Print("/code switches an interactive session to Code focus and /design switches it to Design focus.\n")

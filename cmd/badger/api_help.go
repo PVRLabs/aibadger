@@ -26,7 +26,7 @@ func isAPIHelpFlag(arg string) bool {
 
 func isStableAPIOperation(operation string) bool {
 	switch operation {
-	case "topology", "prompt", "extract":
+	case "topology", "prompt", "extract", "review-context":
 		return true
 	default:
 		return false
@@ -119,12 +119,49 @@ Failures:
   Exits nonzero for invalid arguments, root or input errors, empty input,
   a disabled project, scan failure, or when no safe usable context exists.
 `)
+	case "review-context":
+		fmt.Fprint(w, `Usage:
+  badger api review-context --root <repository> [--mode <default|staged|branch|commit>] [--ref <revision>] [--input <guidance-file>] [--paths-file <paths.json>] [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>]
+
+Purpose:
+  Produce a complete initial Deep Review prompt from authoritative Git state.
+
+Required arguments:
+  --root <repository>  The Git repository root.
+
+Optional arguments:
+  --mode <value>       Review scope (default: default working tree).
+  --ref <revision>     Required for branch and commit modes only.
+  --input <file>       UTF-8 review guidance file (maximum 1 MiB).
+  --paths-file <file>  JSON array of literal repository-relative changed paths;
+                       accepted only in default mode (maximum 1 MiB).
+  --max-payload-bytes <bytes>  Positive complete-prompt byte limit.
+  --max-file-bytes <bytes>     Positive per-file supporting-context limit.
+  --help, -h           Print this help and exit.
+
+Example:
+  badger api review-context --root . --mode default --input guidance.txt
+
+Output and side effects:
+  Writes the complete AI-facing review prompt to stdout. Diagnostics go only
+  to stderr. This command is deterministic for unchanged Git state,
+  non-interactive, and read-only. It does not use stdin, the clipboard, a
+  browser, the TUI, providers, or the network.
+
+Failures:
+  Exits nonzero without writing stdout for generation failures such as invalid
+  arguments or inputs, invalid Git roots or refs, no reviewable changes, Git
+  failures, invalid selected paths, or mandatory payload overflow. A stdout
+  destination failure also exits nonzero but may have accepted a partial
+  prefix. Normal output uses root-relative paths.
+`)
 	default:
 		fmt.Fprint(w, `Usage:
   badger api --help
   badger api topology --root <project>
   badger api prompt --root <project> --focus <code|design> --input <goal-file>
   badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>
+  badger api review-context --root <repository> [--mode <default|staged|branch|commit>]
 
 Purpose:
   Run Badger's stable, non-interactive text API for local integrations.
@@ -133,6 +170,7 @@ Stable operations:
   topology  Produce a compact repository map.
   prompt    Produce the complete first-stage human handoff prompt.
   extract   Produce the complete second-stage prompt with selected context.
+  review-context  Produce an initial Deep Review prompt from Git changes.
 
 Arguments:
   Every operation requires --root <project>. Run an operation with --help or
@@ -150,6 +188,7 @@ Failures:
 Examples:
   badger api topology --root .
   badger api prompt --root . --focus code --input goal.txt
+  badger api review-context --root .
 `)
 	}
 }

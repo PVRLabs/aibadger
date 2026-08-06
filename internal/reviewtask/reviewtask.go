@@ -65,6 +65,10 @@ type Options struct {
 	// SelectedPaths narrows default working-tree review to literal,
 	// repository-relative changed paths. Other modes reject selected paths.
 	SelectedPaths []string
+	// MaxPayloadBytes and MaxFileBytes override the initial review-context
+	// defaults when positive. Negative values are invalid.
+	MaxPayloadBytes int
+	MaxFileBytes    int
 }
 
 // Task is the editable review prompt payload prepared for the caller.
@@ -257,6 +261,9 @@ func build(root string, opts Options, discoverUntracked untrackedDiscoverer) (Ta
 }
 
 func validateOptions(opts Options) error {
+	if opts.MaxPayloadBytes < 0 || opts.MaxFileBytes < 0 {
+		return errors.New("review context byte limits cannot be negative")
+	}
 	if len(opts.SelectedPaths) > 0 && opts.Mode != ModeDefault {
 		return fmt.Errorf("review mode %s does not accept selected paths", opts.Mode)
 	}

@@ -79,7 +79,14 @@ func BuildInitialReviewPayload(root string, opts Options) (InitialReviewResult, 
 	if err != nil {
 		return InitialReviewResult{}, err
 	}
-	return buildInitialReviewPayload(root, set, strings.TrimSpace(opts.ExtraFocus), defaultReviewPayloadLimits, readStableReviewFile), nil
+	limits := defaultReviewPayloadLimits
+	if opts.MaxPayloadBytes > 0 {
+		limits.maxPayloadBytes = opts.MaxPayloadBytes
+	}
+	if opts.MaxFileBytes > 0 {
+		limits.maxFileBytes = opts.MaxFileBytes
+	}
+	return buildInitialReviewPayload(root, set, strings.TrimSpace(opts.ExtraFocus), limits, readStableReviewFile), nil
 }
 
 type stableFileOutcome int

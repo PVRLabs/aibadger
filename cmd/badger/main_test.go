@@ -446,6 +446,7 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 		"badger api topology --root <project>",
 		"badger api prompt --root <project> --focus <code|design> --input <goal-file>",
 		"badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>",
+		"badger api review-context --root <repository> [--mode <default|staged|branch|commit>]",
 		"The api commands are non-interactive and write directly usable prompt text to stdout.",
 		"Design is the default interactive focus; use badger code, badger review, badger design, or badger followup to start explicitly.",
 		"/code switches an interactive session to Code focus and /design switches it to Design focus.",
@@ -576,6 +577,16 @@ func TestParseAPIConfig(t *testing.T) {
 			want: apiConfig{operation: "extract", root: "/project", inputPath: "selectors.txt", goalFilePath: "goal.txt", focus: protocol.FocusDesign},
 		},
 		{
+			name: "default review context",
+			args: []string{"review-context", "--root", "/project", "--input", "guidance.txt", "--paths-file", "paths.json", "--max-payload-bytes", "500000", "--max-file-bytes=64000"},
+			want: apiConfig{operation: "review-context", root: "/project", inputPath: "guidance.txt", reviewMode: "default", pathsFilePath: "paths.json", maxReviewPayloadBytes: 500000, maxReviewFileBytes: 64000},
+		},
+		{
+			name: "branch review context",
+			args: []string{"review-context", "--root=/project", "--mode", "branch", "--ref=main"},
+			want: apiConfig{operation: "review-context", root: "/project", reviewMode: "branch", reviewRef: "main"},
+		},
+		{
 			name:    "missing operation",
 			wantErr: "api operation is required",
 		},
@@ -629,6 +640,10 @@ func TestParseAPIConfig(t *testing.T) {
 			args:    []string{"prompt", "--root", "/project", "--input", "goal.txt", "--focus", "code", "--goal-file", "other.txt"},
 			wantErr: "api prompt does not accept --goal-file",
 		},
+		{name: "review invalid mode", args: []string{"review-context", "--root", "/project", "--mode", "other"}, wantErr: `api review-context supports --mode <default|staged|branch|commit>; got "other"`},
+		{name: "review branch requires ref", args: []string{"review-context", "--root", "/project", "--mode", "branch"}, wantErr: "api review-context mode branch requires --ref <revision>"},
+		{name: "review selected staged rejected", args: []string{"review-context", "--root", "/project", "--mode", "staged", "--paths-file", "paths.json"}, wantErr: "api review-context mode staged does not accept --paths-file"},
+		{name: "review invalid byte limit", args: []string{"review-context", "--root", "/project", "--max-file-bytes", "0"}, wantErr: "api --max-file-bytes requires a positive integer"},
 	}
 
 	for _, tt := range tests {
@@ -686,6 +701,11 @@ func TestRunAPIHelp(t *testing.T) {
 			name: "extract help",
 			args: []string{"extract", "-h"},
 			want: []string{"--input <selector-file>", "--goal-file <goal-file>", "[--focus <code|design>]", "second-stage", "Example:", "Failures:"},
+		},
+		{
+			name: "review context help",
+			args: []string{"review-context", "--help"},
+			want: []string{"--mode <default|staged|branch|commit>", "--paths-file <paths.json>", "Deep Review", "stdout", "destination failure", "partial", "read-only"},
 		},
 	}
 

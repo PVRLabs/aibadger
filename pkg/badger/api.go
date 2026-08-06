@@ -5,6 +5,7 @@ package badger
 // provide all input up front and own both output streams.
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/PVRLabs/aibadger/internal/engine"
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
@@ -24,18 +26,23 @@ import (
 // stable text-first operations; the other current operations support
 // certification.
 type APIOptions struct {
-	Operation    string
-	InputPath    string
-	GoalFilePath string
-	Focus        protocol.Focus
-	Stdout       io.Writer
-	Stderr       io.Writer
+	Operation             string
+	InputPath             string
+	GoalFilePath          string
+	Focus                 protocol.Focus
+	ReviewMode            string
+	ReviewRef             string
+	PathsFilePath         string
+	MaxReviewPayloadBytes int
+	MaxReviewFileBytes    int
+	Stdout                io.Writer
+	Stderr                io.Writer
 }
 
 // RunAPI executes a non-interactive API operation. It never reads stdin,
 // changes settings, asks for confirmation, or accesses the clipboard.
 func RunAPI(cfg Config, opts APIOptions) error {
-	if err := validateAPIOperation(opts.Operation, opts.InputPath, opts.GoalFilePath, opts.Focus); err != nil {
+	if err := validateAPIOperation(opts); err != nil {
 		return err
 	}
 
@@ -55,7 +62,12 @@ func RunAPI(cfg Config, opts APIOptions) error {
 		stderr = io.Discard
 	}
 
-	input, err := readAPIInput(opts.InputPath)
+	var input string
+	if opts.Operation == "review-context" {
+		input, err = readAPIFileLimited(opts.InputPath, "api input file", maxReviewAPIInputBytes)
+	} else {
+		input, err = readAPIInput(opts.InputPath)
+	}
 	if err != nil {
 		return err
 	}
@@ -79,6 +91,9 @@ func RunAPI(cfg Config, opts APIOptions) error {
 			fmt.Fprintln(stderr, "project explicitly disabled via .badger-disable")
 		}
 		return err
+	}
+	if opts.Operation == "review-context" {
+		return runReviewContextAPI(cfg.Root, input, opts, stdout)
 	}
 
 	scanOutput := scanOutputSilent
@@ -128,7 +143,11 @@ func RunAPI(cfg Config, opts APIOptions) error {
 	return nil
 }
 
-func validateAPIOperation(operation, inputPath, goalFilePath string, focus protocol.Focus) error {
+func validateAPIOperation(opts APIOptions) error {
+	operation, inputPath, goalFilePath, focus := opts.Operation, opts.InputPath, opts.GoalFilePath, opts.Focus
+	if operation != "review-context" && (opts.ReviewMode != "" || opts.ReviewRef != "" || opts.PathsFilePath != "" || opts.MaxReviewPayloadBytes != 0 || opts.MaxReviewFileBytes != 0) {
+		return fmt.Errorf("api %s does not accept review-context options", operation)
+	}
 	switch operation {
 	case "scan", "topology":
 		if inputPath != "" {
@@ -163,6 +182,32 @@ func validateAPIOperation(operation, inputPath, goalFilePath string, focus proto
 		if focus != "" && focus != protocol.FocusCode && focus != protocol.FocusDesign {
 			return fmt.Errorf("api extract supports --focus <code|design>")
 		}
+	case "review-context":
+		if goalFilePath != "" || focus != "" {
+			return errors.New("api review-context does not accept --focus or --goal-file")
+		}
+		if opts.MaxReviewPayloadBytes < 0 || opts.MaxReviewFileBytes < 0 {
+			return errors.New("api review-context byte limits cannot be negative")
+		}
+		mode := opts.ReviewMode
+		if mode == "" {
+			mode = "default"
+		}
+		switch mode {
+		case "default", "staged":
+			if strings.TrimSpace(opts.ReviewRef) != "" {
+				return fmt.Errorf("api review-context mode %s does not accept --ref", mode)
+			}
+		case "branch", "commit":
+			if strings.TrimSpace(opts.ReviewRef) == "" {
+				return fmt.Errorf("api review-context mode %s requires --ref <revision>", mode)
+			}
+		default:
+			return fmt.Errorf("api review-context supports --mode <default|staged|branch|commit>; got %q", mode)
+		}
+		if opts.PathsFilePath != "" && mode != "default" {
+			return fmt.Errorf("api review-context mode %s does not accept --paths-file", mode)
+		}
 	case "goal", "extraction", "write-plan":
 		if inputPath == "" {
 			return fmt.Errorf("api %s requires --input <file>", operation)
@@ -177,6 +222,71 @@ func validateAPIOperation(operation, inputPath, goalFilePath string, focus proto
 		return fmt.Errorf("unknown api operation: %s", operation)
 	}
 	return nil
+}
+
+const maxReviewAPIInputBytes = 1024 * 1024
+
+func runReviewContextAPI(root, guidance string, api APIOptions, stdout io.Writer) error {
+	mode := reviewtask.ModeDefault
+	switch api.ReviewMode {
+	case "", "default":
+	case "staged":
+		mode = reviewtask.ModeStaged
+	case "branch":
+		mode = reviewtask.ModeBranch
+	case "commit":
+		mode = reviewtask.ModeCommit
+	}
+	paths, err := readReviewPaths(api.PathsFilePath)
+	if err != nil {
+		return err
+	}
+	result, err := reviewtask.BuildInitialReviewPayload(root, reviewtask.Options{
+		Mode: mode, Ref: api.ReviewRef, ExtraFocus: guidance, SelectedPaths: paths,
+		MaxPayloadBytes: api.MaxReviewPayloadBytes, MaxFileBytes: api.MaxReviewFileBytes,
+	})
+	if err != nil {
+		return fmt.Errorf("preparing review context: %w", err)
+	}
+	switch result.Failure {
+	case reviewtask.PayloadFailureNoChanges:
+		return errors.New("api review-context found no reviewable changes")
+	case reviewtask.PayloadFailureMandatoryOverflow:
+		return errors.New("api review-context mandatory content exceeds the payload byte limit")
+	}
+	if _, err := fmt.Fprint(stdout, result.Payload.Prompt); err != nil {
+		return fmt.Errorf("writing review context: %w", err)
+	}
+	return nil
+}
+
+func readReviewPaths(path string) ([]string, error) {
+	if path == "" {
+		return nil, nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading api paths file: %w", err)
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxReviewAPIInputBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("reading api paths file: %w", err)
+	}
+	if len(data) > maxReviewAPIInputBytes {
+		return nil, fmt.Errorf("reading api paths file: exceeds %d bytes", maxReviewAPIInputBytes)
+	}
+	if !utf8.Valid(data) {
+		return nil, errors.New("reading api paths file: invalid UTF-8")
+	}
+	var paths []string
+	if err := json.Unmarshal(data, &paths); err != nil {
+		return nil, fmt.Errorf("reading api paths file: expected a JSON array of strings: %w", err)
+	}
+	if len(paths) == 0 {
+		return nil, errors.New("reading api paths file: JSON array must contain at least one path")
+	}
+	return paths, nil
 }
 
 func normalizeAPIRoot(root string) (string, error) {
@@ -208,6 +318,28 @@ func readAPIFile(path, label string) (string, error) {
 	input, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("reading %s: %w", label, err)
+	}
+	if !utf8.Valid(input) {
+		return "", fmt.Errorf("reading %s: invalid UTF-8: %s", label, path)
+	}
+	return string(input), nil
+}
+
+func readAPIFileLimited(path, label string, maxBytes int) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", label, err)
+	}
+	defer file.Close()
+	input, err := io.ReadAll(io.LimitReader(file, int64(maxBytes)+1))
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", label, err)
+	}
+	if len(input) > maxBytes {
+		return "", fmt.Errorf("reading %s: exceeds %d bytes", label, maxBytes)
 	}
 	if !utf8.Valid(input) {
 		return "", fmt.Errorf("reading %s: invalid UTF-8: %s", label, path)

@@ -2,7 +2,7 @@
 
 Badger provides a supported, stable, non-interactive command surface for
 editors, scripts, coding agents, and other local tools. The stable operations
-are `topology`, `prompt`, and `extract`.
+are `topology`, `prompt`, `extract`, and `review-context`.
 
 Use `badger api --help` for an overview or add `--help` (or `-h`) to a stable
 operation for command-specific usage.
@@ -60,6 +60,44 @@ Use `api topology` instead when an integration needs only Badger's compact
 project map and will manage its own repository access.
 
 ## Commands
+
+### `api review-context`
+
+Print a complete initial Deep Review prompt from current Git state.
+
+```bash
+badger api review-context --root <repository> \
+  [--mode <default|staged|branch|commit>] [--ref <revision>] \
+  [--input <guidance-file>] [--paths-file <paths.json>] \
+  [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>]
+```
+
+The default mode reviews staged and unstaged tracked changes and relevant
+Git-untracked paths. `staged` reviews the index, `branch` reviews `HEAD` from
+the merge base with `--ref`, and `commit` reviews the commit named by `--ref`.
+Only default mode accepts `--paths-file`; that file is a UTF-8 JSON array of
+literal repository-relative changed paths, for example
+`["internal/client.go","deleted.go"]`. Badger validates and deduplicates the
+paths, accepts current deleted paths, and rejects absolute, escaping, or
+unchanged paths.
+
+`--input` optionally supplies current review guidance. Both input files are
+caller-owned, read once, and limited to 1 MiB. The byte-limit options must be
+positive. Omitting them uses Badger's 512 KiB complete-prompt and 64 KiB
+per-supporting-file defaults. The authoritative diff is mandatory; complete
+eligible changed files are included only when they fit. Tracked additions,
+deletions, binary files, sensitive files, oversized files, and untracked files
+follow the status policy printed in the prompt.
+
+The operation builds the complete AI-facing prompt before writing stdout. It
+exits nonzero without writing stdout for generation failures such as no changes,
+an invalid Git root or ref, Git failure, invalid selections, or mandatory
+overflow. A destination write failure also returns nonzero; as with any stream,
+the destination may already contain a partial prefix when that happens. The
+operation is non-interactive and read-only and does not scan project topology,
+read stdin, access the clipboard, open the TUI or a browser, contact providers,
+or access the network. Normal output uses repository-relative paths and does
+not expose the absolute repository root.
 
 ### `api topology`
 

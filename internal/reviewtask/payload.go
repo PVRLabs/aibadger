@@ -11,6 +11,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/defaults"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/scanner"
 	"github.com/PVRLabs/aibadger/internal/startup"
 )
 
@@ -100,7 +101,7 @@ func buildInitialReviewPayloadFromChangeSet(root string, set ChangeSet, opts Opt
 	if opts.MaxFileBytes > 0 {
 		limits.maxFileBytes = opts.MaxFileBytes
 	}
-	return buildInitialReviewPayload(root, set, strings.TrimSpace(opts.ExtraFocus), limits, readStableReviewFile)
+	return buildInitialReviewPayloadWithTopology(root, set, strings.TrimSpace(opts.ExtraFocus), limits, opts.IncludeTopology, readStableReviewFile)
 }
 
 // BuildInteractiveContext prepares review context for editable TUI
@@ -230,20 +231,44 @@ const (
 type stableFileReader func(string, int) ([]byte, stableFileOutcome)
 
 func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, readFile stableFileReader) InitialReviewResult {
+	return buildInitialReviewPayloadWithTopology(root, set, guidance, limits, false, readFile)
+}
+
+func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, includeTopology bool, readFile stableFileReader) InitialReviewResult {
 	if len(set.Changes) == 0 && len(set.UntrackedPaths) == 0 {
 		return InitialReviewResult{Failure: PayloadFailureNoChanges}
 	}
-
 	files := make([]FileContext, len(set.Changes))
 	for i, change := range set.Changes {
 		files[i] = FileContext{Path: change.Path, Status: initialContextStatus(change)}
+	}
+	topology := ""
+	if includeTopology {
+		// Reserve the complete mandatory review request before rendering topology.
+		// This guarantees topology can never consume or hide the authoritative diff.
+		mandatory := renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes, "")
+		// renderInitialReviewPrompt inserts one separator newline between the
+		// topology block and the review instruction. Reserve it alongside the
+		// mandatory review payload so an exactly-filled topology remains valid.
+		topologyBudget := limits.maxPayloadBytes - len(mandatory) - 1
+		if topologyBudget < 0 {
+			topologyBudget = 0
+		}
+		s := scanner.NewScanner(root)
+		project, err := s.Scan()
+		if err != nil {
+			return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
+		}
+		formatter := protocol.NewFormatter()
+		formatter.MaxTopologyPromptBytes = topologyBudget
+		topology = formatter.GenerateTopology(project)
 	}
 
 	// Pending optional files render neither a limitation status nor a content
 	// block. This is the smallest truthful provisional prompt, so it cannot
 	// reject a review merely because a status may disappear after a successful
 	// read.
-	if len(renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes)) > limits.maxPayloadBytes {
+	if len(renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes, topology)) > limits.maxPayloadBytes {
 		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 	}
 
@@ -264,7 +289,7 @@ func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limi
 			files[i].Content = string(content)
 		}
 
-		if len(renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes)) <= limits.maxPayloadBytes {
+		if len(renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes, topology)) <= limits.maxPayloadBytes {
 			continue
 		}
 		if files[i].Status == ContextIncluded {
@@ -285,7 +310,7 @@ func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limi
 			files[i].Status = ContextBudget
 		}
 	}
-	prompt := renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes)
+	prompt := renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes, topology)
 	for len(prompt) > limits.maxPayloadBytes {
 		removed := false
 		for i := len(files) - 1; i >= 0; i-- {
@@ -300,7 +325,7 @@ func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limi
 		if !removed {
 			return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 		}
-		prompt = renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes)
+		prompt = renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes, topology)
 	}
 	if len(prompt) > limits.maxPayloadBytes {
 		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
@@ -325,8 +350,16 @@ func initialContextStatus(change Change) ContextStatus {
 	}
 }
 
-func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileContext, maxFileBytes int) string {
+func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileContext, maxFileBytes int, topologyParts ...string) string {
+	topology := ""
+	if len(topologyParts) > 0 {
+		topology = topologyParts[0]
+	}
 	var out strings.Builder
+	if topology != "" {
+		out.WriteString(topology)
+		out.WriteByte('\n')
+	}
 	out.WriteString(buildReviewInstruction(guidance))
 	out.WriteByte('\n')
 	out.WriteString(renderReviewContext(set, files, maxFileBytes))

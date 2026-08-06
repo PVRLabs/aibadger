@@ -36,6 +36,7 @@ type APIOptions struct {
 	PathsFilePath         string
 	MaxReviewPayloadBytes int
 	MaxReviewFileBytes    int
+	IncludeReviewTopology bool
 	Stdout                io.Writer
 	Stderr                io.Writer
 }
@@ -162,7 +163,7 @@ func runAPIWithReviewBuilder(cfg Config, opts APIOptions, buildReview reviewPayl
 
 func validateAPIOperation(opts APIOptions) error {
 	operation, inputPath, goalFilePath, focus := opts.Operation, opts.InputPath, opts.GoalFilePath, opts.Focus
-	if operation != "review-context" && operation != "review-continuation" && (opts.ReviewMode != "" || opts.ReviewRef != "" || opts.PathsFilePath != "" || opts.MaxReviewPayloadBytes != 0 || opts.MaxReviewFileBytes != 0) {
+	if operation != "review-context" && operation != "review-continuation" && (opts.ReviewMode != "" || opts.ReviewRef != "" || opts.PathsFilePath != "" || opts.MaxReviewPayloadBytes != 0 || opts.MaxReviewFileBytes != 0 || opts.IncludeReviewTopology) {
 		return fmt.Errorf("api %s does not accept review-context options", operation)
 	}
 	switch operation {
@@ -229,7 +230,7 @@ func validateAPIOperation(opts APIOptions) error {
 		if inputPath == "" {
 			return errors.New("api review-continuation requires --input <file>")
 		}
-		if goalFilePath != "" || focus != "" || opts.ReviewMode != "" || opts.ReviewRef != "" || opts.PathsFilePath != "" {
+		if goalFilePath != "" || focus != "" || opts.ReviewMode != "" || opts.ReviewRef != "" || opts.PathsFilePath != "" || opts.IncludeReviewTopology {
 			return errors.New("api review-continuation accepts only --root, --input, --max-payload-bytes, and --max-file-bytes")
 		}
 		if opts.MaxReviewPayloadBytes < 0 || opts.MaxReviewFileBytes < 0 {
@@ -315,6 +316,7 @@ func runReviewContextAPIWithBuilder(root, guidance string, api APIOptions, stdou
 	result, err := buildReview(root, reviewtask.Options{
 		Mode: mode, Ref: api.ReviewRef, ExtraFocus: guidance, SelectedPaths: paths,
 		MaxPayloadBytes: api.MaxReviewPayloadBytes, MaxFileBytes: api.MaxReviewFileBytes,
+		IncludeTopology: api.IncludeReviewTopology,
 	})
 	if err != nil {
 		return fmt.Errorf("preparing review context: %w", sanitizeReviewPreparationError(root, err))

@@ -126,6 +126,7 @@ type apiConfig struct {
 	pathsFilePath         string
 	maxReviewPayloadBytes int
 	maxReviewFileBytes    int
+	includeReviewTopology bool
 }
 
 func runAPI(args []string, stdout, stderr io.Writer) error {
@@ -151,6 +152,7 @@ func runAPI(args []string, stdout, stderr io.Writer) error {
 		PathsFilePath:         api.pathsFilePath,
 		MaxReviewPayloadBytes: api.maxReviewPayloadBytes,
 		MaxReviewFileBytes:    api.maxReviewFileBytes,
+		IncludeReviewTopology: api.includeReviewTopology,
 		Stdout:                stdout,
 		Stderr:                stderr,
 	})
@@ -247,6 +249,8 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 			if err != nil {
 				return apiConfig{}, err
 			}
+		case arg == "--include-topology":
+			cfg.includeReviewTopology = true
 		default:
 			return apiConfig{}, fmt.Errorf("unknown api flag: %s", arg)
 		}

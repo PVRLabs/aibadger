@@ -121,11 +121,12 @@ Failures:
 `)
 	case "review-context":
 		fmt.Fprint(w, `Usage:
-  badger api review-context --root <repository> [--mode <default|staged|branch|commit>] [--ref <revision>] [--input <guidance-file>] [--paths-file <paths.json>] [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>]
+  badger api review-context --root <repository> [--mode <default|staged|branch|commit>] [--ref <revision>] [--input <guidance-file>] [--paths-file <paths.json>] [--include-topology] [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>]
 
 Purpose:
   Produce a complete standalone review request from authoritative Git state.
-  The request is directly usable and intentionally omits project topology.
+  The request is directly usable. Project topology and the source tree are
+  omitted unless --include-topology is explicitly supplied.
 
 Required arguments:
   --root <repository>  The Git repository root.
@@ -136,6 +137,8 @@ Optional arguments:
   --input <file>       UTF-8 review guidance file (maximum 1 MiB).
   --paths-file <file>  JSON array of literal repository-relative changed paths;
                        accepted only in default mode (maximum 1 MiB).
+  --include-topology    Include Badger-owned project topology and source tree
+                        before the review context under the shared byte limit.
   --max-payload-bytes <bytes>  Positive complete-prompt byte limit.
   --max-file-bytes <bytes>     Positive per-file supporting-context limit.
   --help, -h           Print this help and exit.
@@ -144,7 +147,8 @@ Example:
   badger api review-context --root . --mode default --input guidance.txt
 
 Output and side effects:
-  Writes the complete topology-free AI-facing review request to stdout.
+  Writes the complete AI-facing review request to stdout. Topology is included
+  only when --include-topology is explicitly supplied.
   Diagnostics go only to stderr. This command is deterministic for unchanged Git state,
   non-interactive, and read-only. It does not use stdin, the clipboard, a
   browser, the TUI, providers, or the network.

@@ -69,6 +69,9 @@ type Options struct {
 	// defaults when positive. Negative values are invalid.
 	MaxPayloadBytes int
 	MaxFileBytes    int
+	// IncludeTopology asks the initial payload builder to prepend Badger-owned
+	// project topology and source-tree context under the same payload budget.
+	IncludeTopology bool
 	// MaxPromptBytes bounds the complete interactive Schema A prompt. It is
 	// ignored by stable/headless payload generation.
 	MaxPromptBytes int

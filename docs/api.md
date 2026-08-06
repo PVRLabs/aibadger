@@ -64,14 +64,15 @@ project map and will manage its own repository access.
 
 ### `api review-context`
 
-Print a complete standalone review request from current Git state. “Complete”
-means the output is directly usable without assembling another review-context
-envelope; it does not include project topology.
+Print a complete review request from current Git state. “Complete” means the
+output is directly usable without assembling another review-context envelope.
+Topology is omitted unless `--include-topology` is explicitly requested.
 
 ```bash
 badger api review-context --root <repository> \
   [--mode <default|staged|branch|commit>] [--ref <revision>] \
   [--input <guidance-file>] [--paths-file <paths.json>] \
+  [--include-topology] \
   [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>]
 ```
 
@@ -98,9 +99,10 @@ generation time, including in staged, branch, and commit modes. Supporting
 content may therefore be newer than the reviewed diff and never changes which
 patch is authoritative.
 
-The operation builds the complete standalone AI-facing review request before
-writing stdout. It intentionally omits project topology; integrations that
-want topology must obtain and compose `api topology` output separately. It
+The operation builds the complete AI-facing review request before writing
+stdout. With `--include-topology`, Badger owns the project scan, source-tree
+format, ordering, and shared payload budget; the authoritative diff remains
+mandatory. Without that flag, topology is not inspected or included. It
 exits nonzero without writing stdout for generation failures such as no changes,
 an invalid Git root or ref, Git failure, invalid selections, or mandatory
 overflow. A destination write failure also returns nonzero; as with any stream,
@@ -111,8 +113,9 @@ or access the network. Normal output uses repository-relative paths and does
 not expose the absolute repository root.
 
 Editor integrations can capability-check this operation with `badger api
---help` and, when needed, `badger api review-context --help`. On success,
-stdout is the complete topology-free request to copy verbatim; on failure,
+--help` and `badger api review-context --help`; the latter advertises
+`--include-topology` when supported. On success, stdout is the complete
+request to copy verbatim; on failure,
 stderr contains the
 `Error: ...` diagnostic and stdout is empty. The command never writes to the
 clipboard or contacts an AI provider.

@@ -629,6 +629,11 @@ func TestParseAPIConfig(t *testing.T) {
 			want: apiConfig{operation: "review-context", root: "/project", inputPath: "guidance.txt", reviewMode: "default", pathsFilePath: "paths.json", maxReviewPayloadBytes: 500000, maxReviewFileBytes: 64000},
 		},
 		{
+			name: "topology-aware review context",
+			args: []string{"review-context", "--root", "/project", "--include-topology"},
+			want: apiConfig{operation: "review-context", root: "/project", reviewMode: "default", includeReviewTopology: true},
+		},
+		{
 			name: "branch review context",
 			args: []string{"review-context", "--root=/project", "--mode", "branch", "--ref=main"},
 			want: apiConfig{operation: "review-context", root: "/project", reviewMode: "branch", reviewRef: "main"},
@@ -759,7 +764,7 @@ func TestRunAPIHelp(t *testing.T) {
 		{
 			name: "review context help",
 			args: []string{"review-context", "--help"},
-			want: []string{"--mode <default|staged|branch|commit>", "--paths-file <paths.json>", "standalone review request", "omits project topology", "stdout", "destination failure", "partial", "read-only"},
+			want: []string{"--mode <default|staged|branch|commit>", "--paths-file <paths.json>", "--include-topology", "standalone review request", "Project topology", "stdout", "destination failure", "partial", "read-only"},
 		},
 	}
 

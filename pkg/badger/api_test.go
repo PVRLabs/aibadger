@@ -166,6 +166,26 @@ func TestRunAPIReviewContextTypedFailuresProduceNoOutput(t *testing.T) {
 	}
 }
 
+func TestRunAPIReviewContextPassesTopologyCapability(t *testing.T) {
+	var stdout bytes.Buffer
+	var got reviewtask.Options
+	err := runAPIWithReviewBuilder(Config{Root: t.TempDir()}, APIOptions{
+		Operation: "review-context", IncludeReviewTopology: true, Stdout: &stdout,
+	}, func(_ string, opts reviewtask.Options) (reviewtask.InitialReviewResult, error) {
+		got = opts
+		return reviewtask.InitialReviewResult{Payload: reviewtask.InitialReviewPayload{Prompt: "topology-aware"}}, nil
+	})
+	if err != nil {
+		t.Fatalf("runAPIWithReviewBuilder() error = %v", err)
+	}
+	if !got.IncludeTopology {
+		t.Fatal("reviewtask options IncludeTopology = false, want true")
+	}
+	if stdout.String() != "topology-aware" {
+		t.Fatalf("stdout = %q, want exact builder output", stdout.String())
+	}
+}
+
 func TestRunAPIReviewContextBuilderFailureDoesNotLeakAbsoluteRoot(t *testing.T) {
 	root := t.TempDir()
 	var stdout, stderr bytes.Buffer

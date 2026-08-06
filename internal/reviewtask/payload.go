@@ -91,7 +91,7 @@ func BuildInitialReviewPayload(root string, opts Options) (InitialReviewResult, 
 	return buildInitialReviewPayload(root, set, strings.TrimSpace(opts.ExtraFocus), limits, readStableReviewFile), nil
 }
 
-// BuildInteractiveContext prepares the improved payload for editable TUI
+// BuildInteractiveContext prepares review context for editable TUI
 // startup. The generated context stays byte-for-byte intact in one raw
 // attachment; text entered in Goal is additional editable review guidance.
 // Clean and non-Git roots preserve the historical editable fallback.
@@ -121,21 +121,39 @@ func BuildInteractiveContext(root string, opts Options) (startup.Context, error)
 }
 
 func initialPayloadStartupContext(payload InitialReviewPayload) startup.Context {
-	contextPrompt := renderInitialReviewPrompt(payload.ChangeSet, "", payload.Files)
+	contextPrompt := renderReviewContext(payload.ChangeSet, payload.Files)
+	additions, deletions := reviewPatchStats(payload.ChangeSet.Changes)
 	return startup.Context{
-		Goal: payload.Guidance,
+		Goal: buildReviewInstruction(payload.Guidance),
 		Attachments: []startup.Attachment{{
-			Type:      "review context",
-			Source:    "improved review context",
-			Text:      contextPrompt,
-			SizeBytes: int64(len(contextPrompt)),
-			Lines:     countReviewTextLines(contextPrompt),
+			Type:         "review context",
+			Source:       "review context",
+			Text:         contextPrompt,
+			SizeBytes:    int64(len(contextPrompt)),
+			Lines:        countReviewTextLines(contextPrompt),
+			FilesChanged: len(payload.ChangeSet.Changes) + len(payload.ChangeSet.UntrackedPaths),
+			Additions:    additions,
+			Deletions:    deletions,
 		}},
 		Status: startup.Status{
-			Text:     "Loaded improved review context. Add optional guidance before submitting.",
+			Text:     "Loaded Git changes and supporting review context. Add optional guidance before submitting.",
 			Severity: "success",
 		},
 	}
+}
+
+func reviewPatchStats(changes []Change) (additions, deletions int) {
+	for _, change := range changes {
+		for _, line := range strings.Split(change.Patch, "\n") {
+			switch {
+			case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
+				additions++
+			case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
+				deletions++
+			}
+		}
+	}
+	return additions, deletions
 }
 
 type stableFileOutcome int
@@ -219,20 +237,22 @@ func initialContextStatus(change Change) ContextStatus {
 
 func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileContext) string {
 	var out strings.Builder
-	out.WriteString("Review the authoritative Git changes below. Report actionable findings now, ordered by severity, with file and line references. If there are no findings, say so clearly. Request FILE:, PREFIX:, or NEAR: context only when unchanged referenced or validating context is genuinely necessary.\n")
-	if guidance != "" {
-		out.WriteString("\nReview guidance:\n")
-		out.WriteString(guidance)
-		out.WriteByte('\n')
-	}
+	out.WriteString(buildReviewInstruction(guidance))
+	out.WriteByte('\n')
+	out.WriteString(renderReviewContext(set, files))
+	return out.String()
+}
+
+func renderReviewContext(set ChangeSet, files []FileContext) string {
+	var out strings.Builder
 	if len(files) > 0 {
-		out.WriteString("\nTracked file context status:\n")
+		out.WriteString("[REVIEW CONTEXT: TRACKED FILE STATUS]\n")
 		for _, file := range files {
 			fmt.Fprintf(&out, "%s\t%s\n", file.Path, file.Status)
 		}
 	}
 	if len(set.Changes) > 0 {
-		out.WriteString("\nAuthoritative tracked Git diff:\n```diff\n")
+		out.WriteString("\nDiff:\n```diff\n")
 		for i, change := range set.Changes {
 			if i > 0 {
 				out.WriteString("\n\n")
@@ -242,7 +262,8 @@ func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileConte
 		out.WriteString("\n```\n")
 	}
 	if len(set.UntrackedPaths) > 0 {
-		out.WriteString("\nGit-untracked reference paths (contents not included):\n")
+		out.WriteString("\n[REVIEW CONTEXT: GIT-UNTRACKED FILES]\n")
+		out.WriteString("Note: Untracked files are provided for reference and are not necessarily missing from the commit. Their contents are not included.\n\n")
 		for _, path := range set.UntrackedPaths {
 			out.WriteString("- ")
 			out.WriteString(escapeReviewPath(path))
@@ -256,7 +277,7 @@ func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileConte
 		if file.Status != ContextIncluded {
 			continue
 		}
-		out.WriteString("\nCurrent working-tree supporting file: ")
+		out.WriteString("\n[REVIEW CONTEXT: CURRENT WORKING-TREE FILE]\nPath: ")
 		out.WriteString(file.Path)
 		out.WriteString("\n```text\n")
 		out.WriteString(file.Content)
@@ -265,7 +286,7 @@ func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileConte
 		}
 		out.WriteString("```\n")
 	}
-	return out.String()
+	return strings.TrimPrefix(out.String(), "\n")
 }
 
 func cloneFileContexts(files []FileContext) []FileContext {

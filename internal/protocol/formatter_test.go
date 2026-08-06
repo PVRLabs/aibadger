@@ -152,9 +152,10 @@ func TestGenerateSchemaAUsesFocusSpecificConstraints(t *testing.T) {
 			name:  "review",
 			focus: FocusReview,
 			wantA: []string{
-				"Do not propose a fix yet.",
-				"Target the smallest context set needed to confirm or refute correctness, regressions, test coverage gaps, and behavior changes.",
-				"changed files, entrypoints, and directly related tests",
+				"Review the supplied changes now.",
+				"output the final review findings",
+				"Never mix selectors with review findings.",
+				"Do not request files already supplied in the review context",
 			},
 			wantB: []string{
 				"This is the final-answer step for a code review.",
@@ -1326,8 +1327,8 @@ func TestGenerateSchemaBThreeLargeFilesDroppedWhenExceedBudget(t *testing.T) {
 	}
 }
 
-// largeTopology returns a topology whose Prompt 1 output, when unbounded,
-// exceeds MaxTopologyPromptBytes (100,000 bytes). Packages use deliberately
+// largeTopology returns a deliberately oversized topology for exercising
+// configured Prompt 1 budgets. Packages use deliberately
 // long paths and filenames to generate a large output without creating many
 // entries. This is a pure formatter test helper — it creates no files and
 // runs no scanner.
@@ -1363,41 +1364,7 @@ var shortFooter = PromptInstructions{
 	SchemaBConstraint: "",
 }
 
-const promptOneBudget = 100000
-
-func TestGenerateSchemaAPromptOneBudgetObeysItsOwnLimit(t *testing.T) {
-	topology := largeTopology(100)
-
-	// 1. Unbounded output must exceed the budget.
-	noLimit := NewFormatter()
-	noLimit.SetPromptInstructions(shortFooter)
-	noLimit.MaxTopologyPromptBytes = 0
-	full := noLimit.GenerateSchemaA(topology, "test")
-	if len(full) <= promptOneBudget {
-		t.Fatalf("unbounded Prompt 1 output = %d bytes, want > %d", len(full), promptOneBudget)
-	}
-
-	// 2. With the budget applied, packages are dropped.
-	formatter := NewFormatter()
-	formatter.SetPromptInstructions(shortFooter)
-	formatter.MaxTopologyPromptBytes = promptOneBudget
-	output := formatter.GenerateSchemaA(topology, "test")
-
-	if !strings.Contains(output, "[TASK]") || !strings.Contains(output, "[CONSTRAINT]") {
-		t.Fatal("Prompt 1 must include task and constraint even when truncated")
-	}
-	if !strings.Contains(output, "... [Truncated due to size limit] ...") {
-		t.Fatal("expected truncation marker when Prompt 1 exceeds budget")
-	}
-	// The output must be smaller than the unbounded version.
-	if len(output) >= len(full) {
-		t.Fatal("truncated Prompt 1 must be smaller than unbounded output")
-	}
-	// At least some packages were dropped.
-	if strings.Count(output, "Pkg: ") >= 100 {
-		t.Fatal("expected some packages to be dropped")
-	}
-}
+const smallPromptOneBudget = 100000
 
 func TestGenerateSchemaAPromptTwoBudgetDoesNotAffectPromptOne(t *testing.T) {
 	topology := largeTopology(100)
@@ -1405,14 +1372,14 @@ func TestGenerateSchemaAPromptTwoBudgetDoesNotAffectPromptOne(t *testing.T) {
 	// Generate with MaxPromptTwoBytes = 1 (near-zero Prompt 2 budget).
 	f1 := NewFormatter()
 	f1.SetPromptInstructions(shortFooter)
-	f1.MaxTopologyPromptBytes = promptOneBudget
+	f1.MaxTopologyPromptBytes = smallPromptOneBudget
 	f1.MaxPromptTwoBytes = 1
 	out1 := f1.GenerateSchemaA(topology, "test")
 
 	// Generate with a very large Prompt 2 budget.
 	f2 := NewFormatter()
 	f2.SetPromptInstructions(shortFooter)
-	f2.MaxTopologyPromptBytes = promptOneBudget
+	f2.MaxTopologyPromptBytes = smallPromptOneBudget
 	f2.MaxPromptTwoBytes = 999 * 1024
 	out2 := f2.GenerateSchemaA(topology, "test")
 
@@ -1420,7 +1387,7 @@ func TestGenerateSchemaAPromptTwoBudgetDoesNotAffectPromptOne(t *testing.T) {
 		t.Fatal("MaxPromptTwoBytes must not affect Prompt 1 output")
 	}
 	if !strings.Contains(out1, "... [Truncated due to size limit] ...") {
-		t.Fatal("Prompt 1 must be truncated at 100 KB regardless of Prompt 2 budget")
+		t.Fatal("Prompt 1 must be truncated at its configured budget regardless of Prompt 2 budget")
 	}
 }
 
@@ -1429,7 +1396,7 @@ func TestGenerateSchemaAPromptOneBudgetControlsPromptOne(t *testing.T) {
 
 	smallBudget := NewFormatter()
 	smallBudget.SetPromptInstructions(shortFooter)
-	smallBudget.MaxTopologyPromptBytes = promptOneBudget
+	smallBudget.MaxTopologyPromptBytes = smallPromptOneBudget
 	smallOut := smallBudget.GenerateSchemaA(topology, "test")
 
 	largeBudget := NewFormatter()
@@ -1442,10 +1409,26 @@ func TestGenerateSchemaAPromptOneBudgetControlsPromptOne(t *testing.T) {
 		t.Fatal("larger Prompt 1 budget should produce larger or equal output")
 	}
 	if !strings.Contains(smallOut, "... [Truncated due to size limit] ...") {
-		t.Fatal("100 KB budget output must contain truncation marker")
+		t.Fatal("smaller-budget output must contain truncation marker")
 	}
 	if strings.Contains(largeOut, "... [Truncated due to size limit] ...") {
 		t.Fatal("140 KB budget output should not be truncated")
+	}
+}
+
+func TestGenerateSchemaADefaultBudgetRetainsTopologyWithLargeReviewTask(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.SetPromptInstructions(shortFooter)
+	topology := largeTopology(25)
+	task := strings.Repeat("r", 242*1024)
+
+	output := formatter.GenerateSchemaA(topology, task)
+
+	if strings.Contains(output, "... [Truncated due to size limit] ...") {
+		t.Fatal("default Prompt 1 budget truncated topology for a 242 KiB task")
+	}
+	if !strings.Contains(output, "Pkg: ") {
+		t.Fatal("default Prompt 1 budget omitted all source-tree packages")
 	}
 }
 

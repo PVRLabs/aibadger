@@ -34,8 +34,25 @@ func TestBuildInitialReviewPayloadIncludesEligibleCurrentFilesAndStatuses(t *tes
 	if strings.Count(result.Payload.Prompt, "package added") != 1 {
 		t.Fatalf("added file was duplicated:\n%s", result.Payload.Prompt)
 	}
-	if strings.Contains(result.Payload.Prompt, "Current working-tree supporting file: .env") {
+	if strings.Contains(result.Payload.Prompt, "Path: .env") {
 		t.Fatalf("sensitive file was duplicated as supporting context:\n%s", result.Payload.Prompt)
+	}
+}
+
+func TestBuildInteractiveContextIncludesTrackedDiffStats(t *testing.T) {
+	repo := newGitRepo(t)
+	writeTrackedFile(t, repo, "app.go", "package main\n// one\n// two\n")
+
+	ctx, err := BuildInteractiveContext(repo, Options{Mode: ModeDefault})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ctx.Attachments) != 1 {
+		t.Fatalf("attachments = %d, want 1", len(ctx.Attachments))
+	}
+	attachment := ctx.Attachments[0]
+	if attachment.FilesChanged != 1 || attachment.Additions != 2 || attachment.Deletions != 4 {
+		t.Fatalf("stats = files:%d +%d/-%d, want files:1 +2/-4", attachment.FilesChanged, attachment.Additions, attachment.Deletions)
 	}
 }
 
@@ -50,10 +67,10 @@ func TestBuildInitialReviewPayloadRendersUntrackedPathsWithoutContents(t *testin
 	if result.Failure != PayloadFailureNone || len(result.Payload.ChangeSet.Changes) != 0 {
 		t.Fatalf("result = %+v", result)
 	}
-	if !strings.Contains(result.Payload.Prompt, "Git-untracked reference paths") || !strings.Contains(result.Payload.Prompt, "notes/new.go") {
+	if !strings.Contains(result.Payload.Prompt, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") || !strings.Contains(result.Payload.Prompt, "not necessarily missing from the commit") || !strings.Contains(result.Payload.Prompt, "notes/new.go") {
 		t.Fatalf("prompt missing untracked path section:\n%s", result.Payload.Prompt)
 	}
-	if strings.Contains(result.Payload.Prompt, "const hidden") || strings.Contains(result.Payload.Prompt, "Authoritative tracked Git diff") {
+	if strings.Contains(result.Payload.Prompt, "const hidden") || strings.Contains(result.Payload.Prompt, "Diff:") {
 		t.Fatalf("untracked contents or synthetic diff leaked:\n%s", result.Payload.Prompt)
 	}
 }

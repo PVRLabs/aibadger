@@ -1611,8 +1611,8 @@ func TestSubmitGoalReviewCommandUsesPreparedPrompt(t *testing.T) {
 	if got.cfg.Focus != protocol.FocusReview {
 		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusReview)
 	}
-	if got.goalInput.Value() != "" {
-		t.Fatalf("goal input = %q, want empty optional guidance", got.goalInput.Value())
+	if !strings.Contains(got.goalInput.Value(), "Review the following change for concrete bugs") {
+		t.Fatalf("goal input = %q, want editable review instruction", got.goalInput.Value())
 	}
 	if strings.Contains(got.goalInput.Value(), "/review") {
 		t.Fatalf("goal input still contains command text: %q", got.goalInput.Value())
@@ -1629,7 +1629,10 @@ func TestSubmitGoalReviewCommandUsesPreparedPrompt(t *testing.T) {
 	if !strings.Contains(got.goalAttachments[0].Text, "println(\"updated\")") {
 		t.Fatalf("goal attachment missing diff content:\n%s", got.goalAttachments[0].Text)
 	}
-	if !strings.Contains(got.status.text, "Loaded improved review context") {
+	if strings.Contains(got.goalAttachments[0].Text, "Review the following change for concrete bugs") {
+		t.Fatalf("goal attachment duplicated editable review instruction:\n%s", got.goalAttachments[0].Text)
+	}
+	if !strings.Contains(got.status.text, "Loaded Git changes and supporting review context") {
 		t.Fatalf("status = %q, want success review status", got.status.text)
 	}
 	if cmd == nil {
@@ -1661,7 +1664,7 @@ func TestSubmitGoalReviewCommandUsesExtraFocusText(t *testing.T) {
 	}
 }
 
-func TestImprovedReviewSubmissionCopiesDirectlyThenAcceptsOptionalSelectors(t *testing.T) {
+func TestImprovedReviewSubmissionUsesPromptOneThenAcceptsOptionalSelectors(t *testing.T) {
 	repo := newReviewRepo(t, "println(\"updated\")")
 	m := NewModel(repo, DefaultConfig())
 	m.goalInput.SetValue("/review")
@@ -1669,24 +1672,31 @@ func TestImprovedReviewSubmissionCopiesDirectlyThenAcceptsOptionalSelectors(t *t
 	next, _ := m.submitGoal()
 	prepared := next.(Model)
 	next, cmd := prepared.submitGoal()
-	copying := next.(Model)
-	if copying.state != stateHome {
-		t.Fatalf("state before copy = %v, want home", copying.state)
+	scanning := next.(Model)
+	if scanning.state != stateScanning {
+		t.Fatalf("state after submit = %v, want scanning", scanning.state)
 	}
 	if cmd == nil {
-		t.Fatal("improved review submission returned nil copy command")
+		t.Fatal("improved review submission returned nil scan command")
 	}
-	original := copyToClipboard
-	copyToClipboard = func(string) error { return nil }
-	t.Cleanup(func() { copyToClipboard = original })
-	msg, ok := cmd().(copyDoneMsg)
-	if !ok {
-		t.Fatalf("copy command returned unexpected message")
+	eng := engine.FromTopology(repo, &model.ProjectTopology{Name: "review-project"})
+	next, _ = scanning.Update(scanDoneMsg{eng: eng})
+	ready := next.(Model)
+	if ready.state != stateScanComplete {
+		t.Fatalf("state after scan = %v, want scan complete", ready.state)
 	}
-	if msg.kind != reviewPromptKind || !strings.Contains(msg.text, "Authoritative tracked Git diff:") || !strings.Contains(msg.text, "Current working-tree supporting file: app.go") {
-		t.Fatalf("copied review payload missing improved context: kind=%q\n%s", msg.kind, msg.text)
+	for _, want := range []string{"[PROJECT TOPOLOGY]", "[SOURCE TREE]", "[TASK]", "[REVIEW CONTEXT: TRACKED FILE STATUS]", "Diff:", "[REVIEW CONTEXT: CURRENT WORKING-TREE FILE]", "Path: app.go", "[CONSTRAINT]", "Review the supplied changes now."} {
+		if !strings.Contains(ready.schemaA, want) {
+			t.Fatalf("Prompt 1 missing %q:\n%s", want, ready.schemaA)
+		}
 	}
-	next, _ = copying.Update(msg)
+	if count := strings.Count(ready.schemaA, "Review the following change for concrete bugs"); count != 1 {
+		t.Fatalf("Prompt 1 review instruction count = %d, want 1:\n%s", count, ready.schemaA)
+	}
+	if !strings.Contains(ready.viewScanComplete(), "Includes Git changes and may include eligible current working-tree file contents") {
+		t.Fatalf("Review Prompt 1 missing truthful privacy notice:\n%s", ready.viewScanComplete())
+	}
+	next, _ = ready.advanceAfterCopy(topologyPromptKind, false)
 	waiting := next.(Model)
 	if waiting.state != stateWaitingForExtractions {
 		t.Fatalf("state after copy = %v, want optional selector entry", waiting.state)
@@ -1700,8 +1710,13 @@ func TestImprovedReviewSubmissionCopiesDirectlyThenAcceptsOptionalSelectors(t *t
 	if !ok || continuation.err != nil {
 		t.Fatalf("review continuation = %#v, want successful context", continuation)
 	}
-	if !strings.Contains(continuation.schema, "Supplemental repository context") || strings.Contains(continuation.schema, "Authoritative tracked Git diff:") {
-		t.Fatalf("continuation resent initial review or lacked supplemental framing:\n%s", continuation.schema)
+	for _, want := range []string{"[PROJECT TOPOLOGY]", "[TASK]", "Continue the existing review", "[OUTPUT CONSTRAINT]", "[CONTEXT]", "app.go"} {
+		if !strings.Contains(continuation.schema, want) {
+			t.Fatalf("Review Prompt 2 missing %q:\n%s", want, continuation.schema)
+		}
+	}
+	if strings.Contains(continuation.schema, "[REVIEW CONTEXT: TRACKED FILE STATUS]") {
+		t.Fatalf("Review Prompt 2 resent initial review context:\n%s", continuation.schema)
 	}
 	_ = next
 }
@@ -1750,8 +1765,8 @@ func TestSubmitGoalReviewCommandUsesUntrackedFilesOnly(t *testing.T) {
 	if got.cfg.Focus != protocol.FocusReview {
 		t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusReview)
 	}
-	if got.goalInput.Value() != "" {
-		t.Fatalf("goal input = %q, want empty optional guidance", got.goalInput.Value())
+	if !strings.Contains(got.goalInput.Value(), "Review the following change for concrete bugs") {
+		t.Fatalf("goal input = %q, want editable review instruction", got.goalInput.Value())
 	}
 	if strings.Contains(got.goalInput.Value(), "Paste the diff below") {
 		t.Fatalf("goal input unexpectedly contains fallback prompt:\n%s", got.goalInput.Value())
@@ -1762,8 +1777,11 @@ func TestSubmitGoalReviewCommandUsesUntrackedFilesOnly(t *testing.T) {
 	if got.goalAttachments[0].Type != goalAttachmentReview {
 		t.Fatalf("goal attachment type = %q, want %q", got.goalAttachments[0].Type, goalAttachmentReview)
 	}
-	if got.goalAttachments[0].Source != "improved review context" {
-		t.Fatalf("goal attachment source = %q, want improved review context", got.goalAttachments[0].Source)
+	if got.goalAttachments[0].Source != "review context" {
+		t.Fatalf("goal attachment source = %q, want review context", got.goalAttachments[0].Source)
+	}
+	if got.goalAttachments[0].Summary != "[review context: 1 changed file, +0/-0, "+protocol.FormatFileSize(got.goalAttachments[0].SizeBytes)+fmt.Sprintf(", %d lines]", got.goalAttachments[0].Lines) {
+		t.Fatalf("goal attachment summary = %q, want changed-file count and payload size", got.goalAttachments[0].Summary)
 	}
 	if !strings.Contains(got.goalAttachments[0].Text, "notes/todo.md") {
 		t.Fatalf("goal attachment missing untracked path:\n%s", got.goalAttachments[0].Text)
@@ -1774,7 +1792,7 @@ func TestSubmitGoalReviewCommandUsesUntrackedFilesOnly(t *testing.T) {
 	if strings.Contains(got.goalAttachments[0].Text, "Diff:") {
 		t.Fatalf("goal attachment unexpectedly contains diff heading:\n%s", got.goalAttachments[0].Text)
 	}
-	if !strings.Contains(got.status.text, "Loaded improved review context") {
+	if !strings.Contains(got.status.text, "Loaded Git changes and supporting review context") {
 		t.Fatalf("status = %q, want success review status", got.status.text)
 	}
 	if cmd == nil {
@@ -1808,8 +1826,8 @@ func TestSubmitGoalReviewCommandUsesTrackedAndUntrackedAttachments(t *testing.T)
 	if got.goalAttachments[0].Type != goalAttachmentReview {
 		t.Fatalf("attachment type = %q, want %q", got.goalAttachments[0].Type, goalAttachmentReview)
 	}
-	if got.goalAttachments[0].Source != "improved review context" {
-		t.Fatalf("attachment source = %q, want improved review context", got.goalAttachments[0].Source)
+	if got.goalAttachments[0].Source != "review context" {
+		t.Fatalf("attachment source = %q, want review context", got.goalAttachments[0].Source)
 	}
 	if !strings.Contains(got.goalAttachments[0].Text, "println(\"updated\")") {
 		t.Fatalf("first attachment missing tracked diff content:\n%s", got.goalAttachments[0].Text)
@@ -1820,7 +1838,7 @@ func TestSubmitGoalReviewCommandUsesTrackedAndUntrackedAttachments(t *testing.T)
 	if strings.Contains(got.goalAttachments[0].Text, "secret untracked contents") {
 		t.Fatalf("attachment leaked untracked file contents:\n%s", got.goalAttachments[0].Text)
 	}
-	if !strings.Contains(got.status.text, "Loaded improved review context") {
+	if !strings.Contains(got.status.text, "Loaded Git changes and supporting review context") {
 		t.Fatalf("status = %q, want success review status", got.status.text)
 	}
 	if cmd == nil {
@@ -2182,7 +2200,7 @@ func TestHomeTabCompletesReviewSuggestionAndStartsReview(t *testing.T) {
 	if len(got.goalAttachments) != 1 {
 		t.Fatalf("goalAttachments length = %d, want 1", len(got.goalAttachments))
 	}
-	if !strings.Contains(got.status.text, "Loaded improved review context") {
+	if !strings.Contains(got.status.text, "Loaded Git changes and supporting review context") {
 		t.Fatalf("status = %q, want review success", got.status.text)
 	}
 	if cmd == nil {
@@ -2790,7 +2808,7 @@ func TestSlashCompletionEnterStartsReview(t *testing.T) {
 	if got.state != stateHome {
 		t.Fatalf("state = %v, want home", got.state)
 	}
-	if !strings.Contains(got.status.text, "Loaded improved review context") {
+	if !strings.Contains(got.status.text, "Loaded Git changes and supporting review context") {
 		t.Fatalf("status = %q, want review success", got.status.text)
 	}
 	if cmd == nil {
@@ -4638,6 +4656,56 @@ func TestManualCopyEnterAdvancesToExtractionInput(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("manual copy advance returned unexpected command")
 	}
+}
+
+func TestReviewPromptOneDeliveryExplainsOptionalContinuation(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+
+	t.Run("clipboard copy", func(t *testing.T) {
+		m := NewModel("/tmp/project", cfg)
+		next, _ := m.advanceAfterCopy(topologyPromptKind, false)
+		got := next.(Model)
+		for _, want := range []string{"If the AI requests additional context", "paste only its FILE:, PREFIX:, or NEAR: selectors", "Final findings require no continuation"} {
+			if !strings.Contains(got.status.text, want) {
+				t.Fatalf("review copy status missing %q: %s", want, got.status.text)
+			}
+		}
+		if strings.Contains(got.status.text, "then paste extraction commands") {
+			t.Fatalf("review copy status retained unconditional extraction guidance: %s", got.status.text)
+		}
+	})
+
+	t.Run("saved file", func(t *testing.T) {
+		m := NewModel("/tmp/project", cfg)
+		next, _ := m.advanceAfterTempFile(topologyPromptKind, "/tmp/prompt.txt")
+		got := next.(Model)
+		if !strings.Contains(got.status.text, reviewPromptOneNextStep) {
+			t.Fatalf("review save status missing optional-continuation guidance: %s", got.status.text)
+		}
+	})
+
+	t.Run("manual delivery", func(t *testing.T) {
+		m := NewModel("/tmp/project", cfg)
+		m.state = stateManualCopy
+		m.manualCopyKind = topologyPromptKind
+		m.manualCopyText = "payload"
+		if view := m.viewManualCopy(); !strings.Contains(view, "If the AI requests additional context") || !strings.Contains(view, "Final findings require no continuation") {
+			t.Fatalf("review manual-copy view missing optional-continuation guidance:\n%s", view)
+		}
+		next, _ := m.advanceAfterCopy(topologyPromptKind, true)
+		got := next.(Model)
+		if !strings.Contains(got.status.text, reviewPromptOneNextStep) {
+			t.Fatalf("review manual-copy status missing optional-continuation guidance: %s", got.status.text)
+		}
+	})
+
+	t.Run("optional selector input", func(t *testing.T) {
+		spec := pasteSpecForState(stateWaitingForExtractions, protocol.FocusReview)
+		if !strings.Contains(spec.title, "only if the AI requested additional context") || !strings.Contains(spec.title, "final findings require no continuation") {
+			t.Fatalf("review extraction screen guidance = %q", spec.title)
+		}
+	})
 }
 
 func TestTextPreviewHidesExtraLines(t *testing.T) {

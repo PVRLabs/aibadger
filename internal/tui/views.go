@@ -348,9 +348,13 @@ func (m Model) viewManualCopy() string {
 	if text == "" {
 		text = "(empty payload)"
 	}
+	instruction := fmt.Sprintf("Manually copy %s from the block below, then press Enter to continue.", m.manualCopyKind)
+	if m.manualCopyKind == topologyPromptKind && protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview {
+		instruction += "\n\n" + reviewPromptOneNextStep
+	}
 	body := fmt.Sprintf(
 		"%s\n\n--- BEGIN %s ---\n%s\n--- END %s ---",
-		fmt.Sprintf("Manually copy %s from the block below, then press Enter to continue.", m.manualCopyKind),
+		instruction,
 		m.manualCopyKind,
 		text,
 		m.manualCopyKind,
@@ -507,6 +511,12 @@ func (m Model) viewPaste(st state) string {
 func pasteSpecForState(st state, focus protocol.Focus) pasteSpec {
 	switch st {
 	case stateWaitingForExtractions:
+		if protocol.NormalizeFocus(focus) == protocol.FocusReview {
+			return pasteSpec{
+				title:       "Optional review continuation. Paste selectors only if the AI requested additional context; final findings require no continuation.",
+				placeholder: "Optional: paste FILE/PREFIX/NEAR selectors here.",
+			}
+		}
 		return pasteSpec{
 			title:       "Paste extraction commands from your AI chat.",
 			placeholder: "Paste FILE/PREFIX/NEAR commands here. Paste submits automatically; Enter is a fallback.",

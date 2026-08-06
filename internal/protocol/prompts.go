@@ -44,9 +44,10 @@ const codeSchemaAConstraint = "[TASK]\n%s\n\n[CONSTRAINT]\n" +
 	"NEAR:<path>#<literal string from a nearby unique line or comment>\n"
 
 const reviewSchemaAConstraint = "[TASK]\n%s\n\n[CONSTRAINT]\n" +
-	"Do not propose a fix yet. Output ONLY a machine-readable list of review targets or findings using the exact operators below. Output zero other text, explanations, or markdown formatting.\n" +
-	"Target the smallest context set needed to confirm or refute correctness, regressions, test coverage gaps, and behavior changes. Prefer changed files, entrypoints, and directly related tests before broader context. Do not request one file from every package just because the change is large.\n" +
-	"For review, explanation, or triage queries, request the most relevant implementation and verification files first: entrypoints, modified code paths, tests, and core orchestrators. If the issue appears localized, keep the context narrow.\n" +
+	"Review the supplied changes now.\n\n" +
+	"If the supplied diff, changed-file context, project topology, source tree, and external context are sufficient, output the final review findings. Order findings by severity and include the affected file and line when available, the concrete risk, and why it matters. If there are no actionable findings, state that clearly. Do not invent patches or unrelated improvements.\n\n" +
+	"If additional unchanged context is genuinely necessary to confirm or refute a potential finding, output ONLY a machine-readable list using the exact operators below. Output zero other text, explanations, findings, or markdown formatting. Never mix selectors with review findings.\n\n" +
+	"Request the smallest additional context set needed. Prefer directly related implementation files, entrypoints, tests, and core orchestrators. Do not request files already supplied in the review context, and do not request one file from every package merely because the change is large.\n\n" +
 	"FILE:<path>\n" +
 	"PREFIX:<path>#<literal prefix from the start of the target line>\n" +
 	"NEAR:<path>#<literal string from a nearby unique line or comment>\n"

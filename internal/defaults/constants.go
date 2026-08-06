@@ -15,8 +15,9 @@ const (
 	// MaxContextFileBytes caps the amount of extracted file content retained
 	// before adding truncation markers and Prompt 2 block framing.
 	MaxContextFileBytes = 50 * 1024
-	// MaxTopologyPromptBytes caps Prompt 1 (topology) payload target.
-	MaxTopologyPromptBytes = 100000
+	// MaxTopologyPromptBytes caps the complete serialized Prompt 1 target,
+	// including topology, task content, and constraints.
+	MaxTopologyPromptBytes = 512 * 1024
 	// MaxPromptTwoBytes is the target maximum for the serialized Prompt 2.
 	// Badger enforces it by dropping extracted context blocks. If the
 	// non-droppable prompt framing, topology, task, and instructions alone

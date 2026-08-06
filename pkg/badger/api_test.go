@@ -28,7 +28,7 @@ func TestRunAPIReviewContextProducesStablePrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunAPI() error = %v", err)
 	}
-	for _, want := range []string{"Review guidance:\nCheck concurrency", "Authoritative tracked Git diff:", "+const changed = true"} {
+	for _, want := range []string{"Additional focus:\nCheck concurrency", "Diff:\n```diff", "+const changed = true"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
 		}

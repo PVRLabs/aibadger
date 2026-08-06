@@ -305,6 +305,37 @@ func TestGoalAttachmentDiffPreviewCapsSourceBytes(t *testing.T) {
 	}
 }
 
+func TestReviewAttachmentPreviewShowsEmbeddedGitDiff(t *testing.T) {
+	attachment := newGoalAttachment(goalAttachmentReview, "review context", strings.Join([]string{
+		"Review the following change.",
+		"",
+		"[REVIEW CONTEXT: TRACKED FILE STATUS]",
+		"app.go\tcomplete-file-included",
+		"",
+		"Diff:",
+		"```diff",
+		"diff --git a/app.go b/app.go",
+		"index 1111111..2222222 100644",
+		"--- a/app.go",
+		"+++ b/app.go",
+		"@@ -1 +1 @@",
+		"-old",
+		"+new",
+		"```",
+	}, "\n"), 1, 1, 1)
+
+	got := attachment.previewLines()
+	want := []string{
+		"diff --git a/app.go b/app.go",
+		"index 1111111..2222222 100644",
+		"--- a/app.go",
+		"…",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("previewLines() = %#v, want %#v", got, want)
+	}
+}
+
 func TestRenderGoalAttachmentRowTruncatesSafely(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.width = 28

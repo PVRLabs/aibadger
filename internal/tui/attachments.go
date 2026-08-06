@@ -94,6 +94,13 @@ func formatGoalAttachmentSummary(attachment goalAttachment) string {
 	default:
 		return fmt.Sprintf("[text: %s, %d lines]", protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines)
 	case goalAttachmentReview:
+		if attachment.FilesChanged > 0 {
+			label := "files"
+			if attachment.FilesChanged == 1 {
+				label = "file"
+			}
+			return fmt.Sprintf("[review context: %d changed %s, +%d/-%d, %s, %d lines]", attachment.FilesChanged, label, attachment.Additions, attachment.Deletions, protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines)
+		}
 		return fmt.Sprintf("[review context: %s, %d lines]", protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines)
 	}
 }
@@ -278,6 +285,12 @@ func (attachment goalAttachment) previewLines() []string {
 	text := attachment.Text
 	switch attachment.Type {
 	case goalAttachmentText:
+	case goalAttachmentReview:
+		text = reviewAttachmentDiff(attachment.Text)
+		if text == "" {
+			return nil
+		}
+		fallthrough
 	case goalAttachmentGitDiff:
 		var capped bool
 		text, capped = firstValidUTF8Bytes(text, goalAttachmentDiffPreviewMaxBytes)
@@ -291,6 +304,19 @@ func (attachment goalAttachment) previewLines() []string {
 	}
 	lines, truncated := previewContentLines(text)
 	return truncateGoalAttachmentPreviewLines(lines, truncated)
+}
+
+func reviewAttachmentDiff(text string) string {
+	const startMarker = "\nDiff:\n```diff\n"
+	start := strings.Index(text, startMarker)
+	if start < 0 {
+		return ""
+	}
+	text = text[start+len(startMarker):]
+	if end := strings.Index(text, "\n```\n"); end >= 0 {
+		text = text[:end]
+	}
+	return text
 }
 
 func previewContentLines(text string) ([]string, bool) {

@@ -78,7 +78,8 @@ func contextCmd(session *workflow.Session, goal string, commands []extractor.Com
 
 func reviewContinuationCmd(session *workflow.Session, commands []extractor.Command) tea.Cmd {
 	return func() tea.Msg {
-		schema, metadata, extractedCount, failedCommands, safetyExclusions, err := session.GenerateReviewContinuation(commands)
+		const task = "Continue the existing review using the additional unchanged context requested by the AI. Report final findings, risks, or a clear no-issues result."
+		schema, metadata, extractedCount, failedCommands, safetyExclusions, err := session.GenerateContextDetailed(task, commands)
 		return contextDoneMsg{
 			schema:           schema,
 			metadata:         metadata,

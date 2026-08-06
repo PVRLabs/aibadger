@@ -22,16 +22,23 @@ func (m Model) viewScanComplete() string {
 	}
 
 	if m.promptDeliveryIsLarge(topologyPromptKind) {
-		return fmt.Sprintf("%s\n\n%s", renderSummary(m.eng.Topology), m.viewLargePromptDelivery(topologyPromptKind, m.schemaA))
+		return fmt.Sprintf("%s\n\n%s\n\n%s", renderSummary(m.eng.Topology), promptOnePrivacyText(m.cfg.Focus), m.viewLargePromptDelivery(topologyPromptKind, m.schemaA))
 	}
 
 	note := fmt.Sprintf(
 		"Ready to copy %s to your clipboard.\n\n%s\nYou will pass this prompt to an AI chat.\n\n%s",
 		renderBold("Prompt 1: Topology"),
-		"Privacy: Structure only - no source code.",
+		promptOnePrivacyText(m.cfg.Focus),
 		renderBold(fmt.Sprintf("Copy Prompt 1: Topology to clipboard (payload: %s)? (y/N)", protocol.FormatFileSize(int64(len(m.schemaA))))),
 	)
 	return fmt.Sprintf("%s\n\n%s", renderSummary(m.eng.Topology), note)
+}
+
+func promptOnePrivacyText(focus protocol.Focus) string {
+	if protocol.NormalizeFocus(focus) == protocol.FocusReview {
+		return "Privacy: Includes Git changes and may include eligible current working-tree file contents."
+	}
+	return "Privacy: Structure only - no source code."
 }
 
 func (m Model) viewContextReady() string {

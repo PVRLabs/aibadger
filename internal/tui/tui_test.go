@@ -1693,7 +1693,7 @@ func TestImprovedReviewSubmissionUsesPromptOneThenAcceptsOptionalSelectors(t *te
 	if ready.state != stateScanComplete {
 		t.Fatalf("state after scan = %v, want scan complete", ready.state)
 	}
-	for _, want := range []string{"[PROJECT TOPOLOGY]", "[SOURCE TREE]", "[TASK]", "[REVIEW CONTEXT: TRACKED FILE STATUS]", "Diff:", "[REVIEW CONTEXT: CURRENT WORKING-TREE FILE]", "Path: app.go", "[CONSTRAINT]", "Review the supplied changes now."} {
+	for _, want := range []string{"[PROJECT TOPOLOGY]", "[SOURCE TREE]", "[TASK]", "Diff:", "[REVIEW CONTEXT: CURRENT WORKING-TREE FILE]", "Path: app.go", "[CONSTRAINT]", "Review the supplied changes now."} {
 		if !strings.Contains(ready.schemaA, want) {
 			t.Fatalf("Prompt 1 missing %q:\n%s", want, ready.schemaA)
 		}
@@ -1723,7 +1723,7 @@ func TestImprovedReviewSubmissionUsesPromptOneThenAcceptsOptionalSelectors(t *te
 			t.Fatalf("Review Prompt 2 missing %q:\n%s", want, continuation.schema)
 		}
 	}
-	if strings.Contains(continuation.schema, "[REVIEW CONTEXT: TRACKED FILE STATUS]") {
+	if strings.Contains(continuation.schema, "[FILE CONTEXT STATUS]") {
 		t.Fatalf("Review Prompt 2 resent initial review context:\n%s", continuation.schema)
 	}
 	_ = next
@@ -1824,7 +1824,7 @@ func preparedReviewStartupContext() startup.Context {
 		Goal: "Review the following change for concrete bugs.",
 		Attachments: []startup.Attachment{{
 			Type: "review context", Source: "review context",
-			Text:         "[REVIEW CONTEXT: TRACKED FILE STATUS]\napp.go\tcomplete-file-included\n\nDiff:\n```diff\n+changed\n```",
+			Text:         "Diff:\n```diff\n+changed\n```",
 			FilesChanged: 1, Additions: 1,
 		}},
 		Status: startup.Status{Text: "Loaded Git changes and supporting review context. Add optional guidance before submitting.", Severity: "success"},
@@ -1939,7 +1939,7 @@ func TestReviewPromptTwoConsentMatrix(t *testing.T) {
 			t.Fatalf("Review Prompt 2 view missing %q:\n%s", want, view)
 		}
 	}
-	if strings.Contains(payload, "[REVIEW CONTEXT: TRACKED FILE STATUS]") {
+	if strings.Contains(payload, "[FILE CONTEXT STATUS]") {
 		t.Fatal("Review Prompt 2 fixture replays initial diff context")
 	}
 
@@ -2049,7 +2049,7 @@ func TestReviewPromptOneExternalContextMatrix(t *testing.T) {
 		cfg.Focus = protocol.FocusReview
 		m := NewModel(root, cfg)
 		m.state = stateScanning
-		m.goal = "Review the following change for concrete bugs.\n\n[REVIEW CONTEXT: TRACKED FILE STATUS]\napp.go\tcomplete-file-included\n\nDiff:\n```diff\n+changed\n```"
+		m.goal = "Review the following change for concrete bugs.\n\nDiff:\n```diff\n+changed\n```"
 		next, cmd := m.Update(scanDoneMsg{eng: eng})
 		got := next.(Model)
 		if cmd != nil || got.state != stateScanComplete {

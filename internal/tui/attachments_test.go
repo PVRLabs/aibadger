@@ -309,8 +309,8 @@ func TestReviewAttachmentPreviewShowsEmbeddedGitDiff(t *testing.T) {
 	attachment := newGoalAttachment(goalAttachmentReview, "review context", strings.Join([]string{
 		"Review the following change.",
 		"",
-		"[REVIEW CONTEXT: TRACKED FILE STATUS]",
-		"app.go\tcomplete-file-included",
+		"[FILE CONTEXT STATUS]",
+		"- app.go — diff only: deleted",
 		"",
 		"Diff:",
 		"```diff",

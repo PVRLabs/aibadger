@@ -1,6 +1,7 @@
 package reviewtask
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,7 +160,9 @@ func TestPayloadExactTotalBoundaryAndFirstBudgetFailure(t *testing.T) {
 		{Path: "a.go", Kind: ChangeModified, Patch: "diff --git a/a.go b/a.go"},
 		{Path: "b.go", Kind: ChangeModified, Patch: "diff --git a/b.go b/b.go"},
 	}}
-	reader := func(path string, _ int) ([]byte, stableFileOutcome) { return []byte(filepath.Base(path)), stableFileOK }
+	reader := func(path string, _ int) ([]byte, stableFileOutcome) {
+		return []byte(strings.Repeat(filepath.Base(path), 20)), stableFileOK
+	}
 	baseline := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: 10000, maxFileBytes: 100}, reader)
 	exact := len(baseline.Payload.Prompt)
 	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: exact, maxFileBytes: 100}, reader)
@@ -169,10 +172,63 @@ func TestPayloadExactTotalBoundaryAndFirstBudgetFailure(t *testing.T) {
 
 	oneOnly := cloneFileContexts(baseline.Payload.Files)
 	oneOnly[1] = FileContext{Path: "b.go", Status: ContextBudget}
-	limit := len(renderInitialReviewPrompt(set, "", oneOnly))
-	result = buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: limit, maxFileBytes: 100}, reader)
+	limit := len(renderInitialReviewPrompt(set, "", oneOnly, 200))
+	result = buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: limit, maxFileBytes: 200}, reader)
 	if result.Payload.Files[0].Status != ContextIncluded || result.Payload.Files[1].Status != ContextBudget {
 		t.Fatalf("budget statuses = %+v", result.Payload.Files)
+	}
+}
+
+func TestPayloadPendingFilesDoNotCauseFalseMandatoryOverflow(t *testing.T) {
+	set := ChangeSet{Mode: ModeDefault}
+	for i := 0; i < 24; i++ {
+		path := strings.Repeat("nested/", 4) + fmt.Sprintf("file-%02d.go", i)
+		set.Changes = append(set.Changes, Change{Path: path, Kind: ChangeModified, Patch: "p"})
+	}
+	finalFiles := make([]FileContext, len(set.Changes))
+	oldProvisionalFiles := make([]FileContext, len(set.Changes))
+	for i, change := range set.Changes {
+		finalFiles[i] = FileContext{Path: change.Path, Status: ContextUnavailable}
+		oldProvisionalFiles[i] = FileContext{Path: change.Path, Status: ContextBudget}
+	}
+	finalSize := len(renderInitialReviewPrompt(set, "", finalFiles, 100))
+	oldProvisionalSize := len(renderInitialReviewPrompt(set, "", oldProvisionalFiles, 100))
+	if oldProvisionalSize <= finalSize {
+		t.Fatalf("old provisional size = %d, final size = %d; fixture does not prove regression", oldProvisionalSize, finalSize)
+	}
+	reads := 0
+	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: finalSize, maxFileBytes: 100}, func(string, int) ([]byte, stableFileOutcome) {
+		reads++
+		return nil, stableFileUnavailable
+	})
+	if result.Failure != PayloadFailureNone || len(result.Payload.Prompt) != finalSize || reads != len(set.Changes) {
+		t.Fatalf("result=%+v reads=%d, want successful %d-byte prompt after %d reads", result, reads, finalSize, len(set.Changes))
+	}
+}
+
+func TestPayloadStopsReadingAfterFirstBudgetFailure(t *testing.T) {
+	set := ChangeSet{Mode: ModeDefault, Changes: []Change{
+		{Path: "a.go", Kind: ChangeModified, Patch: "p1"},
+		{Path: "b.go", Kind: ChangeModified, Patch: "p2"},
+		{Path: "c.go", Kind: ChangeModified, Patch: "p3"},
+	}}
+	content := strings.Repeat("x", 256)
+	desired := []FileContext{
+		{Path: "a.go", Status: ContextIncluded, Content: content},
+		{Path: "b.go", Status: ContextBudget},
+		{Path: "c.go", Status: ContextBudget},
+	}
+	limit := len(renderInitialReviewPrompt(set, "", desired, 512))
+	reads := 0
+	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: limit, maxFileBytes: 512}, func(string, int) ([]byte, stableFileOutcome) {
+		reads++
+		return []byte(content), stableFileOK
+	})
+	if result.Failure != PayloadFailureNone || reads != 2 {
+		t.Fatalf("result=%+v reads=%d, want success after first two reads", result, reads)
+	}
+	if got := payloadStatuses(result.Payload.Files); got["a.go"] != ContextIncluded || got["b.go"] != ContextBudget || got["c.go"] != ContextBudget {
+		t.Fatalf("statuses = %v", got)
 	}
 }
 
@@ -208,6 +264,50 @@ func TestPayloadOptionalReadOutcomesAreExplicit(t *testing.T) {
 	statuses := payloadStatuses(result.Payload.Files)
 	if statuses["changed.go"] != ContextChangedDuringRead || statuses["missing.go"] != ContextUnavailable || statuses["large.go"] != ContextOversized {
 		t.Fatalf("statuses = %v", statuses)
+	}
+}
+
+func TestRenderFileContextStatusUsesSharedVocabularyAndStableOrder(t *testing.T) {
+	files := []FileContext{
+		{Path: "included.go", Status: ContextIncluded},
+		{Path: "deleted.go", Status: ContextDeleted},
+		{Path: "new.go", Status: ContextAddedPatch},
+		{Path: "image.png", Status: ContextBinary},
+		{Path: ".env", Status: ContextSensitive},
+		{Path: "large.go", Status: ContextOversized},
+		{Path: "missing.go", Status: ContextUnavailable},
+		{Path: "changed.go", Status: ContextChangedDuringRead},
+		{Path: "budget.go", Status: ContextBudget},
+	}
+	want := strings.Join([]string{
+		"[FILE CONTEXT STATUS]",
+		`- deleted.go — diff only: deleted`,
+		`- new.go — diff only: tracked newly added file already complete in patch`,
+		`- image.png — diff only: binary file`,
+		`- .env — diff only: sensitive file excluded from full-file context`,
+		`- large.go — diff only: file exceeds 64 KiB full-file limit`,
+		`- missing.go — diff only: full file unavailable`,
+		`- changed.go — diff only: full file unavailable`,
+		`- budget.go — diff only: total review-context budget reached`,
+		"",
+	}, "\n")
+	if got := renderFileContextStatus(files, 64*1024); got != want {
+		t.Fatalf("rendered status = %q, want %q", got, want)
+	}
+	if got := renderFileContextStatus([]FileContext{{Path: "ok.go", Status: ContextIncluded}}, 64*1024); got != "" {
+		t.Fatalf("included-only status = %q, want empty", got)
+	}
+	if got := renderFileContextStatus([]FileContext{{Path: "unknown.go", Status: ContextStatus("internal-new-status")}}, 64*1024); strings.Contains(got, "internal-new-status") || !strings.Contains(got, "full file unavailable") {
+		t.Fatalf("unknown internal status leaked into prompt: %q", got)
+	}
+}
+
+func TestRenderFileContextStatusUsesEffectiveLimitAndEscapesPath(t *testing.T) {
+	files := []FileContext{{Path: "dir/line\nname.go", Status: ContextOversized}}
+	got := renderFileContextStatus(files, 1000)
+	want := "[FILE CONTEXT STATUS]\n- dir/line\\nname.go — diff only: file exceeds 1000 bytes full-file limit\n"
+	if got != want {
+		t.Fatalf("rendered status = %q, want %q", got, want)
 	}
 }
 

@@ -134,7 +134,7 @@ func TestRunAPIReviewContextSelectedPathsAndFailures(t *testing.T) {
 	if err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", PathsFilePath: deletedPaths, Stdout: &stdout, Stderr: &stderr}); err != nil {
 		t.Fatalf("RunAPI(deleted) error = %v", err)
 	}
-	if !strings.Contains(stdout.String(), "gone.go\tdiff-only-deleted") {
+	if !strings.Contains(stdout.String(), "- gone.go — diff only: deleted") {
 		t.Fatalf("deleted stdout missing disposition:\n%s", stdout.String())
 	}
 

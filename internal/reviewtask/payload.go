@@ -34,6 +34,7 @@ const (
 	ContextUnavailable       ContextStatus = "diff-only-unavailable"
 	ContextChangedDuringRead ContextStatus = "diff-only-changed-during-read"
 	ContextBudget            ContextStatus = "diff-only-budget"
+	contextPending           ContextStatus = "pending-full-file-read"
 )
 
 // PayloadFailure is a typed non-Git failure from initial payload generation.
@@ -57,7 +58,11 @@ type InitialReviewPayload struct {
 	ChangeSet ChangeSet
 	Guidance  string
 	Files     []FileContext
-	Prompt    string
+	// MaxFileBytes is the effective per-file limit used when rendering status
+	// reasons. It keeps interactive delivery byte-for-byte equivalent to the
+	// API/headless payload that produced it.
+	MaxFileBytes int
+	Prompt       string
 }
 
 // InitialReviewResult returns either a complete payload or a typed failure.
@@ -178,7 +183,7 @@ func maximumInteractivePayloadBudget(maxPromptBytes int) int {
 }
 
 func initialPayloadStartupContext(payload InitialReviewPayload) startup.Context {
-	contextPrompt := renderReviewContext(payload.ChangeSet, payload.Files)
+	contextPrompt := renderReviewContext(payload.ChangeSet, payload.Files, payload.MaxFileBytes)
 	additions, deletions := reviewPatchStats(payload.ChangeSet.Changes)
 	return startup.Context{
 		Goal: buildReviewInstruction(payload.Guidance),
@@ -230,21 +235,20 @@ func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limi
 	}
 
 	files := make([]FileContext, len(set.Changes))
-	eligible := make([]bool, len(set.Changes))
 	for i, change := range set.Changes {
 		files[i] = FileContext{Path: change.Path, Status: initialContextStatus(change)}
-		eligible[i] = files[i].Status == ContextBudget
 	}
 
-	// If even the context known without optional reads cannot fit, return before
-	// touching candidate files. ContextBudget is the conservative pending status.
-	if len(renderInitialReviewPrompt(set, guidance, files)) > limits.maxPayloadBytes {
+	// Pending optional files render neither a limitation status nor a content
+	// block. This is the smallest truthful provisional prompt, so it cannot
+	// reject a review merely because a status may disappear after a successful
+	// read.
+	if len(renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes)) > limits.maxPayloadBytes {
 		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 	}
 
-	budgetExhausted := false
 	for i, change := range set.Changes {
-		if !eligible[i] || budgetExhausted {
+		if files[i].Status != contextPending {
 			continue
 		}
 		content, outcome := readFile(filepath.Join(root, filepath.FromSlash(change.Path)), limits.maxFileBytes)
@@ -256,23 +260,52 @@ func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limi
 		case stableFileChanged:
 			files[i].Status = ContextChangedDuringRead
 		case stableFileOK:
-			candidate := cloneFileContexts(files)
-			candidate[i].Status = ContextIncluded
-			candidate[i].Content = string(content)
-			if len(renderInitialReviewPrompt(set, guidance, candidate)) > limits.maxPayloadBytes {
-				files[i].Status = ContextBudget
-				budgetExhausted = true
-				continue
-			}
-			files = candidate
+			files[i].Status = ContextIncluded
+			files[i].Content = string(content)
 		}
+
+		if len(renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes)) <= limits.maxPayloadBytes {
+			continue
+		}
+		if files[i].Status == ContextIncluded {
+			files[i].Status = ContextBudget
+			files[i].Content = ""
+		}
+		for j := i + 1; j < len(files); j++ {
+			if files[j].Status == contextPending {
+				files[j].Status = ContextBudget
+			}
+		}
+		break
 	}
 
-	prompt := renderInitialReviewPrompt(set, guidance, files)
+	// Any pending entries remain only after budget exhaustion and were not read.
+	for i := range files {
+		if files[i].Status == contextPending {
+			files[i].Status = ContextBudget
+		}
+	}
+	prompt := renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes)
+	for len(prompt) > limits.maxPayloadBytes {
+		removed := false
+		for i := len(files) - 1; i >= 0; i-- {
+			if files[i].Status != ContextIncluded {
+				continue
+			}
+			files[i].Status = ContextBudget
+			files[i].Content = ""
+			removed = true
+			break
+		}
+		if !removed {
+			return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
+		}
+		prompt = renderInitialReviewPrompt(set, guidance, files, limits.maxFileBytes)
+	}
 	if len(prompt) > limits.maxPayloadBytes {
 		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 	}
-	return InitialReviewResult{Payload: InitialReviewPayload{ChangeSet: set, Guidance: guidance, Files: files, Prompt: prompt}}
+	return InitialReviewResult{Payload: InitialReviewPayload{ChangeSet: set, Guidance: guidance, Files: files, MaxFileBytes: limits.maxFileBytes, Prompt: prompt}}
 }
 
 func initialContextStatus(change Change) ContextStatus {
@@ -286,27 +319,24 @@ func initialContextStatus(change Change) ContextStatus {
 	case change.Kind == ChangeDeleted:
 		return ContextDeleted
 	case change.Kind == ChangeModified || change.Kind == ChangeRenamed:
-		return ContextBudget // pending eligibility; also the default budget result
+		return contextPending
 	default:
 		return ContextUnavailable
 	}
 }
 
-func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileContext) string {
+func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileContext, maxFileBytes int) string {
 	var out strings.Builder
 	out.WriteString(buildReviewInstruction(guidance))
 	out.WriteByte('\n')
-	out.WriteString(renderReviewContext(set, files))
+	out.WriteString(renderReviewContext(set, files, maxFileBytes))
 	return out.String()
 }
 
-func renderReviewContext(set ChangeSet, files []FileContext) string {
+func renderReviewContext(set ChangeSet, files []FileContext, maxFileBytes int) string {
 	var out strings.Builder
-	if len(files) > 0 {
-		out.WriteString("[REVIEW CONTEXT: TRACKED FILE STATUS]\n")
-		for _, file := range files {
-			fmt.Fprintf(&out, "%s\t%s\n", file.Path, file.Status)
-		}
+	if status := renderFileContextStatus(files, maxFileBytes); status != "" {
+		out.WriteString(status)
 	}
 	if len(set.Changes) > 0 {
 		out.WriteString("\nDiff:\n```diff\n")
@@ -344,6 +374,55 @@ func renderReviewContext(set ChangeSet, files []FileContext) string {
 		out.WriteString("```\n")
 	}
 	return strings.TrimPrefix(out.String(), "\n")
+}
+
+// renderFileContextStatus is the AI-facing vocabulary shared with the VS Code
+// direct-review payload. Internal ContextStatus values remain intentionally
+// separate so control flow and typed results do not depend on prompt wording.
+func renderFileContextStatus(files []FileContext, maxFileBytes int) string {
+	if maxFileBytes <= 0 {
+		maxFileBytes = maxInitialReviewFileBytes
+	}
+	lines := make([]string, 0, len(files)+1)
+	for _, file := range files {
+		reason, ok := fileContextStatusReason(file.Status, maxFileBytes)
+		if !ok {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("- %s — diff only: %s", escapeReviewPath(file.Path), reason))
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "[FILE CONTEXT STATUS]\n" + strings.Join(lines, "\n") + "\n"
+}
+
+func fileContextStatusReason(status ContextStatus, maxFileBytes int) (string, bool) {
+	kib := maxFileBytes / 1024
+	limit := fmt.Sprintf("%d bytes", maxFileBytes)
+	if maxFileBytes%1024 == 0 {
+		limit = fmt.Sprintf("%d KiB", kib)
+	}
+	switch status {
+	case ContextIncluded, contextPending:
+		return "", false
+	case ContextAddedPatch:
+		return "tracked newly added file already complete in patch", true
+	case ContextDeleted:
+		return "deleted", true
+	case ContextBinary:
+		return "binary file", true
+	case ContextSensitive:
+		return "sensitive file excluded from full-file context", true
+	case ContextOversized:
+		return fmt.Sprintf("file exceeds %s full-file limit", limit), true
+	case ContextUnavailable, ContextChangedDuringRead:
+		return "full file unavailable", true
+	case ContextBudget:
+		return "total review-context budget reached", true
+	default:
+		return "full file unavailable", true
+	}
 }
 
 func cloneFileContexts(files []FileContext) []FileContext {

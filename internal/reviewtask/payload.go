@@ -136,6 +136,8 @@ func BuildInteractiveContext(root string, opts Options) (startup.Context, error)
 		return legacy.StartupContext(), nil
 	case PayloadFailureMandatoryOverflow:
 		return startup.Context{}, errors.New("review prompt could not be prepared: mandatory review context exceeds the payload limit")
+	case PayloadFailureTopologyScan:
+		return startup.Context{}, errors.New("review prompt could not be prepared: could not scan project topology")
 	case PayloadFailureNone:
 		return initialPayloadStartupContext(result.Payload), nil
 	default:

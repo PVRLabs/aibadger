@@ -84,6 +84,23 @@ func buildChangeSet(root string, opts Options, buildPatch changePatchBuilder, di
 		}
 	}
 
+	return assembleChangeSet(repoRoot, opts, baseArgs, metadata, untrackedPaths, untrackedOmitted, buildPatch)
+}
+
+// assembleChangeSet converts already-discovered structured Git metadata into
+// the public ChangeSet. Keeping this boundary separate lets higher-level tests
+// exercise selection, ordering, classification, and patch assembly without
+// starting Git processes; BuildChangeSet remains the real-Git integration
+// entry point.
+func assembleChangeSet(repoRoot string, opts Options, baseArgs []string, metadata []changeMetadata, untrackedPaths []string, untrackedOmitted int, buildPatch changePatchBuilder) (ChangeSet, error) {
+	if err := validateOptions(opts); err != nil {
+		return ChangeSet{}, err
+	}
+	selected, err := normalizeSelectedPaths(repoRoot, opts.SelectedPaths)
+	if err != nil {
+		return ChangeSet{}, err
+	}
+
 	byPath := make(map[string]changeMetadata, len(metadata))
 	for _, item := range metadata {
 		byPath[item.path] = item

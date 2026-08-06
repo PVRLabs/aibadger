@@ -3,6 +3,7 @@ package badger
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/engine"
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
@@ -41,12 +43,37 @@ func TestRunAPIReviewContextProducesStablePrompt(t *testing.T) {
 	}
 }
 
+func TestRunAPIReviewContextPresentationUsesPreparedResult(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	build := func(root string, opts reviewtask.Options) (reviewtask.InitialReviewResult, error) {
+		if root == "" || opts.ExtraFocus != "check" {
+			t.Fatalf("builder inputs = root %q, options %#v", root, opts)
+		}
+		return reviewtask.InitialReviewResult{Payload: reviewtask.InitialReviewPayload{Prompt: "prepared review\n"}}, nil
+	}
+	err := runAPIWithReviewBuilder(Config{Root: t.TempDir()}, APIOptions{
+		Operation: "review-context", InputPath: writeAPITestInput(t, "guidance.txt", "check"),
+		Stdout: &stdout, Stderr: &stderr,
+	}, build)
+	if err != nil {
+		t.Fatalf("runAPIWithReviewBuilder() error = %v", err)
+	}
+	if got := stdout.String(); got != "prepared review\n" {
+		t.Fatalf("stdout = %q, want prepared result", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
 func TestRunAPIReviewContextReturnsStdoutWriteFailure(t *testing.T) {
-	root := writeAPIReviewRepo(t)
+	root := t.TempDir()
 	stdout := &failAfterWriter{remaining: 32, err: io.ErrClosedPipe}
-	err := RunAPI(Config{Root: root}, APIOptions{
+	err := runAPIWithReviewBuilder(Config{Root: root}, APIOptions{
 		Operation: "review-context",
 		Stdout:    stdout,
+	}, func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error) {
+		return reviewtask.InitialReviewResult{Payload: reviewtask.InitialReviewPayload{Prompt: strings.Repeat("x", 128)}}, nil
 	})
 	if err == nil {
 		t.Fatal("RunAPI() error = nil, want stdout write failure")
@@ -125,21 +152,46 @@ func TestRunAPIReviewContextSelectedPathsAndFailures(t *testing.T) {
 	}
 }
 
-func TestRunAPIReviewContextNoChangesAndNotGitProduceNoOutput(t *testing.T) {
-	clean := writeAPIReviewRepo(t)
-	runAPIGit(t, clean, "add", "main.go")
-	runAPIGit(t, clean, "commit", "-m", "changed")
-	for name, root := range map[string]string{"clean": clean, "not git": t.TempDir()} {
+func TestRunAPIReviewContextTypedFailuresProduceNoOutput(t *testing.T) {
+	for name, failure := range map[string]reviewtask.PayloadFailure{"no changes": reviewtask.PayloadFailureNoChanges, "overflow": reviewtask.PayloadFailureMandatoryOverflow} {
 		t.Run(name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", Stdout: &stdout, Stderr: &stderr})
+			err := runAPIWithReviewBuilder(Config{Root: t.TempDir()}, APIOptions{Operation: "review-context", Stdout: &stdout, Stderr: &stderr}, func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error) {
+				return reviewtask.InitialReviewResult{Failure: failure}, nil
+			})
 			if err == nil || stdout.Len() != 0 || stderr.Len() != 0 {
-				t.Fatalf("RunAPI() = error %v, stdout %q, stderr %q", err, stdout.String(), stderr.String())
-			}
-			if strings.Contains(err.Error(), root) {
-				t.Fatalf("error leaked absolute root: %v", err)
+				t.Fatalf("runAPIWithReviewBuilder() = error %v, stdout %q, stderr %q", err, stdout.String(), stderr.String())
 			}
 		})
+	}
+}
+
+func TestRunAPIReviewContextBuilderFailureDoesNotLeakAbsoluteRoot(t *testing.T) {
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	sentinel := errors.New("git discovery failed")
+	err := runAPIWithReviewBuilder(Config{Root: root}, APIOptions{
+		Operation: "review-context", Stdout: &stdout, Stderr: &stderr,
+	}, func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error) {
+		return reviewtask.InitialReviewResult{}, fmt.Errorf("git discovery failed for %s: %w", root, sentinel)
+	})
+	if err == nil {
+		t.Fatal("runAPIWithReviewBuilder() error = nil, want preparation failure")
+	}
+	if strings.Contains(err.Error(), root) {
+		t.Fatalf("public error leaked absolute root %q: %v", root, err)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "git") {
+		t.Fatalf("public error = %v, want stable Git description", err)
+	}
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("public error = %v, errors.Is(_, sentinel) = false", err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
 

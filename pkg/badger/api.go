@@ -43,6 +43,16 @@ type APIOptions struct {
 // RunAPI executes a non-interactive API operation. It never reads stdin,
 // changes settings, asks for confirmation, or accesses the clipboard.
 func RunAPI(cfg Config, opts APIOptions) error {
+	return runAPIWithReviewBuilder(cfg, opts, reviewtask.BuildInitialReviewPayload)
+}
+
+// reviewPayloadBuilder is injected by presentation/facade tests so they can
+// exercise output and error mapping without repeatedly creating Git
+// repositories. The production entry point above always uses the real
+// reviewtask builder.
+type reviewPayloadBuilder func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error)
+
+func runAPIWithReviewBuilder(cfg Config, opts APIOptions, buildReview reviewPayloadBuilder) error {
 	if err := validateAPIOperation(opts); err != nil {
 		return err
 	}
@@ -97,7 +107,7 @@ func RunAPI(cfg Config, opts APIOptions) error {
 		return err
 	}
 	if opts.Operation == "review-context" {
-		return runReviewContextAPI(cfg.Root, input, opts, stdout)
+		return runReviewContextAPIWithBuilder(cfg.Root, input, opts, stdout, buildReview)
 	}
 	if opts.Operation == "review-continuation" {
 		return runReviewContinuationAPI(cfg, input, opts, stdout, stderr)
@@ -284,6 +294,10 @@ func runReviewContinuationAPI(cfg Config, input string, api APIOptions, stdout, 
 const maxReviewAPIInputBytes = 1024 * 1024
 
 func runReviewContextAPI(root, guidance string, api APIOptions, stdout io.Writer) error {
+	return runReviewContextAPIWithBuilder(root, guidance, api, stdout, reviewtask.BuildInitialReviewPayload)
+}
+
+func runReviewContextAPIWithBuilder(root, guidance string, api APIOptions, stdout io.Writer, buildReview reviewPayloadBuilder) error {
 	mode := reviewtask.ModeDefault
 	switch api.ReviewMode {
 	case "", "default":
@@ -298,12 +312,12 @@ func runReviewContextAPI(root, guidance string, api APIOptions, stdout io.Writer
 	if err != nil {
 		return err
 	}
-	result, err := reviewtask.BuildInitialReviewPayload(root, reviewtask.Options{
+	result, err := buildReview(root, reviewtask.Options{
 		Mode: mode, Ref: api.ReviewRef, ExtraFocus: guidance, SelectedPaths: paths,
 		MaxPayloadBytes: api.MaxReviewPayloadBytes, MaxFileBytes: api.MaxReviewFileBytes,
 	})
 	if err != nil {
-		return fmt.Errorf("preparing review context: %w", err)
+		return fmt.Errorf("preparing review context: %w", sanitizeReviewPreparationError(root, err))
 	}
 	switch result.Failure {
 	case reviewtask.PayloadFailureNoChanges:
@@ -315,6 +329,43 @@ func runReviewContextAPI(root, guidance string, api APIOptions, stdout io.Writer
 		return fmt.Errorf("writing review context: %w", err)
 	}
 	return nil
+}
+
+type sanitizedReviewPreparationError struct {
+	message string
+	err     error
+}
+
+func (e sanitizedReviewPreparationError) Error() string { return e.message }
+func (e sanitizedReviewPreparationError) Unwrap() error { return e.err }
+
+func sanitizeReviewPreparationError(root string, err error) error {
+	message := err.Error()
+	candidates := []string{root}
+	if root != "" {
+		if cleaned := filepath.Clean(root); cleaned != root {
+			candidates = append(candidates, cleaned)
+		}
+		if resolved, resolveErr := filepath.EvalSymlinks(root); resolveErr == nil && resolved != root {
+			candidates = append(candidates, resolved)
+		}
+	}
+	for _, candidate := range candidates {
+		if candidate != "" {
+			message = replacePathFold(message, candidate, "<repository>")
+		}
+	}
+	return sanitizedReviewPreparationError{message: message, err: err}
+}
+
+func replacePathFold(message, path, replacement string) string {
+	for {
+		index := strings.Index(strings.ToLower(message), strings.ToLower(path))
+		if index < 0 {
+			return message
+		}
+		message = message[:index] + replacement + message[index+len(path):]
+	}
 }
 
 func readReviewPaths(path string) ([]string, error) {

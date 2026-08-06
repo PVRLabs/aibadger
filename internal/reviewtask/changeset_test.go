@@ -41,6 +41,45 @@ func TestBuildChangeSetDefaultClassifiesAndOrdersChanges(t *testing.T) {
 	}
 }
 
+func TestAssembleChangeSetUsesStructuredMetadataWithoutGit(t *testing.T) {
+	root := t.TempDir()
+	metadata := []changeMetadata{
+		{path: "z.go", kind: ChangeModified},
+		{path: "a.go", kind: ChangeAdded},
+		{path: "gone.go", kind: ChangeDeleted, binary: true},
+	}
+	patches := map[string]string{"z.go": "z\n", "a.go": "a\n", "gone.go": "binary\n"}
+	set, err := assembleChangeSet(root, Options{Mode: ModeDefault}, nil, metadata, []string{"scratch.txt"}, 2,
+		func(_ string, _ []string, item changeMetadata) (string, bool, error) {
+			return patches[item.path], item.binary, nil
+		})
+	if err != nil {
+		t.Fatalf("assembleChangeSet() error = %v", err)
+	}
+	if got := []string{set.Changes[0].Path, set.Changes[1].Path, set.Changes[2].Path}; !reflect.DeepEqual(got, []string{"a.go", "gone.go", "z.go"}) {
+		t.Fatalf("change ordering = %#v", got)
+	}
+	if !set.Changes[1].Binary || set.UntrackedOmitted != 2 || !reflect.DeepEqual(set.UntrackedPaths, []string{"scratch.txt"}) {
+		t.Fatalf("assembled classifications = %#v", set)
+	}
+}
+
+func TestAssembleChangeSetAppliesLiteralSelectionAndRejectsMissing(t *testing.T) {
+	root := t.TempDir()
+	metadata := []changeMetadata{{path: "one.go", kind: ChangeModified}, {path: "two.go", kind: ChangeModified}, {path: "new.txt", untracked: true}}
+	buildPatch := func(_ string, _ []string, item changeMetadata) (string, bool, error) { return item.path, false, nil }
+	set, err := assembleChangeSet(root, Options{Mode: ModeDefault, SelectedPaths: []string{"two.go", "two.go", "new.txt"}}, nil, metadata, nil, 0, buildPatch)
+	if err != nil {
+		t.Fatalf("selected assembleChangeSet() error = %v", err)
+	}
+	if len(set.Changes) != 1 || set.Changes[0].Path != "two.go" || !reflect.DeepEqual(set.UntrackedPaths, []string{"new.txt"}) {
+		t.Fatalf("selected set = %#v", set)
+	}
+	if _, err := assembleChangeSet(root, Options{Mode: ModeDefault, SelectedPaths: []string{"missing.go"}}, nil, metadata, nil, 0, buildPatch); err == nil || !strings.Contains(err.Error(), "not a current change") {
+		t.Fatalf("missing selection error = %v", err)
+	}
+}
+
 func TestBuildChangeSetRenameAndBinary(t *testing.T) {
 	repo := newGitRepo(t)
 	writeTrackedFile(t, repo, "old name.txt", "rename body\n")

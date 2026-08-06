@@ -10,6 +10,7 @@ import (
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
+	"github.com/PVRLabs/aibadger/internal/startup"
 	"github.com/PVRLabs/aibadger/pkg/badger"
 )
 
@@ -498,7 +499,13 @@ func parseArgs(args []string, cfg *appConfig) error {
 }
 
 func runHeadlessReview(cfg badger.Config, app appConfig, stdout, _ io.Writer) error {
-	result, err := reviewtask.BuildInitialReviewPayload(cfg.Root, reviewtask.Options{
+	return runHeadlessReviewWithBuilder(cfg, app, stdout, reviewtask.BuildInitialReviewPayload)
+}
+
+type reviewPayloadBuilder func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error)
+
+func runHeadlessReviewWithBuilder(cfg badger.Config, app appConfig, stdout io.Writer, buildReview reviewPayloadBuilder) error {
+	result, err := buildReview(cfg.Root, reviewtask.Options{
 		Mode:       app.reviewMode,
 		Ref:        app.reviewRef,
 		ExtraFocus: app.reviewExtraFocus,
@@ -577,7 +584,13 @@ func applyFollowupStartup(cfg *badger.Config, app appConfig) {
 }
 
 func applyReviewStartup(cfg *badger.Config, app appConfig) error {
-	ctx, err := reviewtask.BuildInteractiveContext(cfg.Root, reviewtask.Options{
+	return applyReviewStartupWithBuilder(cfg, app, reviewtask.BuildInteractiveContext)
+}
+
+type reviewContextBuilder func(string, reviewtask.Options) (startup.Context, error)
+
+func applyReviewStartupWithBuilder(cfg *badger.Config, app appConfig, buildReview reviewContextBuilder) error {
+	ctx, err := buildReview(cfg.Root, reviewtask.Options{
 		Mode:           app.reviewMode,
 		Ref:            app.reviewRef,
 		ExtraFocus:     app.reviewExtraFocus,

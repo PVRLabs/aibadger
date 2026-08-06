@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
+	"github.com/PVRLabs/aibadger/internal/startup"
 	"github.com/PVRLabs/aibadger/internal/version"
 	"github.com/PVRLabs/aibadger/pkg/badger"
 )
@@ -324,20 +326,37 @@ func TestApplyReviewStartupUsesReviewPrompt(t *testing.T) {
 }
 
 func TestRunHeadlessReviewWritesPreparedGoal(t *testing.T) {
-	repo := newGitRepo(t)
-	writeFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"updated\")\n}\n")
 	cfg := badger.DefaultConfig()
-	cfg.Root = repo
+	cfg.Root = t.TempDir()
 	var stdout bytes.Buffer
 
-	if err := runHeadlessReview(cfg, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, io.Discard); err != nil {
+	build := func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error) {
+		return reviewtask.InitialReviewResult{Payload: reviewtask.InitialReviewPayload{Prompt: "prepared\n"}}, nil
+	}
+	if err := runHeadlessReviewWithBuilder(cfg, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, build); err != nil {
 		t.Fatalf("runHeadlessReview() error = %v", err)
 	}
-	if !strings.Contains(stdout.String(), "Diff:\n```diff") {
-		t.Fatalf("runHeadlessReview() output missing diff:\n%s", stdout.String())
+	if stdout.String() != "prepared\n" {
+		t.Fatalf("runHeadlessReview() output = %q, want prepared output", stdout.String())
 	}
 	if !strings.HasSuffix(stdout.String(), "\n") || strings.HasSuffix(stdout.String(), "\n\n") {
 		t.Fatalf("runHeadlessReview() output should have exactly one trailing newline: %q", stdout.String())
+	}
+}
+
+func TestRunHeadlessReviewPresentationUsesPreparedResult(t *testing.T) {
+	var stdout bytes.Buffer
+	build := func(root string, opts reviewtask.Options) (reviewtask.InitialReviewResult, error) {
+		if root == "" || opts.Mode != reviewtask.ModeDefault {
+			t.Fatalf("builder inputs = root %q, options %#v", root, opts)
+		}
+		return reviewtask.InitialReviewResult{Payload: reviewtask.InitialReviewPayload{Prompt: "prepared headless\n"}}, nil
+	}
+	if err := runHeadlessReviewWithBuilder(badger.Config{Root: t.TempDir()}, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, build); err != nil {
+		t.Fatalf("runHeadlessReviewWithBuilder() error = %v", err)
+	}
+	if got := stdout.String(); got != "prepared headless\n" {
+		t.Fatalf("stdout = %q, want prepared result", got)
 	}
 }
 
@@ -346,7 +365,9 @@ func TestRunHeadlessReviewPropagatesErrors(t *testing.T) {
 	cfg.Root = t.TempDir()
 	var stdout bytes.Buffer
 
-	err := runHeadlessReview(cfg, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, io.Discard)
+	err := runHeadlessReviewWithBuilder(cfg, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error) {
+		return reviewtask.InitialReviewResult{}, errors.New("not a git repository")
+	})
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "not a git repository") {
 		t.Fatalf("runHeadlessReview() error = %v, want non-git error", err)
 	}
@@ -356,12 +377,13 @@ func TestRunHeadlessReviewPropagatesErrors(t *testing.T) {
 }
 
 func TestApplyReviewStartupUsesFallbackPromptWhenNoDiff(t *testing.T) {
-	repo := newGitRepo(t)
 	cfg := badger.DefaultConfig()
-	cfg.Root = repo
+	cfg.Root = t.TempDir()
 	app := appConfig{focus: protocol.FocusReview}
 
-	if err := applyReviewStartup(&cfg, app); err != nil {
+	if err := applyReviewStartupWithBuilder(&cfg, app, func(string, reviewtask.Options) (startup.Context, error) {
+		return startup.Context{Goal: "fallback review prompt", Status: startup.Status{Severity: "warning", Text: "no changes"}}, nil
+	}); err != nil {
 		t.Fatalf("applyReviewStartup() error = %v", err)
 	}
 	if !cfg.SkipOnboarding {
@@ -370,14 +392,28 @@ func TestApplyReviewStartupUsesFallbackPromptWhenNoDiff(t *testing.T) {
 	if cfg.Startup.Status.Severity != "warning" {
 		t.Fatalf("Startup.Status.Severity = %q, want %q", cfg.Startup.Status.Severity, "warning")
 	}
-	if cfg.Startup.Goal == "" {
+	if cfg.Startup.Goal != "fallback review prompt" {
 		t.Fatal("Startup.Goal is empty")
-	}
-	if strings.Contains(cfg.Startup.Goal, "Diff:") {
-		t.Fatalf("Startup.Goal unexpectedly contains raw diff text:\n%s", cfg.Startup.Goal)
 	}
 	if len(cfg.Startup.Attachments) != 0 {
 		t.Fatalf("Startup.Attachments length = %d, want 0", len(cfg.Startup.Attachments))
+	}
+}
+
+func TestApplyReviewStartupPresentationUsesPreparedContext(t *testing.T) {
+	cfg := badger.DefaultConfig()
+	cfg.Root = t.TempDir()
+	build := func(root string, opts reviewtask.Options) (startup.Context, error) {
+		if root == "" || opts.Mode != reviewtask.ModeDefault {
+			t.Fatalf("builder inputs = root %q, options %#v", root, opts)
+		}
+		return startup.Context{Goal: "prepared goal", Status: startup.Status{Text: "prepared", Severity: "success"}}, nil
+	}
+	if err := applyReviewStartupWithBuilder(&cfg, appConfig{reviewMode: reviewtask.ModeDefault}, build); err != nil {
+		t.Fatalf("applyReviewStartupWithBuilder() error = %v", err)
+	}
+	if cfg.Startup.Goal != "prepared goal" || cfg.Startup.Status.Text != "prepared" {
+		t.Fatalf("startup = %#v, want prepared context", cfg.Startup)
 	}
 }
 

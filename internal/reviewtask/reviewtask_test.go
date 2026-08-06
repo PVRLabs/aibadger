@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,14 +16,18 @@ import (
 )
 
 var (
-	committedRepo string
-	unbornRepo    string
-	committedOnce sync.Once
-	unbornOnce    sync.Once
+	committedRepo    string
+	unbornRepo       string
+	committedOnce    sync.Once
+	unbornOnce       sync.Once
+	gitTestProcesses atomic.Int64
 )
 
 func TestMain(m *testing.M) {
 	code := m.Run()
+	if os.Getenv("BADGER_REPORT_GIT_TEST_PROCESSES") != "" {
+		fmt.Fprintf(os.Stderr, "reviewtask test Git subprocesses: %d\n", gitTestProcesses.Load())
+	}
 	if committedRepo != "" {
 		if err := os.RemoveAll(committedRepo); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to remove committed template %s: %v\n", committedRepo, err)
@@ -89,6 +94,7 @@ func createUnbornTemplate() (dir string) {
 }
 
 func runTemplateGit(dir string, args ...string) {
+	gitTestProcesses.Add(1)
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(),
 		"GIT_AUTHOR_NAME=Badger Test",
@@ -1087,21 +1093,34 @@ func buildTask(t *testing.T, repo string, opts Options) Task {
 func newGitRepo(t *testing.T) string {
 	t.Helper()
 	ensureCommittedTemplate()
-	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS(committedRepo)); err != nil {
-		t.Fatalf("copy committed template: %v", err)
-	}
-	return dst
+	return copyRepositoryTemplate(t, committedRepo, "committed")
 }
 
 func newUnbornGitRepo(t *testing.T) string {
 	t.Helper()
 	ensureUnbornTemplate()
+	return copyRepositoryTemplate(t, unbornRepo, "unborn")
+}
+
+func copyRepositoryTemplate(t *testing.T, template, label string) string {
+	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS(unbornRepo)); err != nil {
-		t.Fatalf("copy unborn template: %v", err)
+	if err := os.CopyFS(dst, os.DirFS(template)); err != nil {
+		t.Fatalf("copy %s repository template: %v", label, err)
 	}
 	return dst
+}
+
+func TestRepositoryTemplatesAreIsolated(t *testing.T) {
+	first := newGitRepo(t)
+	second := newGitRepo(t)
+	writeTrackedFile(t, first, "only-first.go", "package main\n")
+	if _, err := os.Stat(filepath.Join(second, "only-first.go")); !os.IsNotExist(err) {
+		t.Fatalf("second template copy sees first copy mutation: stat error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(committedRepo, "only-first.go")); !os.IsNotExist(err) {
+		t.Fatalf("committed template sees copy mutation: stat error = %v", err)
+	}
 }
 
 func writeTrackedFile(t *testing.T, dir, path, contents string) {
@@ -1141,6 +1160,7 @@ func setFileModTime(t *testing.T, path string, modTime time.Time) {
 
 func runGitCmd(t *testing.T, dir string, args ...string) string {
 	t.Helper()
+	gitTestProcesses.Add(1)
 
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(),

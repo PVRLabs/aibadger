@@ -52,6 +52,7 @@ const (
 const (
 	topologyPromptKind    = workflow.TopologyPromptKind
 	codeContextPromptKind = workflow.CodeContextPromptKind
+	reviewPromptKind      = "Review Context"
 	// Bubble Tea's default renderer wakes at 60 FPS even while the view is
 	// unchanged; 10 FPS keeps scan animation responsive without burning idle CPU.
 	tuiRendererFPS  = 10
@@ -294,6 +295,10 @@ func startupGoalAttachments(attachmentsIn []startup.Attachment) []goalAttachment
 		}
 		kind := goalAttachmentType(strings.TrimSpace(attachment.Type))
 		source := strings.TrimSpace(attachment.Source)
+		if kind == goalAttachmentReview {
+			attachments = append(attachments, newGoalAttachment(goalAttachmentReview, source, attachment.Text, 0, 0, 0))
+			continue
+		}
 		if kind == goalAttachmentText {
 			attachments = append(attachments, newGoalTextAttachment(source, attachment.Text))
 			continue
@@ -624,6 +629,18 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 	if instruction == badgeCommand {
 		return m.handleBadgeCommand()
 	}
+	if protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview && hasReviewContextAttachment(m.goalAttachments) {
+		if m.eng == nil {
+			m.eng = engine.FromTopology(m.root, nil)
+			workflow.ConfigureEngine(m.eng, m.engineOptions(0))
+			m.session = nil
+		}
+		m.goal = goal
+		m.status = tuiMessage{}
+		m.err = nil
+		m.goalInput.Blur()
+		return m, copyCmd(reviewPromptKind, goal)
+	}
 
 	m.goal = goal
 	m.status = tuiMessage{}
@@ -632,6 +649,15 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 	m.scanFrame = 0
 	m.goalInput.Blur()
 	return m, tea.Batch(scanProjectCmd(m.root, m.cfg.MaxFilesPerDirectory), scanTick())
+}
+
+func hasReviewContextAttachment(attachments []goalAttachment) bool {
+	for _, attachment := range attachments {
+		if attachment.Type == goalAttachmentReview {
+			return true
+		}
+	}
+	return false
 }
 
 func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
@@ -697,7 +723,7 @@ func parseReviewCommand(goal string) (string, bool) {
 }
 
 func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
-	task, err := reviewtask.Build(m.root, reviewtask.Options{
+	ctx, err := reviewtask.BuildInteractiveContext(m.root, reviewtask.Options{
 		Mode:       reviewtask.ModeDefault,
 		ExtraFocus: extraFocus,
 	})
@@ -708,7 +734,6 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 		return m, textarea.Blink
 	}
 
-	ctx := task.StartupContext()
 	m.cfg.Focus = protocol.FocusReview
 	m.state = stateHome
 	m.goal = ""
@@ -730,6 +755,14 @@ func (m Model) advanceAfterCopy(kind string, manual bool) (tea.Model, tea.Cmd) {
 	m.manualCopyText = ""
 	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
 	switch {
+	case kind == reviewPromptKind:
+		if manual {
+			m.status = neutralMessage("Review Context shown for manual copy. Paste it into the existing AI chat; paste selectors here only if more context is requested.")
+		} else {
+			m.status = successMessage("Review Context copied. Paste it into any AI chat; paste selectors here only if more context is requested.")
+		}
+		m.state = stateWaitingForExtractions
+		m.resetPaste(pasteSpecForState(m.state, m.cfg.Focus).placeholder)
 	case kind == topologyPromptKind:
 		if manual {
 			m.status = neutralMessage("Prompt 1: Topology shown for manual copy. Paste it into any LLM chat interface, then paste extraction commands.")
@@ -767,6 +800,9 @@ func (m Model) advanceAfterTempFileWithStatus(kind, path string, status tuiMessa
 	m.status = status
 	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
 	switch {
+	case kind == reviewPromptKind:
+		m.state = stateWaitingForExtractions
+		m.resetPaste(pasteSpecForState(m.state, m.cfg.Focus).placeholder)
 	case kind == topologyPromptKind:
 		m.state = stateWaitingForExtractions
 		m.resetPaste(pasteSpecForState(m.state, m.cfg.Focus).placeholder)
@@ -781,6 +817,10 @@ func (m Model) advanceAfterTempFileWithStatus(kind, path string, status tuiMessa
 func (m Model) cancelPromptDelivery(kind string) (tea.Model, tea.Cmd) {
 	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
 	switch {
+	case kind == reviewPromptKind:
+		m.status = neutralMessage("Review Context was not copied.")
+		m.state = stateWaitingForExtractions
+		m.resetPaste(pasteSpecForState(m.state, m.cfg.Focus).placeholder)
 	case kind == topologyPromptKind:
 		m.status = neutralMessage("Prompt 1: Topology was not copied.")
 		m.state = stateWaitingForExtractions
@@ -796,6 +836,22 @@ func (m Model) cancelPromptDelivery(kind string) (tea.Model, tea.Cmd) {
 func (m Model) submitExtractions() (tea.Model, tea.Cmd) {
 	input := strings.TrimSpace(m.paste.Value())
 	session := m.workflowSession()
+	if protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview {
+		result := session.ParseStrictExtractionInputDetailed(input)
+		if len(result.Failures) > 0 {
+			m.status = tuiMessage{}
+			if result.Count > 0 {
+				m.err = fmt.Errorf("Review continuation mixes selectors with findings or invalid text.")
+			} else {
+				m.err = fmt.Errorf("No review selectors found. Final findings require no continuation.")
+			}
+			return m, nil
+		}
+		m.commands = result.Commands
+		m.status = successMessage(fmt.Sprintf("Parsed %d review selector(s).", result.Count))
+		m.err = nil
+		return m, reviewContinuationCmd(session, m.commands)
+	}
 	result := session.ParseExtractionInput(input)
 	m.commands = result.Commands
 	if result.Empty {

@@ -498,7 +498,7 @@ func parseArgs(args []string, cfg *appConfig) error {
 }
 
 func runHeadlessReview(cfg badger.Config, app appConfig, stdout, _ io.Writer) error {
-	reviewTask, err := reviewtask.Build(cfg.Root, reviewtask.Options{
+	result, err := reviewtask.BuildInitialReviewPayload(cfg.Root, reviewtask.Options{
 		Mode:       app.reviewMode,
 		Ref:        app.reviewRef,
 		ExtraFocus: app.reviewExtraFocus,
@@ -506,11 +506,16 @@ func runHeadlessReview(cfg badger.Config, app appConfig, stdout, _ io.Writer) er
 	if err != nil {
 		return err
 	}
-	goal, err := reviewTask.HeadlessGoal()
-	if err != nil {
-		return err
+	switch result.Failure {
+	case reviewtask.PayloadFailureNoChanges:
+		return fmt.Errorf("review prompt could not be prepared: no reviewable changes were detected")
+	case reviewtask.PayloadFailureMandatoryOverflow:
+		return fmt.Errorf("review prompt could not be prepared: mandatory review context exceeds the payload limit")
+	case reviewtask.PayloadFailureNone:
+	default:
+		return fmt.Errorf("review prompt could not be prepared: unknown payload outcome %q", result.Failure)
 	}
-	_, err = fmt.Fprintln(stdout, strings.TrimRight(goal, "\n"))
+	_, err = fmt.Fprintln(stdout, strings.TrimRight(result.Payload.Prompt, "\n"))
 	return err
 }
 
@@ -572,7 +577,7 @@ func applyFollowupStartup(cfg *badger.Config, app appConfig) {
 }
 
 func applyReviewStartup(cfg *badger.Config, app appConfig) error {
-	reviewTask, err := reviewtask.Build(cfg.Root, reviewtask.Options{
+	ctx, err := reviewtask.BuildInteractiveContext(cfg.Root, reviewtask.Options{
 		Mode:       app.reviewMode,
 		Ref:        app.reviewRef,
 		ExtraFocus: app.reviewExtraFocus,
@@ -581,17 +586,8 @@ func applyReviewStartup(cfg *badger.Config, app appConfig) error {
 		return err
 	}
 
-	if app.headless {
-		goal, err := reviewTask.HeadlessGoal()
-		if err != nil {
-			return err
-		}
-		cfg.Startup = badger.StartupContext{Goal: goal}
-		return nil
-	}
-
 	cfg.SkipOnboarding = true
-	cfg.Startup = reviewTask.StartupContext()
+	cfg.Startup = ctx
 	return nil
 }
 

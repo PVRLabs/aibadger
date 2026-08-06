@@ -76,6 +76,20 @@ func contextCmd(session *workflow.Session, goal string, commands []extractor.Com
 	}
 }
 
+func reviewContinuationCmd(session *workflow.Session, commands []extractor.Command) tea.Cmd {
+	return func() tea.Msg {
+		schema, metadata, extractedCount, failedCommands, safetyExclusions, err := session.GenerateReviewContinuation(commands)
+		return contextDoneMsg{
+			schema:           schema,
+			metadata:         metadata,
+			extractedCount:   extractedCount,
+			failedCommands:   failedCommands,
+			safetyExclusions: safetyExclusions,
+			err:              err,
+		}
+	}
+}
+
 func writeCmd(session *workflow.Session, updates []writer.FileUpdate) tea.Cmd {
 	return func() tea.Msg {
 		applied, errs := session.ApplyWrites(updates)

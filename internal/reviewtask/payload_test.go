@@ -230,6 +230,23 @@ func TestBuildInitialReviewPayloadNoChangesIsTyped(t *testing.T) {
 	}
 }
 
+func TestBuildInteractiveContextKeepsFallbackAndRejectsMandatoryOverflow(t *testing.T) {
+	clean := newGitRepo(t)
+	ctx, err := BuildInteractiveContext(clean, Options{Mode: ModeDefault})
+	if err != nil {
+		t.Fatalf("BuildInteractiveContext(clean) error = %v", err)
+	}
+	if len(ctx.Attachments) != 0 || !strings.Contains(ctx.Goal, "Paste the diff below") || ctx.Status.Severity != "warning" {
+		t.Fatalf("clean startup context = %#v, want editable warning fallback", ctx)
+	}
+
+	repo := newGitRepo(t)
+	writeTrackedFile(t, repo, "app.go", "package main\n// changed\n")
+	if _, err := BuildInteractiveContext(repo, Options{Mode: ModeDefault, MaxPayloadBytes: 1}); err == nil || !strings.Contains(err.Error(), "mandatory review context") {
+		t.Fatalf("BuildInteractiveContext(overflow) error = %v, want mandatory overflow", err)
+	}
+}
+
 func oneModifiedChangeSet(path, patch string) ChangeSet {
 	return ChangeSet{Mode: ModeDefault, Changes: []Change{{Path: path, Kind: ChangeModified, Patch: patch}}}
 }

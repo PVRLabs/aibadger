@@ -24,6 +24,7 @@ type goalAttachmentType string
 const (
 	goalAttachmentGitDiff goalAttachmentType = "git diff"
 	goalAttachmentText    goalAttachmentType = "text"
+	goalAttachmentReview  goalAttachmentType = "review context"
 )
 
 var (
@@ -92,6 +93,8 @@ func formatGoalAttachmentSummary(attachment goalAttachment) string {
 		fallthrough
 	default:
 		return fmt.Sprintf("[text: %s, %d lines]", protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines)
+	case goalAttachmentReview:
+		return fmt.Sprintf("[review context: %s, %d lines]", protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines)
 	}
 }
 
@@ -179,6 +182,9 @@ func assembleGoalSubmission(instruction string, attachments []goalAttachment) st
 }
 
 func renderGoalAttachment(attachment goalAttachment) string {
+	if attachment.Type == goalAttachmentReview {
+		return attachment.Text
+	}
 	return strings.Join([]string{
 		fmt.Sprintf("Attached %s:", attachment.Type),
 		renderGoalAttachmentBlock(attachment),
@@ -208,6 +214,8 @@ func attachmentFenceLanguage(kind goalAttachmentType) string {
 		return "diff"
 	case goalAttachmentText:
 		return "text"
+	case goalAttachmentReview:
+		return ""
 	default:
 		return ""
 	}

@@ -1,6 +1,7 @@
 package reviewtask
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
+	"github.com/PVRLabs/aibadger/internal/startup"
 )
 
 const (
@@ -87,6 +89,53 @@ func BuildInitialReviewPayload(root string, opts Options) (InitialReviewResult, 
 		limits.maxFileBytes = opts.MaxFileBytes
 	}
 	return buildInitialReviewPayload(root, set, strings.TrimSpace(opts.ExtraFocus), limits, readStableReviewFile), nil
+}
+
+// BuildInteractiveContext prepares the improved payload for editable TUI
+// startup. The generated context stays byte-for-byte intact in one raw
+// attachment; text entered in Goal is additional editable review guidance.
+// Clean and non-Git roots preserve the historical editable fallback.
+func BuildInteractiveContext(root string, opts Options) (startup.Context, error) {
+	result, err := BuildInitialReviewPayload(root, opts)
+	if err != nil {
+		legacy, legacyErr := Build(root, opts)
+		if legacyErr == nil && legacy.FailureClassification == FailureNotGit {
+			return legacy.StartupContext(), nil
+		}
+		return startup.Context{}, err
+	}
+	switch result.Failure {
+	case PayloadFailureNoChanges:
+		legacy, err := Build(root, opts)
+		if err != nil {
+			return startup.Context{}, err
+		}
+		return legacy.StartupContext(), nil
+	case PayloadFailureMandatoryOverflow:
+		return startup.Context{}, errors.New("review prompt could not be prepared: mandatory review context exceeds the payload limit")
+	case PayloadFailureNone:
+		return initialPayloadStartupContext(result.Payload), nil
+	default:
+		return startup.Context{}, fmt.Errorf("review prompt could not be prepared: unknown payload outcome %q", result.Failure)
+	}
+}
+
+func initialPayloadStartupContext(payload InitialReviewPayload) startup.Context {
+	contextPrompt := renderInitialReviewPrompt(payload.ChangeSet, "", payload.Files)
+	return startup.Context{
+		Goal: payload.Guidance,
+		Attachments: []startup.Attachment{{
+			Type:      "review context",
+			Source:    "improved review context",
+			Text:      contextPrompt,
+			SizeBytes: int64(len(contextPrompt)),
+			Lines:     countReviewTextLines(contextPrompt),
+		}},
+		Status: startup.Status{
+			Text:     "Loaded improved review context. Add optional guidance before submitting.",
+			Severity: "success",
+		},
+	}
 }
 
 type stableFileOutcome int

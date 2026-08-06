@@ -297,23 +297,20 @@ func TestApplyReviewStartupUsesReviewPrompt(t *testing.T) {
 	if err := applyReviewStartup(&cfg, app); err != nil {
 		t.Fatalf("applyReviewStartup() error = %v", err)
 	}
-	if cfg.Startup.Goal == "" {
-		t.Fatal("Startup.Goal is empty")
-	}
-	if strings.Contains(cfg.Startup.Goal, "Diff:") {
-		t.Fatalf("Startup.Goal unexpectedly contains raw diff text:\n%s", cfg.Startup.Goal)
+	if cfg.Startup.Goal != "Check edge cases." {
+		t.Fatalf("Startup.Goal = %q, want editable guidance", cfg.Startup.Goal)
 	}
 	if len(cfg.Startup.Attachments) != 1 {
 		t.Fatalf("Startup.Attachments length = %d, want 1", len(cfg.Startup.Attachments))
 	}
-	if cfg.Startup.Attachments[0].Type != "git diff" {
-		t.Fatalf("Startup.Attachments[0].Type = %q, want git diff", cfg.Startup.Attachments[0].Type)
+	if cfg.Startup.Attachments[0].Type != "review context" {
+		t.Fatalf("Startup.Attachments[0].Type = %q, want review context", cfg.Startup.Attachments[0].Type)
 	}
 	if cfg.Startup.Attachments[0].Text == "" {
 		t.Fatal("Startup.Attachments[0].Text is empty")
 	}
-	if cfg.Startup.Attachments[0].FilesChanged == 0 {
-		t.Fatal("Startup.Attachments[0].FilesChanged is zero")
+	if !strings.Contains(cfg.Startup.Attachments[0].Text, "Authoritative tracked Git diff:") {
+		t.Fatalf("review attachment missing improved diff:\n%s", cfg.Startup.Attachments[0].Text)
 	}
 	if cfg.Startup.Status.Severity != "success" {
 		t.Fatalf("Startup.Status.Severity = %q, want %q", cfg.Startup.Status.Severity, "success")
@@ -333,7 +330,7 @@ func TestRunHeadlessReviewWritesPreparedGoal(t *testing.T) {
 	if err := runHeadlessReview(cfg, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, io.Discard); err != nil {
 		t.Fatalf("runHeadlessReview() error = %v", err)
 	}
-	if !strings.Contains(stdout.String(), "Diff:") {
+	if !strings.Contains(stdout.String(), "Authoritative tracked Git diff:") {
 		t.Fatalf("runHeadlessReview() output missing diff:\n%s", stdout.String())
 	}
 	if !strings.HasSuffix(stdout.String(), "\n") || strings.HasSuffix(stdout.String(), "\n\n") {
@@ -347,7 +344,7 @@ func TestRunHeadlessReviewPropagatesErrors(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := runHeadlessReview(cfg, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "not a git repository") {
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "not a git repository") {
 		t.Fatalf("runHeadlessReview() error = %v, want non-git error", err)
 	}
 	if stdout.Len() != 0 {

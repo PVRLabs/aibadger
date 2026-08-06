@@ -16,11 +16,12 @@ import (
 )
 
 var (
-	committedRepo    string
-	unbornRepo       string
-	committedOnce    sync.Once
-	unbornOnce       sync.Once
-	gitTestProcesses atomic.Int64
+	committedRepo     string
+	unbornRepo        string
+	committedOnce     sync.Once
+	unbornOnce        sync.Once
+	parallelRepoTests sync.Map
+	gitTestProcesses  atomic.Int64
 )
 
 func TestMain(m *testing.M) {
@@ -1092,12 +1093,18 @@ func buildTask(t *testing.T, repo string, opts Options) Task {
 
 func newGitRepo(t *testing.T) string {
 	t.Helper()
+	if _, loaded := parallelRepoTests.LoadOrStore(t.Name(), struct{}{}); !loaded {
+		t.Parallel()
+	}
 	ensureCommittedTemplate()
 	return copyRepositoryTemplate(t, committedRepo, "committed")
 }
 
 func newUnbornGitRepo(t *testing.T) string {
 	t.Helper()
+	if _, loaded := parallelRepoTests.LoadOrStore(t.Name(), struct{}{}); !loaded {
+		t.Parallel()
+	}
 	ensureUnbornTemplate()
 	return copyRepositoryTemplate(t, unbornRepo, "unborn")
 }
@@ -1113,7 +1120,7 @@ func copyRepositoryTemplate(t *testing.T, template, label string) string {
 
 func TestRepositoryTemplatesAreIsolated(t *testing.T) {
 	first := newGitRepo(t)
-	second := newGitRepo(t)
+	second := copyRepositoryTemplate(t, committedRepo, "committed")
 	writeTrackedFile(t, first, "only-first.go", "package main\n")
 	if _, err := os.Stat(filepath.Join(second, "only-first.go")); !os.IsNotExist(err) {
 		t.Fatalf("second template copy sees first copy mutation: stat error = %v", err)

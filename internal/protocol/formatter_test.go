@@ -1432,6 +1432,33 @@ func TestGenerateSchemaADefaultBudgetRetainsTopologyWithLargeReviewTask(t *testi
 	}
 }
 
+func TestGenerateSchemaAReviewBudgetRetainsReservedTopology(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.SetFocus(FocusReview)
+	topology := largeTopology(100)
+	const topologyReserveBytes = 40 * 1024
+	const minimumRetainedTopologyBytes = 32 * 1024
+	taskBudget := formatter.MaxTopologyPromptBytes - SchemaAMinimumOverheadBytes(FocusReview) - topologyReserveBytes
+	task := strings.Repeat("r", taskBudget)
+
+	output := formatter.GenerateSchemaA(topology, task)
+
+	if len(output) > formatter.MaxTopologyPromptBytes {
+		t.Fatalf("Review Prompt 1 size = %d, want <= %d", len(output), formatter.MaxTopologyPromptBytes)
+	}
+	if !strings.Contains(output, "Review the supplied changes now.") {
+		t.Fatal("Review Prompt 1 missing the real Review constraint")
+	}
+	start := strings.Index(output, "[SOURCE TREE]\n") + len("[SOURCE TREE]\n")
+	end := strings.Index(output[start:], "\n[TASK]\n")
+	if start < len("[SOURCE TREE]\n") || end < 0 {
+		t.Fatalf("Review Prompt 1 missing source-tree/task framing")
+	}
+	if got := len(output[start : start+end]); got < minimumRetainedTopologyBytes {
+		t.Fatalf("retained source tree = %d bytes, want at least %d", got, minimumRetainedTopologyBytes)
+	}
+}
+
 func TestGenerateSchemaBFixedContentOverBudgetPreservesFraming(t *testing.T) {
 	formatter := NewFormatter()
 	formatter.MaxContextFileBytes = 0

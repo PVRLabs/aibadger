@@ -701,8 +701,9 @@ func parseReviewCommand(goal string) (string, bool) {
 
 func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 	ctx, err := reviewtask.BuildInteractiveContext(m.root, reviewtask.Options{
-		Mode:       reviewtask.ModeDefault,
-		ExtraFocus: extraFocus,
+		Mode:           reviewtask.ModeDefault,
+		ExtraFocus:     extraFocus,
+		MaxPromptBytes: m.cfg.MaxTopologyPromptBytes,
 	})
 	if err != nil {
 		m.status = errorMessage(fmt.Sprintf("Unable to prepare review prompt: %v", err))
@@ -811,9 +812,9 @@ func (m Model) submitExtractions() (tea.Model, tea.Cmd) {
 	session := m.workflowSession()
 	if protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview {
 		result := session.ParseStrictExtractionInputDetailed(input)
-		if len(result.Failures) > 0 {
+		if len(result.Failures) > 0 || result.Empty {
 			m.status = tuiMessage{}
-			if result.Count > 0 {
+			if len(result.Failures) > 0 && result.Count > 0 {
 				m.err = fmt.Errorf("Review continuation mixes selectors with findings or invalid text.")
 			} else {
 				m.err = fmt.Errorf("No review selectors found. Final findings require no continuation.")

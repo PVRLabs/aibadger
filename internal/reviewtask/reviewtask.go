@@ -69,6 +69,9 @@ type Options struct {
 	// defaults when positive. Negative values are invalid.
 	MaxPayloadBytes int
 	MaxFileBytes    int
+	// MaxPromptBytes bounds the complete interactive Schema A prompt. It is
+	// ignored by stable/headless payload generation.
+	MaxPromptBytes int
 }
 
 // Task is the editable review prompt payload prepared for the caller.

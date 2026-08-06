@@ -71,6 +71,15 @@ func (f *Formatter) GenerateSchemaA(t *model.ProjectTopology, query string) stri
 	return f.GenerateSchemaAWithTaggedFiles(t, query, nil)
 }
 
+// SchemaAMinimumOverheadBytes returns the unavoidable serialized Prompt 1
+// bytes for a focus when the task and topology package list are empty.
+func SchemaAMinimumOverheadBytes(focus Focus) int {
+	formatter := NewFormatter()
+	formatter.SetFocus(focus)
+	formatter.MaxTopologyPromptBytes = -1
+	return len(formatter.GenerateSchemaA(&model.ProjectTopology{}, ""))
+}
+
 // GenerateTopology builds the standalone formatted topology used by Schema A.
 func (f *Formatter) GenerateTopology(t *model.ProjectTopology) string {
 	return f.generateTopology(t, nil, 0)

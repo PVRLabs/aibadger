@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/PVRLabs/aibadger/internal/protocol"
 )
 
 func TestBuildInitialReviewPayloadIncludesEligibleCurrentFilesAndStatuses(t *testing.T) {
@@ -261,6 +263,44 @@ func TestBuildInteractiveContextKeepsFallbackAndRejectsMandatoryOverflow(t *test
 	writeTrackedFile(t, repo, "app.go", "package main\n// changed\n")
 	if _, err := BuildInteractiveContext(repo, Options{Mode: ModeDefault, MaxPayloadBytes: 1}); err == nil || !strings.Contains(err.Error(), "mandatory review context") {
 		t.Fatalf("BuildInteractiveContext(overflow) error = %v, want mandatory overflow", err)
+	}
+}
+
+func TestInteractivePayloadBudgetReservesReviewFramingAndTopology(t *testing.T) {
+	got := InteractivePayloadBudget(512 * 1024)
+	want := 512*1024 - protocol.SchemaAMinimumOverheadBytes(protocol.FocusReview) - 40*1024
+	if got != want {
+		t.Fatalf("InteractivePayloadBudget() = %d, want %d", got, want)
+	}
+	if got := InteractivePayloadBudget(-1); got != maxInitialReviewPayloadBytes {
+		t.Fatalf("unbounded InteractivePayloadBudget() = %d, want %d", got, maxInitialReviewPayloadBytes)
+	}
+	minimum := protocol.SchemaAMinimumOverheadBytes(protocol.FocusReview)
+	if got := InteractivePayloadBudget(minimum + 8*1024); got != 8*1024 {
+		t.Fatalf("small InteractivePayloadBudget() = %d, want %d", got, 8*1024)
+	}
+}
+
+func TestInteractivePayloadRetriesWithoutTopologyReserve(t *testing.T) {
+	const maxPromptBytes = 64 * 1024
+	preferred := InteractivePayloadBudget(maxPromptBytes)
+	maximum := maximumInteractivePayloadBudget(maxPromptBytes)
+	if preferred >= maximum {
+		t.Fatalf("preferred budget = %d, maximum = %d, want fallback capacity", preferred, maximum)
+	}
+	set := oneModifiedChangeSet("app.go", strings.Repeat("+changed\n", 4*1024))
+	opts := Options{Mode: ModeDefault, MaxPayloadBytes: preferred}
+
+	initial := buildInitialReviewPayloadFromChangeSet(t.TempDir(), set, opts)
+	if initial.Failure != PayloadFailureMandatoryOverflow {
+		t.Fatalf("preferred result = %q, want mandatory overflow", initial.Failure)
+	}
+	got := buildInteractivePayloadFromChangeSet(t.TempDir(), set, opts, maxPromptBytes, false)
+	if got.Failure != PayloadFailureNone {
+		t.Fatalf("fallback result = %q, want success", got.Failure)
+	}
+	if len(got.Payload.Prompt) > maximum {
+		t.Fatalf("fallback payload = %d bytes, want <= %d", len(got.Payload.Prompt), maximum)
 	}
 }
 

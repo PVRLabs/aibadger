@@ -578,9 +578,10 @@ func applyFollowupStartup(cfg *badger.Config, app appConfig) {
 
 func applyReviewStartup(cfg *badger.Config, app appConfig) error {
 	ctx, err := reviewtask.BuildInteractiveContext(cfg.Root, reviewtask.Options{
-		Mode:       app.reviewMode,
-		Ref:        app.reviewRef,
-		ExtraFocus: app.reviewExtraFocus,
+		Mode:           app.reviewMode,
+		Ref:            app.reviewRef,
+		ExtraFocus:     app.reviewExtraFocus,
+		MaxPromptBytes: cfg.MaxTopologyPromptBytes,
 	})
 	if err != nil {
 		return err

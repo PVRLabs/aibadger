@@ -1721,6 +1721,31 @@ func TestImprovedReviewSubmissionUsesPromptOneThenAcceptsOptionalSelectors(t *te
 	_ = next
 }
 
+func TestReviewContinuationRejectsEmptyInputWithoutBuildingPromptTwo(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel(t.TempDir(), cfg)
+	m.state = stateWaitingForExtractions
+	m.eng = engine.FromTopology(m.root, &model.ProjectTopology{})
+	m.paste.SetValue("   \n")
+
+	next, cmd := m.submitExtractions()
+	got := next.(Model)
+
+	if cmd != nil {
+		t.Fatal("empty Review continuation returned a Prompt 2 command")
+	}
+	if got.state != stateWaitingForExtractions {
+		t.Fatalf("state = %v, want optional-selector input", got.state)
+	}
+	if got.err == nil || got.err.Error() != "No review selectors found. Final findings require no continuation." {
+		t.Fatalf("error = %v, want no-continuation guidance", got.err)
+	}
+	if got.schemaB != "" || len(got.metadata) != 0 {
+		t.Fatalf("empty Review continuation produced Prompt 2 state: schema=%q metadata=%v", got.schemaB, got.metadata)
+	}
+}
+
 func TestSubmitGoalReviewCommandUsesFallbackPromptWhenNoDiff(t *testing.T) {
 	repo := newReviewRepo(t, "")
 	m := NewModel(repo, DefaultConfig())

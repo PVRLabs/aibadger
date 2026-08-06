@@ -8,13 +8,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/defaults"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
+	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/startup"
 )
 
 const (
-	maxInitialReviewPayloadBytes = 512 * 1024
-	maxInitialReviewFileBytes    = 64 * 1024
+	maxInitialReviewPayloadBytes    = 512 * 1024
+	maxInitialReviewFileBytes       = 64 * 1024
+	minimumInteractiveTopologyBytes = 40 * 1024
 )
 
 // ContextStatus explains how one changed file is represented in an initial
@@ -81,6 +84,10 @@ func BuildInitialReviewPayload(root string, opts Options) (InitialReviewResult, 
 	if err != nil {
 		return InitialReviewResult{}, err
 	}
+	return buildInitialReviewPayloadFromChangeSet(root, set, opts), nil
+}
+
+func buildInitialReviewPayloadFromChangeSet(root string, set ChangeSet, opts Options) InitialReviewResult {
 	limits := defaultReviewPayloadLimits
 	if opts.MaxPayloadBytes > 0 {
 		limits.maxPayloadBytes = opts.MaxPayloadBytes
@@ -88,7 +95,7 @@ func BuildInitialReviewPayload(root string, opts Options) (InitialReviewResult, 
 	if opts.MaxFileBytes > 0 {
 		limits.maxFileBytes = opts.MaxFileBytes
 	}
-	return buildInitialReviewPayload(root, set, strings.TrimSpace(opts.ExtraFocus), limits, readStableReviewFile), nil
+	return buildInitialReviewPayload(root, set, strings.TrimSpace(opts.ExtraFocus), limits, readStableReviewFile)
 }
 
 // BuildInteractiveContext prepares review context for editable TUI
@@ -96,7 +103,15 @@ func BuildInitialReviewPayload(root string, opts Options) (InitialReviewResult, 
 // attachment; text entered in Goal is additional editable review guidance.
 // Clean and non-Git roots preserve the historical editable fallback.
 func BuildInteractiveContext(root string, opts Options) (startup.Context, error) {
-	result, err := BuildInitialReviewPayload(root, opts)
+	maxPromptBytes := opts.MaxPromptBytes
+	if maxPromptBytes == 0 {
+		maxPromptBytes = defaults.MaxTopologyPromptBytes
+	}
+	explicitPayloadLimit := opts.MaxPayloadBytes > 0
+	if opts.MaxPayloadBytes <= 0 {
+		opts.MaxPayloadBytes = InteractivePayloadBudget(maxPromptBytes)
+	}
+	set, err := BuildChangeSet(root, opts)
 	if err != nil {
 		legacy, legacyErr := Build(root, opts)
 		if legacyErr == nil && legacy.FailureClassification == FailureNotGit {
@@ -104,6 +119,7 @@ func BuildInteractiveContext(root string, opts Options) (startup.Context, error)
 		}
 		return startup.Context{}, err
 	}
+	result := buildInteractivePayloadFromChangeSet(root, set, opts, maxPromptBytes, explicitPayloadLimit)
 	switch result.Failure {
 	case PayloadFailureNoChanges:
 		legacy, err := Build(root, opts)
@@ -118,6 +134,47 @@ func BuildInteractiveContext(root string, opts Options) (startup.Context, error)
 	default:
 		return startup.Context{}, fmt.Errorf("review prompt could not be prepared: unknown payload outcome %q", result.Failure)
 	}
+}
+
+func buildInteractivePayloadFromChangeSet(root string, set ChangeSet, opts Options, maxPromptBytes int, explicitPayloadLimit bool) InitialReviewResult {
+	result := buildInitialReviewPayloadFromChangeSet(root, set, opts)
+	if result.Failure != PayloadFailureMandatoryOverflow || explicitPayloadLimit {
+		return result
+	}
+	maxTaskBytes := maximumInteractivePayloadBudget(maxPromptBytes)
+	if maxTaskBytes <= opts.MaxPayloadBytes {
+		return result
+	}
+	opts.MaxPayloadBytes = maxTaskBytes
+	return buildInitialReviewPayloadFromChangeSet(root, set, opts)
+}
+
+// InteractivePayloadBudget reserves room in Prompt 1 for the real Review
+// framing and a useful topology slice. Non-positive Prompt 1 limits retain the
+// standalone review-context limit because the formatter is unbounded.
+func InteractivePayloadBudget(maxPromptBytes int) int {
+	if maxPromptBytes <= 0 {
+		return maxInitialReviewPayloadBytes
+	}
+	budget := maximumInteractivePayloadBudget(maxPromptBytes)
+	if budget > minimumInteractiveTopologyBytes {
+		budget -= minimumInteractiveTopologyBytes
+	}
+	return budget
+}
+
+func maximumInteractivePayloadBudget(maxPromptBytes int) int {
+	if maxPromptBytes <= 0 {
+		return maxInitialReviewPayloadBytes
+	}
+	budget := maxPromptBytes - protocol.SchemaAMinimumOverheadBytes(protocol.FocusReview)
+	if budget < 1 {
+		return 1
+	}
+	if budget > maxInitialReviewPayloadBytes {
+		return maxInitialReviewPayloadBytes
+	}
+	return budget
 }
 
 func initialPayloadStartupContext(payload InitialReviewPayload) startup.Context {

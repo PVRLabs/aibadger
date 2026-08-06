@@ -22,7 +22,8 @@ import (
 )
 
 // APIOptions describes one non-interactive API invocation. InputPath is read
-// exactly once and is never modified. Topology, prompt, and extract are the
+// exactly once and is never modified. Topology, prompt, extract, and the review
+// operations are the
 // stable text-first operations; the other current operations support
 // certification.
 type APIOptions struct {
@@ -63,7 +64,7 @@ func RunAPI(cfg Config, opts APIOptions) error {
 	}
 
 	var input string
-	if opts.Operation == "review-context" {
+	if opts.Operation == "review-context" || opts.Operation == "review-continuation" {
 		input, err = readAPIFileLimited(opts.InputPath, "api input file", maxReviewAPIInputBytes)
 	} else {
 		input, err = readAPIInput(opts.InputPath)
@@ -86,6 +87,9 @@ func RunAPI(cfg Config, opts APIOptions) error {
 			return fmt.Errorf("api extract goal file is empty")
 		}
 	}
+	if opts.Operation == "review-continuation" && strings.TrimSpace(input) == "" {
+		return fmt.Errorf("api review-continuation input file is empty")
+	}
 	if err := engine.CheckDisabled(cfg.Root); err != nil {
 		if errors.Is(err, engine.ErrProjectDisabled) {
 			fmt.Fprintln(stderr, "project explicitly disabled via .badger-disable")
@@ -94,6 +98,9 @@ func RunAPI(cfg Config, opts APIOptions) error {
 	}
 	if opts.Operation == "review-context" {
 		return runReviewContextAPI(cfg.Root, input, opts, stdout)
+	}
+	if opts.Operation == "review-continuation" {
+		return runReviewContinuationAPI(cfg, input, opts, stdout, stderr)
 	}
 
 	scanOutput := scanOutputSilent
@@ -145,7 +152,7 @@ func RunAPI(cfg Config, opts APIOptions) error {
 
 func validateAPIOperation(opts APIOptions) error {
 	operation, inputPath, goalFilePath, focus := opts.Operation, opts.InputPath, opts.GoalFilePath, opts.Focus
-	if operation != "review-context" && (opts.ReviewMode != "" || opts.ReviewRef != "" || opts.PathsFilePath != "" || opts.MaxReviewPayloadBytes != 0 || opts.MaxReviewFileBytes != 0) {
+	if operation != "review-context" && operation != "review-continuation" && (opts.ReviewMode != "" || opts.ReviewRef != "" || opts.PathsFilePath != "" || opts.MaxReviewPayloadBytes != 0 || opts.MaxReviewFileBytes != 0) {
 		return fmt.Errorf("api %s does not accept review-context options", operation)
 	}
 	switch operation {
@@ -208,6 +215,16 @@ func validateAPIOperation(opts APIOptions) error {
 		if opts.PathsFilePath != "" && mode != "default" {
 			return fmt.Errorf("api review-context mode %s does not accept --paths-file", mode)
 		}
+	case "review-continuation":
+		if inputPath == "" {
+			return errors.New("api review-continuation requires --input <file>")
+		}
+		if goalFilePath != "" || focus != "" || opts.ReviewMode != "" || opts.ReviewRef != "" || opts.PathsFilePath != "" {
+			return errors.New("api review-continuation accepts only --root, --input, --max-payload-bytes, and --max-file-bytes")
+		}
+		if opts.MaxReviewPayloadBytes < 0 || opts.MaxReviewFileBytes < 0 {
+			return errors.New("api review-continuation byte limits cannot be negative")
+		}
 	case "goal", "extraction", "write-plan":
 		if inputPath == "" {
 			return fmt.Errorf("api %s requires --input <file>", operation)
@@ -220,6 +237,46 @@ func validateAPIOperation(opts APIOptions) error {
 		}
 	default:
 		return fmt.Errorf("unknown api operation: %s", operation)
+	}
+	return nil
+}
+
+func runReviewContinuationAPI(cfg Config, input string, api APIOptions, stdout, stderr io.Writer) error {
+	eng := engine.FromTopology(cfg.Root, nil)
+	maxPayload := cfg.MaxPromptTwoBytes
+	if api.MaxReviewPayloadBytes > 0 {
+		maxPayload = api.MaxReviewPayloadBytes
+	}
+	maxFile := cfg.MaxContextFileBytes
+	if api.MaxReviewFileBytes > 0 {
+		maxFile = api.MaxReviewFileBytes
+	}
+	workflow.ConfigureEngine(eng, workflow.EngineOptions{MaxContextFileBytes: maxFile, MaxPromptTwoBytes: maxPayload, Focus: protocol.FocusReview})
+	session := workflow.NewSession(eng, writer.WhitespaceMode(cfg.WhitespaceMode))
+	parsed := session.ParseStrictExtractionInputDetailed(input)
+	if len(parsed.Failures) > 0 {
+		if parsed.Count > 0 {
+			return errors.New("api review-continuation response mixes selectors with findings or invalid text")
+		}
+		return errors.New("api review-continuation response contains no selectors; final findings require no continuation")
+	}
+	prompt, metadata, extractedCount, failed, excluded, err := session.GenerateReviewContinuation(parsed.Commands)
+	if err != nil {
+		return err
+	}
+	usable := 0
+	for _, item := range metadata {
+		if !item.Dropped {
+			usable++
+		}
+	}
+	if usable == 0 {
+		return errors.New("api review-continuation payload limit leaves no usable supplemental context")
+	}
+	printExtractionWarnings(stderr, extractedCount, failed, excluded)
+	printExtractionMetadata(stderr, metadata)
+	if _, err := fmt.Fprint(stdout, prompt); err != nil {
+		return fmt.Errorf("writing review continuation: %w", err)
 	}
 	return nil
 }

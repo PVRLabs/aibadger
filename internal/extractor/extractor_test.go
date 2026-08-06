@@ -112,6 +112,18 @@ func TestParseCommandsDetailedPreservesValidSelectorsAndReportsMalformedLines(t 
 	}
 }
 
+func TestParseStrictCommandsDetailedRejectsOversizedMixedLine(t *testing.T) {
+	e := NewExtractor("", nil)
+	result := e.ParseStrictCommandsDetailed("FILE:main.go\n" + strings.Repeat("finding prose ", 6000) + "\nFILE:after.go")
+
+	if len(result.Commands) != 2 {
+		t.Fatalf("commands = %+v, want selectors before and after oversized prose", result.Commands)
+	}
+	if len(result.Failures) != 1 || !strings.Contains(result.Failures[0], "line 2") {
+		t.Fatalf("failures = %v, want oversized prose line rejected", result.Failures)
+	}
+}
+
 func TestParseCommandsDoesNotRecoverFileTokensInsidePrefixOrNearPatterns(t *testing.T) {
 	e := NewExtractor("", nil)
 	input := `PREFIX:src/service.go#literal FILE:example.FILE:other

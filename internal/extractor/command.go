@@ -35,6 +35,40 @@ func (e *Extractor) ParseCommandsDetailed(input string) CommandParseResult {
 	return e.parseCommands(input, true)
 }
 
+// ParseStrictCommandsDetailed accepts only one complete selector per non-empty
+// line. Review continuation uses this boundary so ordinary findings are never
+// mistaken for extraction requests merely because they mention FILE: in prose.
+func (e *Extractor) ParseStrictCommandsDetailed(input string) CommandParseResult {
+	var result CommandParseResult
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	// The caller already owns input as a string, so allow one token to span the
+	// complete response. Otherwise Scanner's 64 KiB default can stop after an
+	// earlier valid selector and silently hide oversized mixed prose.
+	scanner.Buffer(make([]byte, 64*1024), len(input)+1)
+	lineNumber := 0
+	for scanner.Scan() {
+		lineNumber++
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		cmd, ok := parseCommandLine(line)
+		if !ok {
+			result.Failures = append(result.Failures, fmt.Sprintf("line %d: not a complete FILE, PREFIX, or NEAR selector", lineNumber))
+			continue
+		}
+		if (cmd.Type == "PREFIX" || cmd.Type == "NEAR") && cmd.Pattern == "" {
+			result.Failures = append(result.Failures, fmt.Sprintf("line %d: %s requires path#pattern", lineNumber, cmd.Type))
+			continue
+		}
+		result.Commands = append(result.Commands, cmd)
+	}
+	if err := scanner.Err(); err != nil {
+		result.Failures = append(result.Failures, fmt.Sprintf("reading selector response: %v", err))
+	}
+	return result
+}
+
 func (e *Extractor) parseCommands(input string, reportMalformed bool) CommandParseResult {
 	var result CommandParseResult
 	scanner := bufio.NewScanner(strings.NewReader(input))

@@ -459,6 +459,50 @@ func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []Extr
 	return body, metadata
 }
 
+// GenerateReviewContinuation renders only supplemental context for an
+// existing review conversation. It intentionally omits topology, task text,
+// changed-file blocks, and the initial diff.
+func (f *Formatter) GenerateReviewContinuation(extractions []ExtractionResult) (string, []ExtractionMetadata) {
+	const framing = "[REVIEW CONTINUATION]\nSupplemental repository context requested for the existing review follows.\nThese files reflect the filesystem at continuation time and may be newer than the initial review context.\nContinue the existing review and report findings, risks, or a clear no-issues result. Do not request more FILE:, PREFIX:, or NEAR: selectors in this response.\n\n[CONTEXT]\n"
+	processed := make([]ExtractionResult, 0, len(extractions))
+	metadata := make([]ExtractionMetadata, 0, len(extractions))
+	for _, extraction := range extractions {
+		meta := ExtractionMetadata{Path: extraction.Path, OriginalSize: len(extraction.Content)}
+		content := extraction.Content
+		if f.MaxContextFileBytes > 0 && len(content) > f.MaxContextFileBytes {
+			content = f.trimContent(content, f.MaxContextFileBytes)
+			meta.Truncated = true
+		}
+		processed = append(processed, ExtractionResult{Path: extraction.Path, Content: content, FullFile: extraction.FullFile})
+		metadata = append(metadata, meta)
+	}
+	build := func(items []ExtractionResult) string {
+		var sb strings.Builder
+		sb.WriteString(framing)
+		for i, extraction := range items {
+			label := "Extracted Span"
+			if strings.HasPrefix(extraction.Content, "Binary file: ") {
+				label = "Binary Summary"
+			} else if extraction.FullFile {
+				label = "Full File"
+			}
+			if metadata[i].Truncated {
+				label += ", Truncated"
+			}
+			fmt.Fprintf(&sb, "--- File: %s (%s) ---\n%s\n--- End File ---\n", extraction.Path, label, extraction.Content)
+		}
+		return sb.String()
+	}
+	if f.MaxPromptTwoBytes > 0 {
+		for len(processed) > 0 && len(build(processed)) > f.MaxPromptTwoBytes {
+			last := len(processed) - 1
+			metadata[last].Dropped = true
+			processed = processed[:last]
+		}
+	}
+	return build(processed), metadata
+}
+
 func (f *Formatter) buildSchemaBBody(t *model.ProjectTopology, extractions []ExtractionResult, metadata []ExtractionMetadata, constraint string) string {
 	var sb strings.Builder
 	f.writeTopologySection(&sb, t, len(extractions))

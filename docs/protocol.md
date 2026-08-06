@@ -73,6 +73,13 @@ Prompt 2 has this structure:
 - **OUTPUT CONSTRAINT** — instructs the AI to answer using the provided context, not selector lines.
 - **CONTEXT** — extracted file blocks such as `(Full File)`, `(Extracted Span)`, or `(Binary Summary)`.
 
+Deep Review uses the same selectors as an optional continuation escape hatch.
+A selector-only response can be passed to `api review-continuation`; ordinary
+findings end the review without that call. The supplemental payload contains
+only current requested file context and compact review framing, so it does not
+resend the initial diff. Files reflect the filesystem at continuation time
+rather than a persisted review snapshot.
+
 ## Step 3: Apply
 
 Copy **Prompt 2 (Code Context)** back to the AI chat. The AI reads the code and can write back

@@ -115,6 +115,15 @@ func (s *Session) ParseExtractionInputDetailed(input string) ExtractionCommandRe
 	}
 }
 
+func (s *Session) ParseStrictExtractionInputDetailed(input string) ExtractionCommandResult {
+	result := s.Engine.ParseStrictCommandsDetailed(input)
+	return ExtractionCommandResult{Commands: result.Commands, Failures: result.Failures, Count: len(result.Commands), Empty: len(result.Commands) == 0}
+}
+
+func (s *Session) GenerateReviewContinuation(commands []extractor.Command) (string, []protocol.ExtractionMetadata, int, []string, []string, error) {
+	return s.Engine.GenerateReviewContinuation(commands)
+}
+
 func (s *Session) GenerateContext(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, error) {
 	return s.Engine.GenerateContext(goal, commands)
 }

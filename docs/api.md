@@ -2,7 +2,8 @@
 
 Badger provides a supported, stable, non-interactive command surface for
 editors, scripts, coding agents, and other local tools. The stable operations
-are `topology`, `prompt`, `extract`, and `review-context`.
+are `topology`, `prompt`, `extract`, `review-context`, and
+`review-continuation`.
 
 Use `badger api --help` for an overview or add `--help` (or `-h`) to a stable
 operation for command-specific usage.
@@ -98,6 +99,29 @@ operation is non-interactive and read-only and does not scan project topology,
 read stdin, access the clipboard, open the TUI or a browser, contact providers,
 or access the network. Normal output uses repository-relative paths and does
 not expose the absolute repository root.
+
+### `api review-continuation`
+
+Print supplemental context for an existing Deep Review conversation.
+
+```bash
+badger api review-continuation --root <repository> \
+  --input <selector-file> \
+  [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>]
+```
+
+The input must contain only complete `FILE:`, `PREFIX:`, or `NEAR:` selectors,
+one per non-empty line. A findings-only response needs no continuation call.
+Badger rejects findings-only, mixed prose-and-selector, empty, and malformed
+responses rather than interpreting natural-language findings.
+
+Output contains compact continuation instructions and the requested context;
+it does not repeat the initial diff, changed-file blocks, guidance, or
+topology. Files are read from the current filesystem when this command runs and
+may therefore be newer than the initial review context. Existing extraction
+safety, deduplication, partial-success, and deterministic ordering rules apply.
+Warnings go to stderr. Positive byte-limit options override the normal Prompt 2
+limits; the call fails without stdout if no usable supplemental context fits.
 
 ### `api topology`
 

@@ -124,6 +124,26 @@ func (e *Engine) ParseCommandsDetailed(input string) extractor.CommandParseResul
 	return e.extractor.ParseCommandsDetailed(input)
 }
 
+func (e *Engine) ParseStrictCommandsDetailed(input string) extractor.CommandParseResult {
+	return e.extractor.ParseStrictCommandsDetailed(input)
+}
+
+// GenerateReviewContinuation extracts current files and renders supplemental
+// context without repeating the initial review prompt.
+func (e *Engine) GenerateReviewContinuation(commands []extractor.Command) (string, []protocol.ExtractionMetadata, int, []string, []string, error) {
+	extractions, err := e.extractor.Extract(commands)
+	if err != nil {
+		var extractionErr *extractor.ExtractionError
+		if errors.As(err, &extractionErr) && extractionErr.CanProceed && len(extractions) > 0 {
+			prompt, metadata := e.formatter.GenerateReviewContinuation(extractions)
+			return prompt, metadata, len(extractions), append([]string(nil), extractionErr.Failures...), append([]string(nil), extractionErr.Excluded...), nil
+		}
+		return "", nil, 0, nil, nil, err
+	}
+	prompt, metadata := e.formatter.GenerateReviewContinuation(extractions)
+	return prompt, metadata, len(extractions), nil, nil, nil
+}
+
 // GenerateContext extracts requested source and builds the Schema B context.
 func (e *Engine) GenerateContext(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, error) {
 	extractions, err := e.extractor.Extract(commands)

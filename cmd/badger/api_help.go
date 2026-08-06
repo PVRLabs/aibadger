@@ -26,7 +26,7 @@ func isAPIHelpFlag(arg string) bool {
 
 func isStableAPIOperation(operation string) bool {
 	switch operation {
-	case "topology", "prompt", "extract", "review-context":
+	case "topology", "prompt", "extract", "review-context", "review-continuation":
 		return true
 	default:
 		return false
@@ -155,6 +155,19 @@ Failures:
   destination failure also exits nonzero but may have accepted a partial
   prefix. Normal output uses root-relative paths.
 `)
+	case "review-continuation":
+		fmt.Fprint(w, `Usage:
+  badger api review-continuation --root <repository> --input <selector-file> [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>]
+
+Purpose:
+  Produce supplemental current-file context for an existing Deep Review chat.
+
+The input must contain only FILE, PREFIX, or NEAR selectors, one per line.
+Normal findings need no continuation call; mixed findings and selectors are
+rejected. Output omits the initial diff and changed-file context. Files reflect
+the filesystem at continuation time and may be newer than the initial review.
+The operation is non-interactive, read-only, and provider-independent.
+`)
 	default:
 		fmt.Fprint(w, `Usage:
   badger api --help
@@ -162,6 +175,7 @@ Failures:
   badger api prompt --root <project> --focus <code|design> --input <goal-file>
   badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>
   badger api review-context --root <repository> [--mode <default|staged|branch|commit>]
+  badger api review-continuation --root <repository> --input <selector-file>
 
 Purpose:
   Run Badger's stable, non-interactive text API for local integrations.
@@ -171,6 +185,7 @@ Stable operations:
   prompt    Produce the complete first-stage human handoff prompt.
   extract   Produce the complete second-stage prompt with selected context.
   review-context  Produce an initial Deep Review prompt from Git changes.
+  review-continuation  Produce supplemental context for an existing review.
 
 Arguments:
   Every operation requires --root <project>. Run an operation with --help or

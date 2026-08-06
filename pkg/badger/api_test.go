@@ -516,6 +516,88 @@ func TestRunAPIExtractMatchesEngineSchemaB(t *testing.T) {
 	}
 }
 
+func TestRunAPIReviewContinuationProducesOnlySupplementalCurrentContext(t *testing.T) {
+	root := writeAPIExtractionProject(t)
+	selectors := writeAPITestInput(t, "review-selectors.txt", "FILE:main.go\nFILE:main.go\nNEAR:go.mod#module")
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc continuationState() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-continuation", InputPath: selectors, Stdout: &stdout, Stderr: &stderr})
+	if err != nil {
+		t.Fatalf("RunAPI() error = %v", err)
+	}
+	for _, want := range []string{"[REVIEW CONTINUATION]", "filesystem at continuation time", "continuationState", "--- File: go.mod (Full File) ---"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
+		}
+	}
+	for _, forbidden := range []string{"[PROJECT TOPOLOGY]", "diff --git"} {
+		if strings.Contains(stdout.String(), forbidden) {
+			t.Fatalf("stdout repeats initial context %q:\n%s", forbidden, stdout.String())
+		}
+	}
+	if strings.Count(stdout.String(), "--- File: main.go") != 1 {
+		t.Fatalf("duplicate selector was not deduplicated:\n%s", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunAPIReviewContinuationClassifiesResponsesWithoutParsingFindings(t *testing.T) {
+	root := writeAPIExtractionProject(t)
+	for _, tt := range []struct{ name, input, want string }{
+		{name: "empty", input: " \n", want: "input file is empty"},
+		{name: "findings", input: "High: main.go has a race", want: "contains no selectors"},
+		{name: "mixed", input: "FILE:main.go\nHigh: inspect this race", want: "mixes selectors with findings or invalid text"},
+		{name: "oversized mixed", input: "FILE:main.go\n" + strings.Repeat("finding prose ", 6000), want: "mixes selectors with findings or invalid text"},
+		{name: "invalid", input: "PREFIX:main.go", want: "contains no selectors"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			input := writeAPITestInput(t, tt.name+".txt", tt.input)
+			var stdout, stderr bytes.Buffer
+			err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-continuation", InputPath: input, Stdout: &stdout, Stderr: &stderr})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+			if stdout.Len() != 0 || stderr.Len() != 0 {
+				t.Fatalf("output = stdout %q stderr %q, want empty", stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestRunAPIReviewContinuationPartialSafetyAndLimits(t *testing.T) {
+	root := writeAPIExtractionProject(t)
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("SECRET=value\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	selectors := writeAPITestInput(t, "partial-review-selectors.txt", "FILE:main.go\nFILE:missing.go\nFILE:.env\nFILE:preview.png")
+	var stdout, stderr bytes.Buffer
+	err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-continuation", InputPath: selectors, MaxReviewFileBytes: 32, Stdout: &stdout, Stderr: &stderr})
+	if err != nil {
+		t.Fatalf("RunAPI() partial error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "main.go (Full File, Truncated)") || !strings.Contains(stdout.String(), "preview.png (Binary Summary, Truncated)") {
+		t.Fatalf("stdout missing bounded usable context:\n%s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "SECRET=value") {
+		t.Fatalf("stdout leaked sensitive content:\n%s", stdout.String())
+	}
+	for _, want := range []string{"missing.go", ".env: excluded", "Extracted 2 files with warnings"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("stderr missing %q:\n%s", want, stderr.String())
+		}
+	}
+	stdout.Reset()
+	stderr.Reset()
+	err = RunAPI(Config{Root: root}, APIOptions{Operation: "review-continuation", InputPath: selectors, MaxReviewPayloadBytes: 1, Stdout: &stdout, Stderr: &stderr})
+	if err == nil || !strings.Contains(err.Error(), "leaves no usable supplemental context") || stdout.Len() != 0 {
+		t.Fatalf("tiny limit = error %v stdout %q", err, stdout.String())
+	}
+}
+
 func TestRunAPIExtractFocusDefaultsToCodeAndSupportsDesign(t *testing.T) {
 	root := writeAPIExtractionProject(t)
 	selectorsPath := writeAPITestInput(t, "selectors.txt", "FILE:main.go")

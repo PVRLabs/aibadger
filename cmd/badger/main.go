@@ -162,7 +162,7 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 
 	cfg := apiConfig{operation: args[0]}
 	switch cfg.operation {
-	case "topology", "prompt", "extract", "review-context", "scan", "goal", "extraction", "write-plan":
+	case "topology", "prompt", "extract", "review-context", "review-continuation", "scan", "goal", "extraction", "write-plan":
 	default:
 		return apiConfig{}, fmt.Errorf("unknown api operation: %s", cfg.operation)
 	}
@@ -275,6 +275,15 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 		}
 		if cfg.pathsFilePath != "" && cfg.reviewMode != "default" {
 			return apiConfig{}, fmt.Errorf("api review-context mode %s does not accept --paths-file", cfg.reviewMode)
+		}
+		return cfg, nil
+	}
+	if cfg.operation == "review-continuation" {
+		if cfg.inputPath == "" {
+			return apiConfig{}, fmt.Errorf("api review-continuation requires --input <file>")
+		}
+		if cfg.focus != "" || cfg.goalFilePath != "" || cfg.reviewMode != "" || cfg.reviewRef != "" || cfg.pathsFilePath != "" {
+			return apiConfig{}, fmt.Errorf("api review-continuation accepts only --root, --input, --max-payload-bytes, and --max-file-bytes")
 		}
 		return cfg, nil
 	}
@@ -619,6 +628,7 @@ func isFlagArg(arg, name string) bool {
 func printUsage(cfg appConfig) {
 	fmt.Printf("%s - local context bridge\n%s\n\nUsage:\n  badger [code|review|design|followup] [--help]\n  badger [code|review|design|followup] [--version]\n  badger badge                        Launch the TUI with /badge preloaded\n  badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]\n  badger api --help\n  badger api topology --root <project>\n  badger api prompt --root <project> --focus <code|design> --input <goal-file>\n  badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>\n  badger version\n\nOptions:\n  --help, -h        Print this help and exit.\n  --version         Print version and exit.\n\nThe api commands are non-interactive and write directly usable prompt text to stdout.\nStandard runs start the interactive BYOL workflow for the current directory.\nDesign is the default interactive focus; use badger code, badger review, badger design, or badger followup to start explicitly.\n`badger review` preloads an editable review prompt from the current Git working tree. Default mode includes staged and unstaged tracked changes plus up to 25 relevant Git-untracked paths in a separate section; it never includes untracked file contents, and untracked paths alone are valid review context. `--staged`, `--branch <ref>`, and `--commit <sha>` exclude working-tree untracked files. If no reviewable changes are available or the repo is not git-backed, Badger leaves a manual fallback prompt in the editor.\n", badger.Name, buildInfoLine())
 	fmt.Print("Stable Deep Review API: badger api review-context --root <repository> [--mode <default|staged|branch|commit>]\n")
+	fmt.Print("Optional review continuation: badger api review-continuation --root <repository> --input <selector-file>\n")
 
 	// Show note about dev flags in release builds
 	fmt.Print("/code switches an interactive session to Code focus and /design switches it to Design focus.\n")

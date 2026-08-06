@@ -587,6 +587,11 @@ func TestParseAPIConfig(t *testing.T) {
 			want: apiConfig{operation: "review-context", root: "/project", reviewMode: "branch", reviewRef: "main"},
 		},
 		{
+			name: "review continuation",
+			args: []string{"review-continuation", "--root", "/project", "--input", "selectors.txt", "--max-payload-bytes", "500000"},
+			want: apiConfig{operation: "review-continuation", root: "/project", inputPath: "selectors.txt", maxReviewPayloadBytes: 500000},
+		},
+		{
 			name:    "missing operation",
 			wantErr: "api operation is required",
 		},
@@ -644,6 +649,8 @@ func TestParseAPIConfig(t *testing.T) {
 		{name: "review branch requires ref", args: []string{"review-context", "--root", "/project", "--mode", "branch"}, wantErr: "api review-context mode branch requires --ref <revision>"},
 		{name: "review selected staged rejected", args: []string{"review-context", "--root", "/project", "--mode", "staged", "--paths-file", "paths.json"}, wantErr: "api review-context mode staged does not accept --paths-file"},
 		{name: "review invalid byte limit", args: []string{"review-context", "--root", "/project", "--max-file-bytes", "0"}, wantErr: "api --max-file-bytes requires a positive integer"},
+		{name: "continuation missing input", args: []string{"review-continuation", "--root", "/project"}, wantErr: "api review-continuation requires --input <file>"},
+		{name: "continuation rejects mode", args: []string{"review-continuation", "--root", "/project", "--input", "selectors.txt", "--mode", "default"}, wantErr: "api review-continuation accepts only --root, --input, --max-payload-bytes, and --max-file-bytes"},
 	}
 
 	for _, tt := range tests {

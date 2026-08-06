@@ -37,6 +37,7 @@ type APIOptions struct {
 	MaxReviewPayloadBytes int
 	MaxReviewFileBytes    int
 	IncludeReviewTopology bool
+	MaxFilesPerDirectory  int
 	Stdout                io.Writer
 	Stderr                io.Writer
 }
@@ -108,6 +109,7 @@ func runAPIWithReviewBuilder(cfg Config, opts APIOptions, buildReview reviewPayl
 		return err
 	}
 	if opts.Operation == "review-context" {
+		opts.MaxFilesPerDirectory = cfg.MaxFilesPerDirectory
 		return runReviewContextAPIWithBuilder(cfg.Root, input, opts, stdout, buildReview)
 	}
 	if opts.Operation == "review-continuation" {
@@ -316,7 +318,8 @@ func runReviewContextAPIWithBuilder(root, guidance string, api APIOptions, stdou
 	result, err := buildReview(root, reviewtask.Options{
 		Mode: mode, Ref: api.ReviewRef, ExtraFocus: guidance, SelectedPaths: paths,
 		MaxPayloadBytes: api.MaxReviewPayloadBytes, MaxFileBytes: api.MaxReviewFileBytes,
-		IncludeTopology: api.IncludeReviewTopology,
+		IncludeTopology:      api.IncludeReviewTopology,
+		MaxFilesPerDirectory: api.MaxFilesPerDirectory,
 	})
 	if err != nil {
 		return fmt.Errorf("preparing review context: %w", sanitizeReviewPreparationError(root, err))
@@ -326,6 +329,8 @@ func runReviewContextAPIWithBuilder(root, guidance string, api APIOptions, stdou
 		return errors.New("api review-context found no reviewable changes")
 	case reviewtask.PayloadFailureMandatoryOverflow:
 		return errors.New("api review-context mandatory content exceeds the payload byte limit")
+	case reviewtask.PayloadFailureTopologyScan:
+		return errors.New("api review-context could not scan project topology")
 	}
 	if _, err := fmt.Fprint(stdout, result.Payload.Prompt); err != nil {
 		return fmt.Errorf("writing review context: %w", err)

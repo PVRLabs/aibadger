@@ -153,7 +153,7 @@ func TestRunAPIReviewContextSelectedPathsAndFailures(t *testing.T) {
 }
 
 func TestRunAPIReviewContextTypedFailuresProduceNoOutput(t *testing.T) {
-	for name, failure := range map[string]reviewtask.PayloadFailure{"no changes": reviewtask.PayloadFailureNoChanges, "overflow": reviewtask.PayloadFailureMandatoryOverflow} {
+	for name, failure := range map[string]reviewtask.PayloadFailure{"no changes": reviewtask.PayloadFailureNoChanges, "overflow": reviewtask.PayloadFailureMandatoryOverflow, "topology scan": reviewtask.PayloadFailureTopologyScan} {
 		t.Run(name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			err := runAPIWithReviewBuilder(Config{Root: t.TempDir()}, APIOptions{Operation: "review-context", Stdout: &stdout, Stderr: &stderr}, func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error) {
@@ -166,7 +166,7 @@ func TestRunAPIReviewContextTypedFailuresProduceNoOutput(t *testing.T) {
 	}
 }
 
-func TestRunAPIReviewContextPassesTopologyCapability(t *testing.T) {
+func TestRunAPIReviewContextPassesTopologyOptions(t *testing.T) {
 	var stdout bytes.Buffer
 	var got reviewtask.Options
 	err := runAPIWithReviewBuilder(Config{Root: t.TempDir()}, APIOptions{
@@ -180,6 +180,9 @@ func TestRunAPIReviewContextPassesTopologyCapability(t *testing.T) {
 	}
 	if !got.IncludeTopology {
 		t.Fatal("reviewtask options IncludeTopology = false, want true")
+	}
+	if got.MaxFilesPerDirectory <= 0 {
+		t.Fatalf("reviewtask options MaxFilesPerDirectory = %d, want configured bound", got.MaxFilesPerDirectory)
 	}
 	if stdout.String() != "topology-aware" {
 		t.Fatalf("stdout = %q, want exact builder output", stdout.String())

@@ -72,6 +72,9 @@ type Options struct {
 	// IncludeTopology asks the initial payload builder to prepend Badger-owned
 	// project topology and source-tree context under the same payload budget.
 	IncludeTopology bool
+	// MaxFilesPerDirectory applies the normal scanner bound when topology is
+	// requested. Zero retains the scanner's unlimited low-level default.
+	MaxFilesPerDirectory int
 	// MaxPromptBytes bounds the complete interactive Schema A prompt. It is
 	// ignored by stable/headless payload generation.
 	MaxPromptBytes int

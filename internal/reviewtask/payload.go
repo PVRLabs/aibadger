@@ -45,6 +45,7 @@ const (
 	PayloadFailureNone              PayloadFailure = ""
 	PayloadFailureNoChanges         PayloadFailure = "no_changes"
 	PayloadFailureMandatoryOverflow PayloadFailure = "mandatory_overflow"
+	PayloadFailureTopologyScan      PayloadFailure = "topology_scan"
 )
 
 // FileContext records one changed path's explicit payload disposition.
@@ -101,7 +102,7 @@ func buildInitialReviewPayloadFromChangeSet(root string, set ChangeSet, opts Opt
 	if opts.MaxFileBytes > 0 {
 		limits.maxFileBytes = opts.MaxFileBytes
 	}
-	return buildInitialReviewPayloadWithTopology(root, set, strings.TrimSpace(opts.ExtraFocus), limits, opts.IncludeTopology, readStableReviewFile)
+	return buildInitialReviewPayloadWithTopology(root, set, strings.TrimSpace(opts.ExtraFocus), limits, opts.IncludeTopology, opts.MaxFilesPerDirectory, readStableReviewFile)
 }
 
 // BuildInteractiveContext prepares review context for editable TUI
@@ -231,10 +232,10 @@ const (
 type stableFileReader func(string, int) ([]byte, stableFileOutcome)
 
 func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, readFile stableFileReader) InitialReviewResult {
-	return buildInitialReviewPayloadWithTopology(root, set, guidance, limits, false, readFile)
+	return buildInitialReviewPayloadWithTopology(root, set, guidance, limits, false, 0, readFile)
 }
 
-func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, includeTopology bool, readFile stableFileReader) InitialReviewResult {
+func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, includeTopology bool, maxFilesPerDirectory int, readFile stableFileReader) InitialReviewResult {
 	if len(set.Changes) == 0 && len(set.UntrackedPaths) == 0 {
 		return InitialReviewResult{Failure: PayloadFailureNoChanges}
 	}
@@ -251,13 +252,14 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		// topology block and the review instruction. Reserve it alongside the
 		// mandatory review payload so an exactly-filled topology remains valid.
 		topologyBudget := limits.maxPayloadBytes - len(mandatory) - 1
-		if topologyBudget < 0 {
-			topologyBudget = 0
+		if topologyBudget < 1 {
+			return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 		}
 		s := scanner.NewScanner(root)
+		s.MaxFilesPerDirectory = maxFilesPerDirectory
 		project, err := s.Scan()
 		if err != nil {
-			return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
+			return InitialReviewResult{Failure: PayloadFailureTopologyScan}
 		}
 		formatter := protocol.NewFormatter()
 		formatter.MaxTopologyPromptBytes = topologyBudget

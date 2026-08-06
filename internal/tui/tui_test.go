@@ -16,6 +16,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/github"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/protocol"
+	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/startup"
 	"github.com/PVRLabs/aibadger/internal/version"
 	"github.com/PVRLabs/aibadger/internal/workflow"
@@ -1641,8 +1642,15 @@ func TestSubmitGoalReviewCommandUsesPreparedPrompt(t *testing.T) {
 }
 
 func TestSubmitGoalReviewCommandUsesExtraFocusText(t *testing.T) {
-	repo := newReviewRepo(t, "println(\"branch\")")
-	m := NewModel(repo, DefaultConfig())
+	m := NewModel(t.TempDir(), DefaultConfig())
+	m.prepareReviewContext = func(_ string, opts reviewtask.Options) (startup.Context, error) {
+		if opts.ExtraFocus != "Check error handling and nil guards." {
+			t.Fatalf("ExtraFocus = %q", opts.ExtraFocus)
+		}
+		ctx := preparedReviewStartupContext()
+		ctx.Goal += "\n\nAdditional focus: " + opts.ExtraFocus
+		return ctx, nil
+	}
 	m.goalInput.SetValue("/review Check error handling and nil guards.")
 
 	next, cmd := m.submitGoal()
@@ -1747,8 +1755,13 @@ func TestReviewContinuationRejectsEmptyInputWithoutBuildingPromptTwo(t *testing.
 }
 
 func TestSubmitGoalReviewCommandUsesFallbackPromptWhenNoDiff(t *testing.T) {
-	repo := newReviewRepo(t, "")
-	m := NewModel(repo, DefaultConfig())
+	m := NewModel(t.TempDir(), DefaultConfig())
+	m.prepareReviewContext = func(string, reviewtask.Options) (startup.Context, error) {
+		return startup.Context{
+			Goal:   "Review the following change for concrete bugs.\n\nPaste the diff below or replace this text with the change you want reviewed.",
+			Status: startup.Status{Text: "No reviewable changes were detected. Paste a diff or describe the change manually.", Severity: "warning"},
+		}, nil
+	}
 	m.goalInput.SetValue("/review")
 
 	next, cmd := m.submitGoal()
@@ -1770,6 +1783,361 @@ func TestSubmitGoalReviewCommandUsesFallbackPromptWhenNoDiff(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("review command returned nil blink command")
+	}
+}
+
+func TestReviewPreparationFailuresStayInEditor(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  string
+	}{
+		{name: "git failure", err: "git diff failed"},
+		{name: "mandatory overflow", err: "mandatory review context exceeds the payload limit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewModel(t.TempDir(), DefaultConfig())
+			m.prepareReviewContext = func(string, reviewtask.Options) (startup.Context, error) {
+				return startup.Context{}, errors.New(tc.err)
+			}
+			m.goalInput.SetValue("/review")
+
+			next, cmd := m.submitGoal()
+			got := next.(Model)
+			if got.state != stateHome || got.cfg.Focus == protocol.FocusReview {
+				t.Fatalf("failed Review preparation = state %v focus %v", got.state, got.cfg.Focus)
+			}
+			if !strings.Contains(got.status.text, "Unable to prepare review prompt: "+tc.err) || got.status.severity != messageError {
+				t.Fatalf("failed Review status = %#v", got.status)
+			}
+			if len(got.goalAttachments) != 0 || got.goalInput.Value() != "/review" {
+				t.Fatalf("failed Review preparation mutated editor: goal=%q attachments=%v", got.goalInput.Value(), got.goalAttachments)
+			}
+			if cmd == nil {
+				t.Fatal("failed Review preparation did not return editor blink command")
+			}
+		})
+	}
+}
+
+func preparedReviewStartupContext() startup.Context {
+	return startup.Context{
+		Goal: "Review the following change for concrete bugs.",
+		Attachments: []startup.Attachment{{
+			Type: "review context", Source: "review context",
+			Text:         "[REVIEW CONTEXT: TRACKED FILE STATUS]\napp.go\tcomplete-file-included\n\nDiff:\n```diff\n+changed\n```",
+			FilesChanged: 1, Additions: 1,
+		}},
+		Status: startup.Status{Text: "Loaded Git changes and supporting review context. Add optional guidance before submitting.", Severity: "success"},
+	}
+}
+
+func preparedReviewPromptModel(t *testing.T, payload string) Model {
+	t.Helper()
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel(t.TempDir(), cfg)
+	m.state = stateScanComplete
+	m.schemaA = payload
+	m.eng = engine.FromTopology(m.root, &model.ProjectTopology{Name: "review-project", Languages: []string{"Go"}})
+	return m
+}
+
+func TestReviewPromptOneConsentMatrix(t *testing.T) {
+	const payload = "[PROJECT TOPOLOGY]\nPrimary Language: Go\n\n[SOURCE TREE]\n\n[TASK]\nreview context\n\n[CONSTRAINT]\nReview the supplied changes now.\n"
+
+	t.Run("view and default negative", func(t *testing.T) {
+		m := preparedReviewPromptModel(t, payload)
+		view := m.viewScanComplete()
+		for _, want := range []string{
+			"Privacy: Includes Git changes and may include eligible current working-tree file contents.",
+			fmt.Sprintf("Copy Prompt 1: Topology to clipboard (payload: %s)? (y/N)", protocol.FormatFileSize(int64(len(payload)))),
+		} {
+			if !strings.Contains(view, want) {
+				t.Fatalf("Review Prompt 1 view missing %q:\n%s", want, view)
+			}
+		}
+		next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+		got := next.(Model)
+		if cmd != nil || got.state != stateScanComplete {
+			t.Fatalf("default Enter = state %v cmd %v, want no copy", got.state, cmd)
+		}
+	})
+
+	t.Run("affirmative copy", func(t *testing.T) {
+		m := preparedReviewPromptModel(t, payload)
+		copied := stubClipboard(t)
+		_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+		msg := executeCmd(t, cmd).(copyDoneMsg)
+		if msg.kind != topologyPromptKind || msg.text != payload || *copied != payload {
+			t.Fatalf("copy result = %#v clipboard=%q", msg, *copied)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyMsg
+		want state
+	}{
+		{name: "negative", key: tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")}, want: stateWaitingForExtractions},
+		{name: "escape", key: tea.KeyMsg{Type: tea.KeyEsc}, want: stateHome},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := preparedReviewPromptModel(t, payload)
+			next, cmd := m.handleKey(tc.key)
+			got := next.(Model)
+			if got.state != tc.want {
+				t.Fatalf("state = %v, want %v", got.state, tc.want)
+			}
+			if tc.name == "negative" && cmd != nil {
+				t.Fatal("negative confirmation returned copy command")
+			}
+		})
+	}
+
+	t.Run("clipboard failure", func(t *testing.T) {
+		m := preparedReviewPromptModel(t, payload)
+		next, cmd := m.Update(copyDoneMsg{kind: topologyPromptKind, text: payload, err: errors.New("clipboard unavailable")})
+		got := next.(Model)
+		if cmd == nil || !strings.Contains(got.status.text, "clipboard copy failed") {
+			t.Fatalf("clipboard failure = status %#v cmd %v", got.status, cmd)
+		}
+	})
+
+	t.Run("large prompt", func(t *testing.T) {
+		m := preparedReviewPromptModel(t, strings.Repeat("x", 64))
+		m.cfg.LargePromptByteThreshold = 8
+		view := m.viewScanComplete()
+		for _, want := range []string{"Privacy: Includes Git changes", "This prompt is large (64B).", "[c] Copy to clipboard", "[n] Cancel"} {
+			if !strings.Contains(view, want) {
+				t.Fatalf("large Review Prompt 1 missing %q:\n%s", want, view)
+			}
+		}
+		_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+		if cmd != nil {
+			t.Fatal("large Review Prompt 1 accepted y instead of delivery choice")
+		}
+	})
+}
+
+func TestReviewPromptTwoConsentMatrix(t *testing.T) {
+	const payload = "[PROJECT TOPOLOGY]\n\n[TASK]\nContinue review\n\n[CONTEXT]\nPath: app.go\ncurrent context"
+	newModel := func(t *testing.T) Model {
+		t.Helper()
+		cfg := DefaultConfig()
+		cfg.Focus = protocol.FocusReview
+		m := NewModel(t.TempDir(), cfg)
+		m.state = stateContextReady
+		m.schemaB = payload
+		m.metadata = []protocol.ExtractionMetadata{{Path: "app.go"}}
+		return m
+	}
+
+	m := newModel(t)
+	view := m.viewContextReady()
+	for _, want := range []string{"Prompt 2: Code Context", "actual source code from:", "  - app.go", protocol.FormatFileSize(int64(len(payload)))} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("Review Prompt 2 view missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(payload, "[REVIEW CONTEXT: TRACKED FILE STATUS]") {
+		t.Fatal("Review Prompt 2 fixture replays initial diff context")
+	}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil || next.(Model).state != stateContextReady {
+		t.Fatal("Review Prompt 2 Enter should preserve default-negative confirmation")
+	}
+
+	copied := stubClipboard(t)
+	_, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	msg := executeCmd(t, cmd).(copyDoneMsg)
+	if msg.text != payload || *copied != payload {
+		t.Fatalf("Review Prompt 2 copy = %#v clipboard=%q", msg, *copied)
+	}
+
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyMsg
+		want state
+	}{
+		{name: "negative", key: tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")}, want: stateWaitingForCode},
+		{name: "escape", key: tea.KeyMsg{Type: tea.KeyEsc}, want: stateHome},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newModel(t)
+			next, cmd := m.handleKey(tc.key)
+			if next.(Model).state != tc.want || (tc.name == "negative" && cmd != nil) {
+				t.Fatalf("Review Prompt 2 %s = state %v cmd %v", tc.name, next.(Model).state, cmd)
+			}
+		})
+	}
+
+	t.Run("clipboard failure", func(t *testing.T) {
+		m := newModel(t)
+		next, cmd := m.Update(copyDoneMsg{kind: workflow.PromptTwoKind(protocol.FocusReview), text: payload, err: errors.New("clipboard unavailable")})
+		got := next.(Model)
+		if cmd == nil || !strings.Contains(got.status.text, "clipboard copy failed") {
+			t.Fatalf("Review Prompt 2 clipboard failure = status %#v cmd %v", got.status, cmd)
+		}
+	})
+
+	t.Run("large prompt", func(t *testing.T) {
+		m := newModel(t)
+		m.cfg.LargePromptByteThreshold = 8
+		view := m.viewContextReady()
+		for _, want := range []string{"actual source code from:", "  - app.go", "This prompt is large", "[c] Copy to clipboard", "[n] Cancel"} {
+			if !strings.Contains(view, want) {
+				t.Fatalf("large Review Prompt 2 missing %q:\n%s", want, view)
+			}
+		}
+		_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+		if cmd != nil {
+			t.Fatal("large Review Prompt 2 accepted y instead of delivery choice")
+		}
+	})
+}
+
+func TestReviewPromptOneLargeProjectUsesExistingDeliveryState(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	cfg.LargeProjectFileThreshold = 1
+	m := NewModel(t.TempDir(), cfg)
+	m.state = stateScanning
+	m.goal = "Review the following change for concrete bugs.\n\nDiff:\n```diff\n+changed\n```"
+	eng := engine.FromTopology(m.root, &model.ProjectTopology{
+		Name: "large-review", Languages: []string{"Go"},
+		Modules: []model.Module{{Name: "app", FileCount: 2}},
+	})
+
+	next, _ := m.Update(scanDoneMsg{eng: eng})
+	got := next.(Model)
+	if got.state != stateScanComplete || !got.largeProjectPending {
+		t.Fatalf("large Review project = state %v pending %v", got.state, got.largeProjectPending)
+	}
+	view := got.viewScanComplete()
+	for _, want := range []string{"Large project detected: 2 files.", "[c] Continue", "[t] Truncate Prompt 1: Topology", "[e] Exit"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("large Review project missing %q:\n%s", want, view)
+		}
+	}
+	if got.schemaA != "" {
+		t.Fatalf("large Review project generated Prompt 1 before consent: %q", got.schemaA)
+	}
+}
+
+func TestReviewPromptOneExternalContextMatrix(t *testing.T) {
+	writeFile := func(t *testing.T, path, contents string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	newRoot := func(t *testing.T) (string, string) {
+		t.Helper()
+		parent := t.TempDir()
+		root := filepath.Join(parent, "project")
+		writeFile(t, filepath.Join(root, "go.mod"), "module example.com/review\n")
+		writeFile(t, filepath.Join(root, "app.go"), "package review\n")
+		return parent, root
+	}
+	renderReviewPrompt := func(t *testing.T, root string, eng *engine.Engine) string {
+		t.Helper()
+		cfg := DefaultConfig()
+		cfg.Focus = protocol.FocusReview
+		m := NewModel(root, cfg)
+		m.state = stateScanning
+		m.goal = "Review the following change for concrete bugs.\n\n[REVIEW CONTEXT: TRACKED FILE STATUS]\napp.go\tcomplete-file-included\n\nDiff:\n```diff\n+changed\n```"
+		next, cmd := m.Update(scanDoneMsg{eng: eng})
+		got := next.(Model)
+		if cmd != nil || got.state != stateScanComplete {
+			t.Fatalf("scan completion = state %v cmd %v err %v", got.state, cmd, got.err)
+		}
+		return got.schemaA
+	}
+
+	t.Run("no configuration", func(t *testing.T) {
+		_, root := newRoot(t)
+		eng, err := engine.New(root, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		prompt := renderReviewPrompt(t, root, eng)
+		if strings.Contains(prompt, "[EXTERNAL CONTEXT]") {
+			t.Fatalf("unconfigured Review Prompt 1 has external context:\n%s", prompt)
+		}
+	})
+
+	t.Run("one configured root", func(t *testing.T) {
+		parent, root := newRoot(t)
+		external := filepath.Join(parent, "private", "docs")
+		writeFile(t, filepath.Join(external, "spec.md"), "# Spec\n")
+		writeFile(t, filepath.Join(root, ".badger-context"), "../private/docs\n")
+		eng, err := engine.New(root, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		prompt := renderReviewPrompt(t, root, eng)
+		for _, want := range []string{"[SOURCE TREE]", "[EXTERNAL CONTEXT]", "../private/docs [read-only]", "Top: spec.md", "[TASK]", "[CONSTRAINT]"} {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("Review Prompt 1 missing %q:\n%s", want, prompt)
+			}
+		}
+		if strings.Index(prompt, "[SOURCE TREE]") > strings.Index(prompt, "[EXTERNAL CONTEXT]") || strings.Index(prompt, "[EXTERNAL CONTEXT]") > strings.Index(prompt, "[TASK]") {
+			t.Fatalf("Review Prompt 1 section order is wrong:\n%s", prompt)
+		}
+	})
+
+	t.Run("multiple roots preserve configured order", func(t *testing.T) {
+		parent, root := newRoot(t)
+		writeFile(t, filepath.Join(parent, "second", "docs", "second.md"), "# Second\n")
+		writeFile(t, filepath.Join(parent, "first", "docs", "first.md"), "# First\n")
+		writeFile(t, filepath.Join(root, ".badger-context"), "../second/docs\n../first/docs\n")
+		eng, err := engine.New(root, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		prompt := renderReviewPrompt(t, root, eng)
+		second := strings.Index(prompt, "../second/docs [read-only]")
+		first := strings.Index(prompt, "../first/docs [read-only]")
+		if second < 0 || first < 0 || second > first {
+			t.Fatalf("configured external root order was not preserved:\n%s", prompt)
+		}
+	})
+
+	for _, tc := range []struct {
+		name   string
+		setup  func(*testing.T, string, string)
+		config string
+		want   string
+	}{
+		{name: "missing root", config: "../missing/docs\n", want: "path does not exist"},
+		{name: "non-directory root", config: "../private/spec.md\n", want: "path is not a directory", setup: func(t *testing.T, parent, _ string) {
+			writeFile(t, filepath.Join(parent, "private", "spec.md"), "# Spec\n")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parent, root := newRoot(t)
+			if tc.setup != nil {
+				tc.setup(t, parent, root)
+			}
+			writeFile(t, filepath.Join(root, ".badger-context"), tc.config)
+			_, err := engine.New(root, 0)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("engine.New() error = %v, want %q", err, tc.want)
+			}
+			cfg := DefaultConfig()
+			cfg.Focus = protocol.FocusReview
+			m := NewModel(root, cfg)
+			m.state = stateScanning
+			next, _ := m.Update(scanDoneMsg{err: err})
+			got := next.(Model)
+			if got.state != stateHome || got.schemaA != "" || got.err == nil {
+				t.Fatalf("invalid external root reached Review Prompt 1: state=%v schema=%q err=%v", got.state, got.schemaA, got.err)
+			}
+		})
 	}
 }
 

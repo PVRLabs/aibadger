@@ -64,8 +64,9 @@ const (
 )
 
 type Model struct {
-	root string
-	cfg  Config
+	root                 string
+	cfg                  Config
+	prepareReviewContext func(string, reviewtask.Options) (startup.Context, error)
 
 	state  state
 	goal   string
@@ -220,6 +221,7 @@ func NewModel(root string, cfg Config) Model {
 		goalAttachmentSelected: -1,
 		session:                workflow.NewSession(nil, cfg.WhitespaceMode),
 		externalRoots:          loadExternalRoots(root),
+		prepareReviewContext:   reviewtask.BuildInteractiveContext,
 	}
 
 	settings, showOnboarding, onboardingCompleted := loadSettingsState(cfg.SettingsPath)
@@ -700,7 +702,11 @@ func parseReviewCommand(goal string) (string, bool) {
 }
 
 func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
-	ctx, err := reviewtask.BuildInteractiveContext(m.root, reviewtask.Options{
+	prepare := m.prepareReviewContext
+	if prepare == nil {
+		prepare = reviewtask.BuildInteractiveContext
+	}
+	ctx, err := prepare(m.root, reviewtask.Options{
 		Mode:           reviewtask.ModeDefault,
 		ExtraFocus:     extraFocus,
 		MaxPromptBytes: m.cfg.MaxTopologyPromptBytes,

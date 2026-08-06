@@ -71,8 +71,13 @@ See [docs/install.md](docs/install.md) for Windows, source builds, and more.
 
 ### Specialized Modes
 - `badger code` — explicitly start in Code focus
-- `badger review` — Git diff pre-loaded for code reviews
+- `badger review` — Git changes and bounded supporting context for immediate findings
 - `badger design` — explicitly start in Design focus with an empty editor
+
+For editor integrations and scripts, the stable `badger api review-context`
+operation generates a standalone, topology-free review request from one Git
+repository; the optional `review-continuation` operation supplies
+selector-requested context.
 
 Full usage: [docs/usage.md](docs/usage.md)
 

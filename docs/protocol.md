@@ -73,12 +73,22 @@ Prompt 2 has this structure:
 - **OUTPUT CONSTRAINT** — instructs the AI to answer using the provided context, not selector lines.
 - **CONTEXT** — extracted file blocks such as `(Full File)`, `(Extracted Span)`, or `(Binary Summary)`.
 
-Deep Review uses the same selectors as an optional continuation escape hatch.
-A selector-only response can be passed to `api review-continuation`; ordinary
-findings end the review without that call. The supplemental payload contains
-only current requested file context and compact review framing, so it does not
-resend the initial diff. Files reflect the filesystem at continuation time
-rather than a persisted review snapshot.
+Interactive Review and Deep Review integrations use the same selectors as an
+optional continuation escape hatch. Their initial review prompt asks for
+immediate findings when the supplied diff and supporting context are
+sufficient. Ordinary findings end the review without another Badger call. A
+selector-only response can be pasted into interactive Review or passed to
+`api review-continuation`; the supplemental payload contains only current
+requested file context and compact review framing, so it does not resend the
+initial diff. Files reflect the filesystem at continuation time rather than a
+persisted review snapshot.
+
+Interactive Review composes generated review context into the normal Prompt 1
+schema, so it includes `[PROJECT TOPOLOGY]` and `[SOURCE TREE]`. The stable
+`api review-context` output is intentionally standalone and topology-free; it
+contains the review instructions, authoritative diff, status, guidance, and
+eligible supporting context only. Integrations must not assume the API and TUI
+Prompt 1 are byte-for-byte equivalent.
 
 ## Step 3: Apply
 

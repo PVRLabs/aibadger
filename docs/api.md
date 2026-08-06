@@ -64,7 +64,9 @@ project map and will manage its own repository access.
 
 ### `api review-context`
 
-Print a complete initial Deep Review prompt from current Git state.
+Print a complete standalone review request from current Git state. “Complete”
+means the output is directly usable without assembling another review-context
+envelope; it does not include project topology.
 
 ```bash
 badger api review-context --root <repository> \
@@ -90,7 +92,15 @@ eligible changed files are included only when they fit. Tracked additions,
 deletions, binary files, sensitive files, oversized files, and untracked files
 follow the status policy printed in the prompt.
 
-The operation builds the complete AI-facing prompt before writing stdout. It
+The selected mode controls the authoritative fenced diff. Optional complete
+supporting files are read from the current checked-out working tree at
+generation time, including in staged, branch, and commit modes. Supporting
+content may therefore be newer than the reviewed diff and never changes which
+patch is authoritative.
+
+The operation builds the complete standalone AI-facing review request before
+writing stdout. It intentionally omits project topology; integrations that
+want topology must obtain and compose `api topology` output separately. It
 exits nonzero without writing stdout for generation failures such as no changes,
 an invalid Git root or ref, Git failure, invalid selections, or mandatory
 overflow. A destination write failure also returns nonzero; as with any stream,
@@ -99,6 +109,13 @@ operation is non-interactive and read-only and does not scan project topology,
 read stdin, access the clipboard, open the TUI or a browser, contact providers,
 or access the network. Normal output uses repository-relative paths and does
 not expose the absolute repository root.
+
+Editor integrations can capability-check this operation with `badger api
+--help` and, when needed, `badger api review-context --help`. On success,
+stdout is the complete topology-free request to copy verbatim; on failure,
+stderr contains the
+`Error: ...` diagnostic and stdout is empty. The command never writes to the
+clipboard or contacts an AI provider.
 
 ### `api review-continuation`
 

@@ -124,7 +124,8 @@ Failures:
   badger api review-context --root <repository> [--mode <default|staged|branch|commit>] [--ref <revision>] [--input <guidance-file>] [--paths-file <paths.json>] [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>]
 
 Purpose:
-  Produce a complete initial Deep Review prompt from authoritative Git state.
+  Produce a complete standalone review request from authoritative Git state.
+  The request is directly usable and intentionally omits project topology.
 
 Required arguments:
   --root <repository>  The Git repository root.
@@ -143,8 +144,8 @@ Example:
   badger api review-context --root . --mode default --input guidance.txt
 
 Output and side effects:
-  Writes the complete AI-facing review prompt to stdout. Diagnostics go only
-  to stderr. This command is deterministic for unchanged Git state,
+  Writes the complete topology-free AI-facing review request to stdout.
+  Diagnostics go only to stderr. This command is deterministic for unchanged Git state,
   non-interactive, and read-only. It does not use stdin, the clipboard, a
   browser, the TUI, providers, or the network.
 

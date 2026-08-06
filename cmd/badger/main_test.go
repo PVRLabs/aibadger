@@ -475,23 +475,34 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 	for _, want := range []string{
 		"badger badge",
 		"Launch the TUI with /badge preloaded",
-		"badger review [--staged | --branch <ref> | --commit <sha>] [extra focus text]",
-		"`badger review` preloads an editable review prompt from the current Git working tree.",
-		"relevant Git-untracked paths",
-		"badger api --help",
+		"Interactive focuses:",
+		"design      Explore or design changes (default).",
+		"review      Review Git changes with optional supporting context.",
+		"badger review [--staged | --branch <ref> | --commit <sha>]",
+		"[extra guidance]",
+		"badger api <command> --help",
+		"Stable API:",
 		"badger api topology --root <project>",
-		"badger api prompt --root <project> --focus <code|design> --input <goal-file>",
-		"badger api extract --root <project> [--focus <code|design>] --input <selector-file> --goal-file <goal-file>",
-		"badger api review-context --root <repository> [--mode <default|staged|branch|commit>]",
-		"The api commands are non-interactive and write directly usable prompt text to stdout.",
-		"Design is the default interactive focus; use badger code, badger review, badger design, or badger followup to start explicitly.",
-		"/code switches an interactive session to Code focus and /design switches it to Design focus.",
+		"badger api prompt --root <project> --focus <code|design>",
+		"badger api extract --root <project> [--focus <code|design>]",
+		"badger api review-context --root <repository>",
+		"[--mode <default|staged|branch|commit>]",
+		"badger api review-continuation --root <repository>",
+		"API commands are non-interactive and write usable prompt text to stdout.",
+		"Run badger api --help or add --help to a command for complete options.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("printUsage output missing %q:\n%s", want, out)
 		}
 	}
-	for _, hidden := range []string{"api scan", "api goal", "api extraction", "api write-plan"} {
+	for _, hidden := range []string{
+		"api scan",
+		"api goal",
+		"api extraction",
+		"api write-plan",
+		"preloads an editable review prompt",
+		"`badger review`",
+	} {
 		if strings.Contains(out, hidden) {
 			t.Fatalf("printUsage output exposed certification-only operation %q:\n%s", hidden, out)
 		}
@@ -748,7 +759,7 @@ func TestRunAPIHelp(t *testing.T) {
 		{
 			name: "review context help",
 			args: []string{"review-context", "--help"},
-			want: []string{"--mode <default|staged|branch|commit>", "--paths-file <paths.json>", "Deep Review", "stdout", "destination failure", "partial", "read-only"},
+			want: []string{"--mode <default|staged|branch|commit>", "--paths-file <paths.json>", "standalone review request", "omits project topology", "stdout", "destination failure", "partial", "read-only"},
 		},
 	}
 

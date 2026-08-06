@@ -19,40 +19,54 @@ cd your-project
 badger review
 ```
 
-Badger opens your editor with a prompt pre-filled from the current Git working tree. Review it, make any tweaks, then save and close to submit.
+Badger loads the generated review context as a removable attachment and leaves
+the editor available for optional guidance. Add any focus you want, or submit
+the review as-is.
 
 > [!NOTE]
-> Default review includes staged and unstaged tracked changes plus up to 25 relevant Git-untracked paths in a separate section. An untracked-only review is valid. Untracked file contents and unchanged source code stay local until you paste extraction commands.
-> Large pasted review context may be preserved as a separate removable attachment so the editor stays focused on your instruction.
+> Default review includes the complete staged and unstaged tracked diff,
+> bounded complete copies of eligible changed text files, and up to 25 relevant
+> Git-untracked paths in a separate section. An untracked-only review is valid.
+> Untracked file contents are never included automatically.
 
-### Step 2: Copy Prompt 1 (Map) to your AI chat
+### Step 2: Copy the review prompt to your AI chat
 
-Badger scans the project and shows **Prompt 1 (Map)** — a compact map of the project's structure, key files, and your goal. Copy it and paste into your AI chat (Claude, ChatGPT, Gemini, etc.).
+Badger prepares a prompt containing the authoritative Git diff, explicit
+status for files represented by the diff only, any eligible supporting file
+context that fits, and compact project topology. Copy it and paste it into your
+AI chat (Claude, ChatGPT, Gemini, etc.).
 
 > [!NOTE]
-> Prompt 1 contains file paths and structure only — your source code stays local.
+> Nothing is copied until you confirm the clipboard action. Binary, sensitive,
+> deleted, oversized, unavailable, and budget-excluded files remain diff-only
+> with an explanatory status.
 
-### Step 3: Paste the AI's extraction commands back
+### Step 3: Read the findings or request more context
 
-The AI reads the topology and replies with the files it needs:
+The initial prompt asks the AI to report findings immediately when the supplied
+context is sufficient. A findings or no-issues response completes the review;
+there is no mandatory second step.
+
+If additional unchanged context is needed, the AI may instead reply only with
+selectors such as:
 
 ```text
 FILE:internal/tui/tui.go
 NEAR:internal/tui/tui.go#handleKeypress
 ```
 
-Copy those lines, paste them into Badger, and press Enter. Badger fetches only those files and prepares **Prompt 2 (Code Context)**.
+Copy selector-only lines back into Badger and press Enter. Badger fetches the
+requested current files and prepares supplemental review context without
+repeating the initial diff.
 
-### Step 4: Copy Prompt 2 back to the AI chat
+### Step 4: Copy optional supplemental context
 
-Copy Prompt 2 and paste it into your AI chat. The AI now has both the project structure and the actual source code. It responds with its analysis and any suggested changes.
+Copy the supplemental context into the same AI conversation. The files are
+read at continuation time and may be newer than the initial review context.
+The AI then reports findings, risks, or a clear no-issues result.
 
 > [!NOTE]
 > Most prompts can be copied directly. When Prompt 2 is unusually large (≈128 KB or more), Badger shows a delivery menu with clipboard, temp-file, and manual-copy options. Clipboard is recommended. Saving to a temp file is available when you prefer to attach the file rather than paste it.
-
-### Step 5: Apply the AI's changes
-
-Paste the AI's full response into Badger. Badger parses any file changes, shows you a write plan listing what will be written to each file, and asks for confirmation. Review the plan and confirm to apply.
 
 ## Explore a project with no initial goal
 
@@ -168,7 +182,9 @@ Keep the change small and include any tests that should change.
 
 - `/help`: show the interactive command reference.
 - `/code`: switch the active focus to Code and clear the current goal and attachments.
-- `/review`: seed an editable review prompt from the current Git working tree. It reuses the same review flow as `badger review`.
+- `/review`: load current Git review context as a removable attachment and keep
+  the editor available for optional guidance. It reuses the same flow as
+  `badger review`.
 - `/design`: switch the active focus to Design and clear the current goal and attachments. Press Enter with the empty editor to start the zero-input exploration.
 - `/followup`: switch the active focus to Follow-up. The active focus appears in the status bar as `Focus: Follow-up` and the prompt seeds a short follow-up framing.
 - `/exit`: quit Badger.
@@ -180,7 +196,7 @@ first argument:
 badger            # Design focus (default); empty Enter starts exploration
 badger code       # Code focus
 badger design     # Design focus — starts with an empty editor
-badger review     # Review focus — prompt is prefilled from the current Git working tree
+badger review     # Review focus — Git context attachment plus optional guidance
 badger followup   # Follow-up focus — prompt seeds a short follow-up framing
 ```
 
@@ -196,15 +212,39 @@ badger review --commit <sha>         # a single commit
 ```
 
 Flags are mutually exclusive. When `--staged`, `--branch`, or `--commit` is used, working-tree untracked files are excluded.
+The fenced Git diff follows the selected mode and is authoritative. Optional
+complete supporting files are read from the current checkout, so they can be
+newer than a staged, branch, or commit diff.
+
+### Deep Review API
+
+Editor integrations and scripts can generate a complete standalone review
+request from one Git repository with the stable non-interactive API:
+
+```bash
+badger api review-context --root . --input guidance.txt
+```
+
+Here, complete means directly usable review instructions plus Git and
+supporting-file context; it does not mean the interactive TUI's topology is
+included. The command does not inspect project topology, use the clipboard,
+launch a provider, or access the network. The Git diff is authoritative;
+eligible complete changed-file context is optional and bounded by the effective
+file and total limits. If the AI returns only
+`FILE:`, `PREFIX:`, or `NEAR:` selectors for additional context, pass them to
+`badger api review-continuation --root . --input selectors.txt`. Findings-only
+responses end the review and do not require continuation.
 
 ## Attachments
 
 When you paste a git diff, error output, or other supporting text into
 Badger, it is preserved as a **removable attachment** so the goal input
-stays clean and focused. In default mode, the `badger review` command
-attaches staged and unstaged tracked changes and lists up to 25 relevant
-Git-untracked paths separately without including their contents. Relevant
-untracked paths alone are enough to start a review. See [Review Options](#review-options) for how `--staged`, `--branch`, and `--commit` affect attachment behavior. Text pastes exceeding
+stays clean and focused. In default mode, the `badger review` command attaches
+the authoritative diff, explicit file-context status, bounded eligible
+current-working-tree files, and up to 25 relevant Git-untracked paths without
+their contents. Relevant untracked paths alone are enough to start a review.
+See [Review Options](#review-options) for how `--staged`, `--branch`, and
+`--commit` affect attachment behavior. Text pastes exceeding
 16KB or 40 lines are automatically
 converted into attachments.
 

@@ -47,3 +47,14 @@ Default builds enable development-only flags. Release builds use the `aibadger_r
 ## Commit metadata
 
 - When a commit is tied to a named plan, include a trailer of the form `Plan: <plan name>`.
+
+## Agent-Friendly CLI Usage
+
+Prefer low-noise tools when available on `PATH`.
+
+- If a command is excessively noisy, misleading, hard to parse, or otherwise
+  agent-unfriendly, report it with `agent-complaint`.
+- Do not run extra commands just to collect profiling data.
+- Do not include secrets, source code, sensitive paths, or large output in
+  complaints.
+- Run `agent-complaint --help` for usage.

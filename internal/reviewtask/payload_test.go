@@ -34,6 +34,18 @@ func TestBuildInitialReviewPayloadIncludesEligibleCurrentFilesAndStatuses(t *tes
 	if !strings.Contains(result.Payload.Prompt, "Check concurrency.") || !strings.Contains(result.Payload.Prompt, "current supporting content") {
 		t.Fatalf("prompt missing guidance or supporting content:\n%s", result.Payload.Prompt)
 	}
+	for _, want := range []string{
+		"[TASK]",
+		"[CONSTRAINT]",
+		"If additional unchanged context is genuinely necessary",
+		"FILE:<path>",
+		"PREFIX:<path>#<literal prefix from the start of the target line>",
+		"NEAR:<path>#<literal string from a nearby unique line or comment>",
+	} {
+		if !strings.Contains(result.Payload.Prompt, want) {
+			t.Fatalf("prompt missing shared review instruction %q:\n%s", want, result.Payload.Prompt)
+		}
+	}
 	if strings.Count(result.Payload.Prompt, "package added") != 1 {
 		t.Fatalf("added file was duplicated:\n%s", result.Payload.Prompt)
 	}
@@ -398,6 +410,9 @@ func TestInteractivePayloadRetriesWithoutTopologyReserve(t *testing.T) {
 	got := buildInteractivePayloadFromChangeSet(t.TempDir(), set, opts, maxPromptBytes, false)
 	if got.Failure != PayloadFailureNone {
 		t.Fatalf("fallback result = %q, want success", got.Failure)
+	}
+	if strings.Contains(got.Payload.Prompt, "[TASK]") || strings.Contains(got.Payload.Prompt, "[CONSTRAINT]") {
+		t.Fatalf("interactive payload redundantly included Schema-A framing:\n%s", got.Payload.Prompt)
 	}
 	if len(got.Payload.Prompt) > maximum {
 		t.Fatalf("fallback payload = %d bytes, want <= %d", len(got.Payload.Prompt), maximum)

@@ -287,12 +287,12 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 		if cfg.inputPath == "" {
 			return apiConfig{}, fmt.Errorf("api review-continuation requires --input <file>")
 		}
-		if cfg.focus != "" || cfg.goalFilePath != "" || cfg.reviewMode != "" || cfg.reviewRef != "" || cfg.pathsFilePath != "" {
+		if cfg.focus != "" || cfg.goalFilePath != "" || cfg.reviewMode != "" || cfg.reviewRef != "" || cfg.pathsFilePath != "" || cfg.includeReviewTopology {
 			return apiConfig{}, fmt.Errorf("api review-continuation accepts only --root, --input, --max-payload-bytes, and --max-file-bytes")
 		}
 		return cfg, nil
 	}
-	if cfg.reviewMode != "" || cfg.reviewRef != "" || cfg.pathsFilePath != "" || cfg.maxReviewPayloadBytes != 0 || cfg.maxReviewFileBytes != 0 {
+	if cfg.reviewMode != "" || cfg.reviewRef != "" || cfg.pathsFilePath != "" || cfg.maxReviewPayloadBytes != 0 || cfg.maxReviewFileBytes != 0 || cfg.includeReviewTopology {
 		return apiConfig{}, fmt.Errorf("api %s does not accept review-context options", cfg.operation)
 	}
 	if cfg.operation == "scan" || cfg.operation == "topology" {

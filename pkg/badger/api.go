@@ -296,10 +296,6 @@ func runReviewContinuationAPI(cfg Config, input string, api APIOptions, stdout, 
 
 const maxReviewAPIInputBytes = 1024 * 1024
 
-func runReviewContextAPI(root, guidance string, api APIOptions, stdout io.Writer) error {
-	return runReviewContextAPIWithBuilder(root, guidance, api, stdout, reviewtask.BuildInitialReviewPayload)
-}
-
 func runReviewContextAPIWithBuilder(root, guidance string, api APIOptions, stdout io.Writer, buildReview reviewPayloadBuilder) error {
 	mode := reviewtask.ModeDefault
 	switch api.ReviewMode {

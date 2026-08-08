@@ -703,6 +703,8 @@ func TestParseAPIConfig(t *testing.T) {
 		{name: "review invalid byte limit", args: []string{"review-context", "--root", "/project", "--max-file-bytes", "0"}, wantErr: "api --max-file-bytes requires a positive integer"},
 		{name: "continuation missing input", args: []string{"review-continuation", "--root", "/project"}, wantErr: "api review-continuation requires --input <file>"},
 		{name: "continuation rejects mode", args: []string{"review-continuation", "--root", "/project", "--input", "selectors.txt", "--mode", "default"}, wantErr: "api review-continuation accepts only --root, --input, --max-payload-bytes, and --max-file-bytes"},
+		{name: "continuation rejects topology", args: []string{"review-continuation", "--root", "/project", "--input", "selectors.txt", "--include-topology"}, wantErr: "api review-continuation accepts only --root, --input, --max-payload-bytes, and --max-file-bytes"},
+		{name: "scan rejects review topology", args: []string{"scan", "--root", "/project", "--include-topology"}, wantErr: "api scan does not accept review-context options"},
 	}
 
 	for _, tt := range tests {

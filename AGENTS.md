@@ -1,70 +1,42 @@
-# Agent Guidance
+# AIBadger Agent Guidance
 
-A `.badger-context` file may list related read-only context directories used by
-AI Badger.
+## Scope and context
 
-Do not proactively read, inventory, or recursively search those directories.
-Consult a listed directory only when:
+A `.badger-context` file may identify related read-only context directories.
+Do not search them proactively. Consult only the specific files needed when the
+user, task, or repository points there, or when this repository lacks required
+information. Never include private context contents in public source or docs.
 
-- the user explicitly references material in it;
-- a repository file or task points to a specific document there; or
-- the current task requires information that cannot be found in this repository.
+Prefer existing repository patterns and keep changes scoped to the request.
 
-When external context is needed, read only the specific files relevant to the
-task. Treat all listed directories as read-only and do not include their
-contents in public documentation or source files.
+## Go and verification
 
-Prefer the repository's existing patterns and keep changes scoped to the request.
+Use the Go version declared in `go.mod`. The public facade is `pkg/badger`;
+implementation code is under `internal/` and `cmd/badger`.
 
-## Toolchain
+During iteration, prefer focused package or test runs. Before finishing a
+change, format touched Go files and run verification appropriate to its scope;
+use `go vet ./...` and `go test ./...` when the change affects the repository
+broadly. Do not add project-local formatter or linter tooling unless asked.
 
-- Use the Go version declared by `go.mod`.
-- Module: `github.com/PVRLabs/aibadger`
-- Public facade: `pkg/badger`. Implementation lives under `internal/` and `cmd/badger`.
-
-## Build and test
+Useful commands:
 
 ```bash
 go build ./...
-go build -o badger ./cmd/badger
-go test ./...
 go test ./internal/scanner
 go test ./internal/scanner -run TestName
-```
-
-Default `go build` is a development binary. Prefer package- or test-scoped runs while iterating; run `go test ./...` before finishing a change set.
-
-## Verification
-
-```bash
 gofmt -w <changed-go-files>
 go vet ./...
 ```
 
-Format only files you touch. Do not add project-local linter or formatter tooling unless asked.
+## Artifacts and releases
 
-## Artifacts
+Do not commit ignored local binaries (`/badger`, `/badger-release`, `*.test`,
+`/bin/badger`), hand-edit release archives/checksums/installer trees, or change
+release packaging metadata unless the task is a release or tap update.
 
-- Do not commit local binaries listed in `.gitignore` (`/badger`, `/badger-release`, `*.test`, `/bin/badger`).
-- Do not hand-edit release archives, checksums, or installer-produced install trees.
-- Leave release packaging metadata alone unless the task is a release or tap update.
-- App version: `internal/version/version.go` (`*-dev` suffix on `main`).
+Default builds are development builds. Release builds use the
+`aibadger_release` tag and profiling builds use `aibadger_profile`; see
+`docs/releasing.md` for release-specific details.
 
-## Build modes
-
-Default builds identify themselves as development builds. Release builds use the `aibadger_release` tag, and profiling builds use `aibadger_profile`. See `docs/install.md` and `docs/releasing.md` for build flags, profiling, and publish steps.
-
-## Commit metadata
-
-- When a commit is tied to a named plan, include a trailer of the form `Plan: <plan name>`.
-
-## Agent-Friendly CLI Usage
-
-Prefer low-noise tools when available on `PATH`.
-
-- If a command is excessively noisy, misleading, hard to parse, or otherwise
-  agent-unfriendly, report it with `agent-complaint`.
-- Do not run extra commands just to collect profiling data.
-- Do not include secrets, source code, sensitive paths, or large output in
-  complaints.
-- Run `agent-complaint --help` for usage.
+When a commit is tied to a named plan, include `Plan: <plan name>`.

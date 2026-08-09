@@ -1,7 +1,7 @@
 package badger
 
 // This file owns the non-interactive API runner used by external tools and
-// certification. It deliberately does not enter the headless session: callers
+// certification. It deliberately does not enter an interactive session: callers
 // provide all input up front and own both output streams.
 
 import (
@@ -130,7 +130,7 @@ func runAPIWithReviewBuilder(cfg Config, opts APIOptions, buildReview reviewPayl
 		return nil
 	}
 
-	workflow.ConfigureEngine(eng, headlessEngineOptions(cfg, HeadlessOptions{Focus: opts.Focus}))
+	workflow.ConfigureEngine(eng, apiEngineOptions(cfg, opts.Focus))
 	session := workflow.NewSession(eng, writer.WhitespaceMode(cfg.WhitespaceMode))
 	switch opts.Operation {
 	case "topology":
@@ -156,9 +156,9 @@ func runAPIWithReviewBuilder(cfg Config, opts APIOptions, buildReview reviewPayl
 	case "goal":
 		fmt.Fprintf(stdout, "Dev goal: %s\n", input)
 	case "extraction":
-		printHeadlessExtractionPlan(stdout, input, session.ParseExtractionInput(input).Commands)
+		printAPIExtractionPlan(stdout, input, session.ParseExtractionInput(input).Commands)
 	case "write-plan":
-		printHeadlessResponsePlan(stdout, input, session.ParseWritePlan(input))
+		printAPIResponsePlan(stdout, input, session.ParseWritePlan(input))
 	}
 	return nil
 }

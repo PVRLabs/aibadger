@@ -4,7 +4,6 @@ import (
 	"github.com/PVRLabs/aibadger/internal/brand"
 	"github.com/PVRLabs/aibadger/internal/tui"
 	"github.com/PVRLabs/aibadger/internal/version"
-	"github.com/PVRLabs/aibadger/internal/workflow"
 )
 
 const (
@@ -12,8 +11,6 @@ const (
 	Name = brand.Name
 	// Version is the initial public OSS release version.
 	Version = version.Version
-	// StepNames describes the development headless steps accepted by RunHeadless.
-	StepNames = workflow.StepNames
 )
 
 // Run starts the interactive BYOL TUI.

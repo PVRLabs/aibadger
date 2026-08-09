@@ -348,7 +348,7 @@ func TestRunAPITopologyMatchesEngineFormatter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("engine.New() error = %v", err)
 	}
-	workflow.ConfigureEngine(eng, headlessEngineOptions(fullCfg, HeadlessOptions{}))
+	workflow.ConfigureEngine(eng, apiEngineOptions(fullCfg, ""))
 	if got, want := stdout.String(), eng.GenerateTopology(); got != want {
 		t.Fatalf("topology stdout differs from engine formatter\nstdout:\n%s\nwant:\n%s", got, want)
 	}
@@ -427,7 +427,7 @@ func TestRunAPIPromptMatchesSchemaAAndSeparatesWarnings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("engine.New() error = %v", err)
 	}
-	workflow.ConfigureEngine(eng, headlessEngineOptions(fullCfg, HeadlessOptions{Focus: protocol.FocusDesign}))
+	workflow.ConfigureEngine(eng, apiEngineOptions(fullCfg, protocol.FocusDesign))
 	want, warnings := eng.GenerateMapDetailed(string(goal))
 	if got := stdout.String(); got != want {
 		t.Fatalf("prompt stdout differs from engine Schema A\nstdout:\n%s\nwant:\n%s", got, want)
@@ -555,7 +555,7 @@ func TestRunAPIExtractMatchesEngineSchemaB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("engine.New() error = %v", err)
 	}
-	workflow.ConfigureEngine(eng, headlessEngineOptions(fullCfg, HeadlessOptions{}))
+	workflow.ConfigureEngine(eng, apiEngineOptions(fullCfg, ""))
 	session := workflow.NewSession(eng, writer.WhitespaceMode(fullCfg.WhitespaceMode))
 	parsed := session.ParseExtractionInputDetailed(string(selectors))
 	want, _, _, _, _, err := session.GenerateContextDetailed(string(goal), parsed.Commands)

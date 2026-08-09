@@ -82,20 +82,12 @@ func NewSession(eng *engine.Engine, mode writer.WhitespaceMode) *Session {
 	return &Session{Engine: eng, WhitespaceMode: mode}
 }
 
-func (s *Session) GenerateMap(goal string) string {
-	return s.Engine.GenerateMap(goal)
-}
-
 func (s *Session) GenerateMapDetailed(goal string) (string, []string) {
 	return s.Engine.GenerateMapDetailed(goal)
 }
 
-func (s *Session) ParseExtractionCommands(input string) []extractor.Command {
-	return s.Engine.ParseCommands(input)
-}
-
 func (s *Session) ParseExtractionInput(input string) ExtractionCommandResult {
-	commands := s.ParseExtractionCommands(input)
+	commands := s.Engine.ParseCommands(input)
 	return ExtractionCommandResult{
 		Commands: commands,
 		Count:    len(commands),
@@ -124,24 +116,8 @@ func (s *Session) GenerateReviewContinuation(commands []extractor.Command) (stri
 	return s.Engine.GenerateReviewContinuation(commands)
 }
 
-func (s *Session) GenerateContext(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, error) {
-	return s.Engine.GenerateContext(goal, commands)
-}
-
 func (s *Session) GenerateContextDetailed(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, int, []string, []string, error) {
 	return s.Engine.GenerateContextDetailed(goal, commands)
-}
-
-func (s *Session) GenerateContextFromInput(goal, input string) ([]extractor.Command, string, []protocol.ExtractionMetadata, error) {
-	result := s.ParseExtractionInput(input)
-	schema, metadata, err := s.GenerateContext(goal, result.Commands)
-	return result.Commands, schema, metadata, err
-}
-
-func (s *Session) GenerateContextDetailedFromInput(goal, input string) ([]extractor.Command, string, []protocol.ExtractionMetadata, int, []string, []string, error) {
-	result := s.ParseExtractionInput(input)
-	schema, metadata, extractedCount, failedCommands, safetyExclusions, err := s.GenerateContextDetailed(goal, result.Commands)
-	return result.Commands, schema, metadata, extractedCount, failedCommands, safetyExclusions, err
 }
 
 func (s *Session) ParseWritePlan(input string) writer.ParseResult {
@@ -160,15 +136,11 @@ func (s *Session) ParseFinalResponse(input string) FinalResponseResult {
 	}
 }
 
-func (s *Session) ApplyWrite(update writer.FileUpdate) error {
-	return s.Engine.ApplyUpdate(update, s.WhitespaceMode)
-}
-
 func (s *Session) ApplyWrites(updates []writer.FileUpdate) ([]writer.FileUpdate, []error) {
 	applied := make([]writer.FileUpdate, 0, len(updates))
 	var errs []error
 	for _, update := range updates {
-		if err := s.ApplyWrite(update); err != nil {
+		if err := s.Engine.ApplyUpdate(update, s.WhitespaceMode); err != nil {
 			errs = append(errs, WriteError{Path: update.Path, Err: err})
 			continue
 		}

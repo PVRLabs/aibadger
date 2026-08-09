@@ -45,9 +45,12 @@ func TestGenerateContextIncludesClaudeStyleFileSelections(t *testing.T) {
 		"FILE:internal/brand/brand.go",
 	}, "\n"))
 
-	schema, metadata, err := eng.GenerateContext("what is this project about?", commands)
+	schema, metadata, count, failed, excluded, err := eng.GenerateContextDetailed("what is this project about?", commands)
 	if err != nil {
-		t.Fatalf("GenerateContext() error = %v", err)
+		t.Fatalf("GenerateContextDetailed() error = %v", err)
+	}
+	if count != 6 || len(failed) != 0 || len(excluded) != 0 {
+		t.Fatalf("GenerateContextDetailed() count = %d, failed = %v, excluded = %v", count, failed, excluded)
 	}
 	if !strings.Contains(schema, "Active Extractions: 6 files") {
 		t.Fatalf("schema missing active extraction count:\n%s", schema)
@@ -77,9 +80,12 @@ func TestGenerateContextFallsBackForMissingSelectorAnchors(t *testing.T) {
 	})
 	commands := eng.ParseCommands("PREFIX:pkg/badger/headless.go#func Start")
 
-	schema, metadata, err := eng.GenerateContext("find crash paths", commands)
+	schema, metadata, count, failed, excluded, err := eng.GenerateContextDetailed("find crash paths", commands)
 	if err != nil {
-		t.Fatalf("GenerateContext() error = %v, want nil for fallback", err)
+		t.Fatalf("GenerateContextDetailed() error = %v, want nil for fallback", err)
+	}
+	if count != 1 || len(failed) != 0 || len(excluded) != 0 {
+		t.Fatalf("GenerateContextDetailed() count = %d, failed = %v, excluded = %v", count, failed, excluded)
 	}
 	if len(metadata) != 1 {
 		t.Fatalf("metadata = %d entries, want 1", len(metadata))
@@ -183,7 +189,7 @@ func TestNewLoadsExternalContext(t *testing.T) {
 	if len(eng.Topology.ExternalContext) != 1 {
 		t.Fatalf("external contexts = %d, want 1", len(eng.Topology.ExternalContext))
 	}
-	mapPrompt := eng.GenerateMap("use specs")
+	mapPrompt, _ := eng.GenerateMapDetailed("use specs")
 	if !strings.Contains(mapPrompt, "../badger-sidecar/docs [read-only]") {
 		t.Fatalf("Prompt 1 missing external context:\n%s", mapPrompt)
 	}

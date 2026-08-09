@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
-	"github.com/PVRLabs/aibadger/internal/workflow"
 )
 
 func (m Model) viewScanComplete() string {
@@ -56,7 +55,7 @@ func (m Model) viewContextReady() string {
 		lines = append(lines, "  - no files listed")
 	}
 
-	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
+	promptTwoKind := codeContextPromptKind
 	warning := renderTruncationNotes(m.metadata)
 
 	if m.promptDeliveryIsLarge(promptTwoKind) {
@@ -137,9 +136,6 @@ func (m Model) promptDeliveryText(kind string) string {
 	case codeContextPromptKind:
 		return m.schemaB
 	default:
-		if kind == workflow.PromptTwoKind(m.cfg.Focus) {
-			return m.schemaB
-		}
 		return ""
 	}
 }

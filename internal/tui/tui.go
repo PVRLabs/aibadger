@@ -466,7 +466,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.schemaB = msg.schema
 		m.metadata = msg.metadata
 		m.state = stateContextReady
-		m.status = neutralMessage(workflow.ContextReadyStatus(m.cfg.Focus))
+		m.status = neutralMessage(workflow.ContextReadyStatus())
 		m.err = nil
 		return m, nil
 	case writeDoneMsg:
@@ -737,7 +737,7 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 func (m Model) advanceAfterCopy(kind string, manual bool) (tea.Model, tea.Cmd) {
 	m.manualCopyKind = ""
 	m.manualCopyText = ""
-	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
+	promptTwoKind := codeContextPromptKind
 	switch {
 	case kind == topologyPromptKind:
 		if protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview {
@@ -780,7 +780,7 @@ func (m Model) advanceAfterTempFileWithStatus(kind, path string, status tuiMessa
 	m.promptFileKind = ""
 	m.promptFilePath = ""
 	m.status = status
-	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
+	promptTwoKind := codeContextPromptKind
 	switch {
 	case kind == topologyPromptKind:
 		if protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview {
@@ -799,7 +799,7 @@ func (m Model) advanceAfterTempFileWithStatus(kind, path string, status tuiMessa
 const reviewPromptOneNextStep = "If the AI requests additional context, paste only its FILE:, PREFIX:, or NEAR: selectors here. Final findings require no continuation."
 
 func (m Model) cancelPromptDelivery(kind string) (tea.Model, tea.Cmd) {
-	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
+	promptTwoKind := codeContextPromptKind
 	switch {
 	case kind == topologyPromptKind:
 		m.status = neutralMessage("Prompt 1: Topology was not copied.")

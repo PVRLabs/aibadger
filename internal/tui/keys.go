@@ -209,8 +209,8 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		return m, nil, false
 
 	case stateContextReady:
-		if m.promptDeliveryIsLarge(workflow.PromptTwoKind(m.cfg.Focus)) {
-			return m, copyCmd(workflow.PromptTwoKind(m.cfg.Focus), m.schemaB), true
+		if m.promptDeliveryIsLarge(codeContextPromptKind) {
+			return m, copyCmd(codeContextPromptKind, m.schemaB), true
 		}
 		return m, nil, false
 
@@ -298,7 +298,7 @@ func (m Model) handleGoalAttachmentDelete() (tea.Model, tea.Cmd, bool) {
 // handleKeyConfirm handles the "y/Y" key, which confirms actions on screens
 // that present a yes/no prompt.
 func (m Model) handleKeyConfirm() (tea.Model, tea.Cmd, bool) {
-	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
+	promptTwoKind := codeContextPromptKind
 	if m.state == stateScanComplete {
 		if m.largeProjectPending || m.promptDeliveryIsLarge(topologyPromptKind) {
 			return m, nil, true
@@ -334,7 +334,7 @@ func (m Model) handleKeyConfirm() (tea.Model, tea.Cmd, bool) {
 // handleKeyCancel handles the "n/N" key, which declines the current prompt
 // and moves on without copying/writing.
 func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
-	promptTwoKind := workflow.PromptTwoKind(m.cfg.Focus)
+	promptTwoKind := codeContextPromptKind
 	if m.state == stateScanComplete {
 		if m.largeProjectPending {
 			return m, nil, true
@@ -392,7 +392,7 @@ func (m Model) handleKeyCopy() (tea.Model, tea.Cmd, bool) {
 		return m, copyCmd(topologyPromptKind, m.schemaA), true
 	}
 	if m.state == stateContextReady {
-		return m, copyCmd(workflow.PromptTwoKind(m.cfg.Focus), m.schemaB), true
+		return m, copyCmd(codeContextPromptKind, m.schemaB), true
 	}
 	return m, nil, false
 }
@@ -403,8 +403,8 @@ func (m Model) handleKeySaveToFile() (tea.Model, tea.Cmd, bool) {
 	if m.state == stateScanComplete && m.promptDeliveryIsLarge(topologyPromptKind) {
 		return m, savePromptCmd(topologyPromptKind, m.schemaA), true
 	}
-	if m.state == stateContextReady && m.promptDeliveryIsLarge(workflow.PromptTwoKind(m.cfg.Focus)) {
-		return m, savePromptCmd(workflow.PromptTwoKind(m.cfg.Focus), m.schemaB), true
+	if m.state == stateContextReady && m.promptDeliveryIsLarge(codeContextPromptKind) {
+		return m, savePromptCmd(codeContextPromptKind, m.schemaB), true
 	}
 	return m, nil, false
 }
@@ -420,11 +420,11 @@ func (m Model) handleKeyPrintToTerminal() (tea.Model, tea.Cmd, bool) {
 		m.status = neutralMessage("Prompt 1: Topology printed to terminal.")
 		return m, nil, true
 	}
-	if m.state == stateContextReady && m.promptDeliveryIsLarge(workflow.PromptTwoKind(m.cfg.Focus)) {
+	if m.state == stateContextReady && m.promptDeliveryIsLarge(codeContextPromptKind) {
 		m.state = stateManualCopy
-		m.manualCopyKind = workflow.PromptTwoKind(m.cfg.Focus)
+		m.manualCopyKind = codeContextPromptKind
 		m.manualCopyText = m.schemaB
-		m.status = neutralMessage(fmt.Sprintf("%s printed to terminal.", workflow.PromptTwoKind(m.cfg.Focus)))
+		m.status = neutralMessage(fmt.Sprintf("%s printed to terminal.", codeContextPromptKind))
 		return m, nil, true
 	}
 	return m, nil, false

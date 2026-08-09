@@ -89,12 +89,6 @@ func (e *Engine) SetFocus(focus protocol.Focus) {
 	e.formatter.SetFocus(focus)
 }
 
-// GenerateMap builds Prompt 1: Topology.
-func (e *Engine) GenerateMap(goal string) string {
-	schema, _ := e.GenerateMapDetailed(goal)
-	return schema
-}
-
 // GenerateTopology builds the formatted topology portion of Prompt 1.
 func (e *Engine) GenerateTopology() string {
 	if e == nil || e.formatter == nil {
@@ -144,21 +138,6 @@ func (e *Engine) GenerateReviewContinuation(commands []extractor.Command) (strin
 	return prompt, metadata, len(extractions), nil, nil, nil
 }
 
-// GenerateContext extracts requested source and builds the Schema B context.
-func (e *Engine) GenerateContext(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, error) {
-	extractions, err := e.extractor.Extract(commands)
-	if err != nil {
-		var extractionErr *extractor.ExtractionError
-		if errors.As(err, &extractionErr) && extractionErr.CanProceed && len(extractions) > 0 {
-			schema, metadata := e.formatter.GenerateSchemaB(e.Topology, extractions, goal)
-			return schema, metadata, nil
-		}
-		return "", nil, err
-	}
-	schema, metadata := e.formatter.GenerateSchemaB(e.Topology, extractions, goal)
-	return schema, metadata, nil
-}
-
 // GenerateContextDetailed extracts requested source and returns partial
 // failures and safety exclusions separately so callers can warn and continue
 // with the usable context.
@@ -174,13 +153,6 @@ func (e *Engine) GenerateContextDetailed(goal string, commands []extractor.Comma
 	}
 	schema, metadata := e.formatter.GenerateSchemaB(e.Topology, extractions, goal)
 	return schema, metadata, len(extractions), nil, nil, nil
-}
-
-// ParseWritePlan extracts planned file operations from an AI response without
-// mutating disk. Keep planning separate from applying so callers can preview,
-// audit, and require explicit consent.
-func (e *Engine) ParseWritePlan(input string) []writer.FileUpdate {
-	return e.ParseWritePlanDetailed(input).Updates
 }
 
 // ParseWritePlanDetailed extracts planned file operations, preserves non-file
@@ -200,11 +172,6 @@ func (e *Engine) ApplyUpdate(update writer.FileUpdate, mode writer.WhitespaceMod
 		return externalContextWriteError(update.Path)
 	}
 	return writer.WriteFile(e.Root, update, mode)
-}
-
-// ApplyWrite applies a single planned file update relative to the project root.
-func (e *Engine) ApplyWrite(update writer.FileUpdate, mode writer.WhitespaceMode) error {
-	return e.ApplyUpdate(update, mode)
 }
 
 func (e *Engine) resolveTaggedFiles(goal string) ([]protocol.TaggedFile, []string) {

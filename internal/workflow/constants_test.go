@@ -8,10 +8,8 @@ import (
 
 func TestContextReadyStatus(t *testing.T) {
 	want := "Code context ready. Review the file list before copying Prompt 2: Code Context."
-	for _, focus := range []protocol.Focus{protocol.FocusCode, protocol.FocusReview, protocol.FocusDesign, protocol.FocusFollowup} {
-		if got := ContextReadyStatus(focus); got != want {
-			t.Fatalf("ContextReadyStatus(%v) = %q, want %q", focus, got, want)
-		}
+	if got := ContextReadyStatus(); got != want {
+		t.Fatalf("ContextReadyStatus() = %q, want %q", got, want)
 	}
 }
 

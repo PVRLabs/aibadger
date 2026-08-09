@@ -19,18 +19,11 @@ const (
 	StepNames                 = defaults.StepNames
 	TopologyPromptKind        = "Prompt 1: Topology"
 	CodeContextPromptKind     = "Prompt 2: Code Context"
+	PipelineFinalLabel        = "Apply"
 )
 
-func PromptTwoKind(_ protocol.Focus) string {
-	return CodeContextPromptKind
-}
-
-func PipelineFinalLabel(_ protocol.Focus) string {
-	return "Apply"
-}
-
-func ContextReadyStatus(focus protocol.Focus) string {
-	return fmt.Sprintf("Code context ready. Review the file list before copying %s.", PromptTwoKind(focus))
+func ContextReadyStatus() string {
+	return fmt.Sprintf("Code context ready. Review the file list before copying %s.", CodeContextPromptKind)
 }
 
 func FocusDisplayName(focus protocol.Focus) string {

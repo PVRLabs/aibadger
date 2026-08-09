@@ -270,7 +270,7 @@ func (m Model) headerView() string {
 
 func (m Model) pipelineView() string {
 	symbols := defaultDisplaySymbols()
-	stages := []string{"Map", "Extract", workflow.PipelineFinalLabel(m.cfg.Focus)}
+	stages := []string{"Map", "Extract", workflow.PipelineFinalLabel}
 	active := 0
 	switch m.state {
 	case stateWaitingForExtractions, stateContextWarning, stateContextReady:
@@ -280,13 +280,13 @@ func (m Model) pipelineView() string {
 	case stateWritePreview, stateWriting:
 		active = 2
 	case stateManualCopy:
-		if m.manualCopyKind == codeContextPromptKind || m.manualCopyKind == workflow.PromptTwoKind(m.cfg.Focus) {
+		if m.manualCopyKind == codeContextPromptKind {
 			active = 1
 		} else {
 			active = 0
 		}
 	case statePromptFileReveal:
-		if m.promptFileKind == codeContextPromptKind || m.promptFileKind == workflow.PromptTwoKind(m.cfg.Focus) {
+		if m.promptFileKind == codeContextPromptKind {
 			active = 1
 		} else {
 			active = 0
@@ -406,7 +406,7 @@ func (m Model) viewHelp() string {
 		"1. Enter a goal. Use @path/to/file when you want Prompt 1 to include a specific file.",
 		"2. Confirm copying Prompt 1: Topology, or use the manual-copy fallback.",
 		"3. Paste FILE/PREFIX/NEAR commands from your AI chat and press Enter.",
-		fmt.Sprintf("4. Confirm copying %s, or use the manual-copy fallback.", workflow.PromptTwoKind(m.cfg.Focus)),
+		fmt.Sprintf("4. Confirm copying %s, or use the manual-copy fallback.", codeContextPromptKind),
 		"5. Paste the final AI response and press Enter.",
 		"6. Review file writes and confirm with y.",
 		"",

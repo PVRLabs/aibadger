@@ -1974,7 +1974,7 @@ func TestReviewPromptTwoConsentMatrix(t *testing.T) {
 
 	t.Run("clipboard failure", func(t *testing.T) {
 		m := newModel(t)
-		next, cmd := m.Update(copyDoneMsg{kind: workflow.PromptTwoKind(protocol.FocusReview), text: payload, err: errors.New("clipboard unavailable")})
+		next, cmd := m.Update(copyDoneMsg{kind: codeContextPromptKind, text: payload, err: errors.New("clipboard unavailable")})
 		got := next.(Model)
 		if cmd == nil || !strings.Contains(got.status.text, "clipboard copy failed") {
 			t.Fatalf("Review Prompt 2 clipboard failure = status %#v cmd %v", got.status, cmd)
@@ -2770,7 +2770,7 @@ func TestDesignFocusPrompt2CodeContextInCopySuccess(t *testing.T) {
 	m := NewModel("/tmp/project", cfg)
 
 	next, cmd := m.Update(copyDoneMsg{
-		kind: workflow.PromptTwoKind(cfg.Focus),
+		kind: codeContextPromptKind,
 		text: "design context",
 	})
 	got, ok := next.(Model)
@@ -2830,8 +2830,8 @@ func TestDesignFocusPrompt2CodeContextInHelpView(t *testing.T) {
 	}
 }
 
-func TestContextReadyStatusUsesFocusAwareMessage(t *testing.T) {
-	wantStatus := workflow.ContextReadyStatus(protocol.FocusCode)
+func TestContextReadyStatusMessage(t *testing.T) {
+	wantStatus := workflow.ContextReadyStatus()
 	for _, focus := range []protocol.Focus{protocol.FocusCode, protocol.FocusReview, protocol.FocusDesign} {
 		t.Run("focus_"+focus.String(), func(t *testing.T) {
 			cfg := DefaultConfig()

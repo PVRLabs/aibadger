@@ -3901,13 +3901,13 @@ func TestHelpDocumentsCtrlU(t *testing.T) {
 
 func TestHelpShowsVersion(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.BuildInfo = "Version: " + version.Version + " · Build: development · Dev flags: enabled"
+	cfg.BuildInfo = "Version: " + version.Version + " · Build: development"
 	m := NewModel("/tmp/project", cfg)
 	m.state = stateHelp
 
 	view := m.View()
 
-	if !strings.Contains(view, "Version: "+version.Version+" · Build: development · Dev flags: enabled") {
+	if !strings.Contains(view, "Version: "+version.Version+" · Build: development") {
 		t.Fatalf("help view missing build info:\n%s", view)
 	}
 }

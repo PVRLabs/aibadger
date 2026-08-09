@@ -62,7 +62,7 @@ type InitialReviewPayload struct {
 	Files     []FileContext
 	// MaxFileBytes is the effective per-file limit used when rendering status
 	// reasons. It keeps interactive delivery byte-for-byte equivalent to the
-	// API/headless payload that produced it.
+	// initial review payload that produced it.
 	MaxFileBytes int
 	Prompt       string
 }

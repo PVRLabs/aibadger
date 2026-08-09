@@ -42,7 +42,7 @@ Format only files you touch. Do not add project-local linter or formatter toolin
 
 ## Build modes
 
-Default builds enable development-only flags. Release builds use the `aibadger_release` tag and reject those flags. See `docs/install.md` and `docs/releasing.md` for release flags, profiling builds, and publish steps.
+Default builds identify themselves as development builds. Release builds use the `aibadger_release` tag, and profiling builds use `aibadger_profile`. See `docs/install.md` and `docs/releasing.md` for build flags, profiling, and publish steps.
 
 ## Commit metadata
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -75,7 +74,7 @@ func TestLoadConfigFocusCommand(t *testing.T) {
 	}{
 		{name: "code", args: []string{"code"}, focus: protocol.FocusCode},
 		{name: "design", args: []string{"design"}, focus: protocol.FocusDesign},
-		{name: "review", args: []string{"review", "--headless"}, focus: protocol.FocusReview},
+		{name: "review", args: []string{"review"}, focus: protocol.FocusReview},
 		{name: "followup", args: []string{"followup"}, focus: protocol.FocusFollowup},
 	}
 
@@ -233,8 +232,7 @@ func TestApplyDesignStartupAlwaysStartsEmpty(t *testing.T) {
 	cfg := badger.DefaultConfig()
 	cfg.Root = t.TempDir()
 	app := appConfig{
-		focus:    protocol.FocusDesign,
-		headless: true,
+		focus: protocol.FocusDesign,
 	}
 
 	applyDesignStartup(&cfg, app)
@@ -265,23 +263,6 @@ func TestApplyFollowupStartupInteractive(t *testing.T) {
 	}
 	if !strings.Contains(cfg.Startup.Status.Text, "Follow-up") {
 		t.Fatalf("Startup.Status.Text = %q, want message mentioning Follow-up", cfg.Startup.Status.Text)
-	}
-}
-
-func TestApplyFollowupStartupHeadless(t *testing.T) {
-	cfg := badger.DefaultConfig()
-	cfg.Root = t.TempDir()
-	app := appConfig{
-		focus:    protocol.FocusFollowup,
-		headless: true,
-	}
-
-	applyFollowupStartup(&cfg, app)
-	if cfg.Startup.Goal == "" {
-		t.Fatal("headless follow-up startup goal is empty")
-	}
-	if !strings.Contains(cfg.Startup.Goal, "Follow-up") {
-		t.Fatalf("headless follow-up startup goal missing follow-up template:\n%s", cfg.Startup.Goal)
 	}
 }
 
@@ -322,57 +303,6 @@ func TestApplyReviewStartupUsesReviewPrompt(t *testing.T) {
 	}
 	if cfg.Startup.Status.Text == "" {
 		t.Fatal("Startup.Status.Text is empty")
-	}
-}
-
-func TestRunHeadlessReviewWritesPreparedGoal(t *testing.T) {
-	cfg := badger.DefaultConfig()
-	cfg.Root = t.TempDir()
-	var stdout bytes.Buffer
-
-	build := func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error) {
-		return reviewtask.InitialReviewResult{Payload: reviewtask.InitialReviewPayload{Prompt: "prepared\n"}}, nil
-	}
-	if err := runHeadlessReviewWithBuilder(cfg, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, build); err != nil {
-		t.Fatalf("runHeadlessReview() error = %v", err)
-	}
-	if stdout.String() != "prepared\n" {
-		t.Fatalf("runHeadlessReview() output = %q, want prepared output", stdout.String())
-	}
-	if !strings.HasSuffix(stdout.String(), "\n") || strings.HasSuffix(stdout.String(), "\n\n") {
-		t.Fatalf("runHeadlessReview() output should have exactly one trailing newline: %q", stdout.String())
-	}
-}
-
-func TestRunHeadlessReviewPresentationUsesPreparedResult(t *testing.T) {
-	var stdout bytes.Buffer
-	build := func(root string, opts reviewtask.Options) (reviewtask.InitialReviewResult, error) {
-		if root == "" || opts.Mode != reviewtask.ModeDefault {
-			t.Fatalf("builder inputs = root %q, options %#v", root, opts)
-		}
-		return reviewtask.InitialReviewResult{Payload: reviewtask.InitialReviewPayload{Prompt: "prepared headless\n"}}, nil
-	}
-	if err := runHeadlessReviewWithBuilder(badger.Config{Root: t.TempDir()}, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, build); err != nil {
-		t.Fatalf("runHeadlessReviewWithBuilder() error = %v", err)
-	}
-	if got := stdout.String(); got != "prepared headless\n" {
-		t.Fatalf("stdout = %q, want prepared result", got)
-	}
-}
-
-func TestRunHeadlessReviewPropagatesErrors(t *testing.T) {
-	cfg := badger.DefaultConfig()
-	cfg.Root = t.TempDir()
-	var stdout bytes.Buffer
-
-	err := runHeadlessReviewWithBuilder(cfg, appConfig{reviewMode: reviewtask.ModeDefault}, &stdout, func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error) {
-		return reviewtask.InitialReviewResult{}, errors.New("not a git repository")
-	})
-	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "not a git repository") {
-		t.Fatalf("runHeadlessReview() error = %v, want non-git error", err)
-	}
-	if stdout.Len() != 0 {
-		t.Fatalf("runHeadlessReview() stdout = %q, want empty", stdout.String())
 	}
 }
 
@@ -469,7 +399,7 @@ func TestPrintVersion(t *testing.T) {
 
 func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 	out := captureStdout(t, func() {
-		printUsage(appConfig{})
+		printUsage()
 	})
 
 	for _, want := range []string{
@@ -496,6 +426,8 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 		}
 	}
 	for _, hidden := range []string{
+		"--headless",
+		"Dev flags",
 		"api scan",
 		"api goal",
 		"api extraction",
@@ -515,9 +447,7 @@ func TestApplyBadgeStartupInteractive(t *testing.T) {
 	defer func() { terminalInteractiveFunc = originalTerminalInteractive }()
 
 	cfg := badger.DefaultConfig()
-	app := appConfig{}
-
-	if err := applyBadgeStartup(&app, &cfg); err != nil {
+	if err := applyBadgeStartup(&cfg); err != nil {
 		t.Fatalf("applyBadgeStartup() error = %v", err)
 	}
 	if !cfg.SkipOnboarding {
@@ -531,33 +461,25 @@ func TestApplyBadgeStartupInteractive(t *testing.T) {
 	}
 }
 
-func TestApplyBadgeStartupRejectsHeadless(t *testing.T) {
-	originalTerminalInteractive := terminalInteractiveFunc
-	terminalInteractiveFunc = func() bool { return true }
-	defer func() { terminalInteractiveFunc = originalTerminalInteractive }()
-
-	cfg := badger.DefaultConfig()
-	app := appConfig{headless: true}
-
-	if err := applyBadgeStartup(&app, &cfg); err == nil {
-		t.Fatal("applyBadgeStartup() error = nil, want headless rejection")
-	}
-}
-
 func TestApplyBadgeStartupRejectsNonInteractive(t *testing.T) {
 	originalTerminalInteractive := terminalInteractiveFunc
 	terminalInteractiveFunc = func() bool { return false }
 	defer func() { terminalInteractiveFunc = originalTerminalInteractive }()
 
 	cfg := badger.DefaultConfig()
-	app := appConfig{}
-
-	if err := applyBadgeStartup(&app, &cfg); err == nil {
+	if err := applyBadgeStartup(&cfg); err == nil {
 		t.Fatal("applyBadgeStartup() error = nil, want interactive-terminal rejection")
 	}
 }
 
-func TestLoadConfigRejectsRetiredGenericHeadlessFlags(t *testing.T) {
+func TestLoadConfigRejectsReviewHeadless(t *testing.T) {
+	cfg := loadConfig([]string{"review", "--headless"})
+	if cfg.parseErr == nil || cfg.parseErr.Error() != "unknown flag: --headless" {
+		t.Fatalf("parseErr = %v, want unsupported --headless flag", cfg.parseErr)
+	}
+}
+
+func TestLoadConfigRejectsRetiredAutomationFlags(t *testing.T) {
 	for _, args := range [][]string{
 		{"--step", "topology"},
 		{"--input", "commands.txt"},
@@ -567,27 +489,6 @@ func TestLoadConfigRejectsRetiredGenericHeadlessFlags(t *testing.T) {
 		if cfg.parseErr == nil || !strings.Contains(cfg.parseErr.Error(), "unknown flag") {
 			t.Fatalf("loadConfig(%v) parseErr = %v, want unknown flag", args, cfg.parseErr)
 		}
-	}
-}
-
-func TestValidateHeadlessModeOnlyAllowsReview(t *testing.T) {
-	if err := validateHeadlessMode(appConfig{headless: true}); err == nil {
-		t.Fatal("validateHeadlessMode() error = nil for generic --headless")
-	}
-	if err := validateHeadlessMode(appConfig{headless: true, focus: protocol.FocusReview}); err != nil {
-		t.Fatalf("validateHeadlessMode() review error = %v", err)
-	}
-}
-
-func TestUsedDevOnlyFlagsTracksReviewHeadlessOnly(t *testing.T) {
-	got := usedDevOnlyFlags([]string{"review", "--headless", "--step=topology"})
-	if len(got) != 1 || got[0] != "--headless" {
-		t.Fatalf("usedDevOnlyFlags() = %v, want [--headless]", got)
-	}
-
-	got = usedDevOnlyFlags([]string{"--", "--headless"})
-	if len(got) != 0 {
-		t.Fatalf("usedDevOnlyFlags() after option terminator = %v, want none", got)
 	}
 }
 

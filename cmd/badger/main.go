@@ -15,7 +15,6 @@ import (
 )
 
 type appConfig struct {
-	headless         bool
 	showBadge        bool
 	focus            protocol.Focus
 	focusExplicit    bool
@@ -26,10 +25,6 @@ type appConfig struct {
 	showVersion      bool
 	cpuprofile       string // Profile mode: CPU profile output path
 	parseErr         error
-}
-
-var devOnlyFlags = []string{
-	"headless",
 }
 
 func main() {
@@ -43,7 +38,7 @@ func main() {
 
 	cfg := loadConfig(os.Args[1:])
 	if cfg.showHelp {
-		printUsage(cfg)
+		printUsage()
 		return
 	}
 	if cfg.showVersion {
@@ -51,21 +46,8 @@ func main() {
 		return
 	}
 
-	if releaseBuild {
-		devFlags := usedDevOnlyFlags(os.Args[1:])
-		if len(devFlags) > 0 {
-			fmt.Fprintf(os.Stderr, "Error: the following flags are only available in development builds: %s\n", strings.Join(devFlags, ", "))
-			fmt.Fprintf(os.Stderr, "Use the development build (default `go build`) or remove these flags.\n")
-			os.Exit(1)
-		}
-	}
-
 	if cfg.parseErr != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", cfg.parseErr)
-		os.Exit(1)
-	}
-	if err := validateHeadlessMode(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	// Profile mode: start CPU profiling if --cpuprofile flag provided
@@ -89,17 +71,10 @@ func main() {
 	badgerCfg.BuildInfo = buildInfoLine()
 	applyInteractiveFocus(&badgerCfg, &cfg)
 	if cfg.showBadge {
-		if err := applyBadgeStartup(&cfg, &badgerCfg); err != nil {
+		if err := applyBadgeStartup(&badgerCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-	}
-	if cfg.focus == protocol.FocusReview && cfg.headless {
-		if err := runHeadlessReview(badgerCfg, cfg, os.Stdout, os.Stderr); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
 	}
 	if cfg.focus == protocol.FocusReview {
 		if err := applyReviewStartup(&badgerCfg, cfg); err != nil {
@@ -424,8 +399,6 @@ func parseArgs(args []string, cfg *appConfig) error {
 			}
 
 			switch {
-			case arg == "--headless":
-				cfg.headless = true
 			case profileBuild && arg == "--cpuprofile":
 				value, err := nextValue("cpuprofile")
 				if err != nil {
@@ -502,34 +475,6 @@ func parseArgs(args []string, cfg *appConfig) error {
 	return nil
 }
 
-func runHeadlessReview(cfg badger.Config, app appConfig, stdout, _ io.Writer) error {
-	return runHeadlessReviewWithBuilder(cfg, app, stdout, reviewtask.BuildInitialReviewPayload)
-}
-
-type reviewPayloadBuilder func(string, reviewtask.Options) (reviewtask.InitialReviewResult, error)
-
-func runHeadlessReviewWithBuilder(cfg badger.Config, app appConfig, stdout io.Writer, buildReview reviewPayloadBuilder) error {
-	result, err := buildReview(cfg.Root, reviewtask.Options{
-		Mode:       app.reviewMode,
-		Ref:        app.reviewRef,
-		ExtraFocus: app.reviewExtraFocus,
-	})
-	if err != nil {
-		return err
-	}
-	switch result.Failure {
-	case reviewtask.PayloadFailureNoChanges:
-		return fmt.Errorf("review prompt could not be prepared: no reviewable changes were detected")
-	case reviewtask.PayloadFailureMandatoryOverflow:
-		return fmt.Errorf("review prompt could not be prepared: mandatory review context exceeds the payload limit")
-	case reviewtask.PayloadFailureNone:
-	default:
-		return fmt.Errorf("review prompt could not be prepared: unknown payload outcome %q", result.Failure)
-	}
-	_, err = fmt.Fprintln(stdout, strings.TrimRight(result.Payload.Prompt, "\n"))
-	return err
-}
-
 func flagValue(arg, name string) (string, bool) {
 	prefix := "--" + name + "="
 	if strings.HasPrefix(arg, prefix) {
@@ -554,13 +499,6 @@ func validateReviewOptions(mode reviewtask.Mode, ref string) error {
 		}
 	default:
 		return fmt.Errorf("unknown review mode %d", mode)
-	}
-	return nil
-}
-
-func validateHeadlessMode(cfg appConfig) error {
-	if cfg.headless && cfg.focus != protocol.FocusReview {
-		return fmt.Errorf("--headless is only valid with badger review")
 	}
 	return nil
 }
@@ -609,37 +547,7 @@ func applyReviewStartupWithBuilder(cfg *badger.Config, app appConfig, buildRevie
 	return nil
 }
 
-func usedDevOnlyFlags(args []string) []string {
-	var used []string
-	seen := make(map[string]bool, len(devOnlyFlags))
-
-	for _, arg := range args {
-		if arg == "--" {
-			break
-		}
-		for _, flagName := range devOnlyFlags {
-			if isFlagArg(arg, flagName) {
-				displayName := "--" + flagName
-				if !seen[flagName] {
-					used = append(used, displayName)
-					seen[flagName] = true
-				}
-				break
-			}
-		}
-	}
-
-	return used
-}
-
-func isFlagArg(arg, name string) bool {
-	return arg == "-"+name ||
-		arg == "--"+name ||
-		strings.HasPrefix(arg, "-"+name+"=") ||
-		strings.HasPrefix(arg, "--"+name+"=")
-}
-
-func printUsage(cfg appConfig) {
+func printUsage() {
 	fmt.Printf(`%s - local context bridge
 %s
 
@@ -679,21 +587,6 @@ API commands are non-interactive and write usable prompt text to stdout.
 Run badger api --help or add --help to a command for complete options.
 `, badger.Name, buildInfoLine())
 
-	// Show note about dev flags in release builds
-	if releaseBuild {
-		fmt.Print(`
-Note: This is a release build. The development-only review --headless mode
-is not available. Use the development build (default 'go build') for that mode.
-`)
-		return
-	}
-
-	fmt.Print(`
-Developer testing flags:
-  review --headless
-                  Prepare a review goal from Git state and exit.
-`)
-
 	// Profile mode: show profiler-specific help
 	if profileBuild {
 		fmt.Print(`
@@ -716,9 +609,6 @@ func buildInfoLine() string {
 	}
 
 	info := fmt.Sprintf("Version: %s · Build: %s", badger.Version, build)
-	if !releaseBuild {
-		info += " · Dev flags: enabled"
-	}
 	if profileBuild {
 		info += " · Profiling: enabled"
 	}

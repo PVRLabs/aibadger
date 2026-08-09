@@ -12,10 +12,7 @@ const badgeStartupGoal = "/badge"
 
 var terminalInteractiveFunc = defaultTerminalInteractive
 
-func applyBadgeStartup(app *appConfig, badgerCfg *badger.Config) error {
-	if app.headless {
-		return errors.New("badger badge does not support --headless")
-	}
+func applyBadgeStartup(badgerCfg *badger.Config) error {
 	if !terminalInteractiveFunc() {
 		return errors.New("badger badge requires an interactive terminal")
 	}

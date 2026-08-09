@@ -5,7 +5,7 @@ Badger is a context bridge, not an AI provider or autonomous coding agent.
 ## Current Constraints
 
 - Extraction commands are intentionally simple: `FILE:`, `PREFIX:`, and `NEAR:`.
-- Release builds hide development-only headless automation flags.
+- Non-interactive review automation uses the stable `badger api review-context` operation.
 - Binary and generated files are intentionally excluded or minimized to keep prompts compact.
 
 ## Scope Notes

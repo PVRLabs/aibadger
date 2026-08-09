@@ -76,7 +76,7 @@ type Options struct {
 	// requested. Zero retains the scanner's unlimited low-level default.
 	MaxFilesPerDirectory int
 	// MaxPromptBytes bounds the complete interactive Schema A prompt. It is
-	// ignored by stable/headless payload generation.
+	// ignored by non-interactive payload generation.
 	MaxPromptBytes int
 }
 
@@ -176,25 +176,6 @@ func (t Task) StartupContext() startup.Context {
 // or relevant untracked files suitable for review.
 func (t Task) HasReviewableChanges() bool {
 	return strings.TrimSpace(t.Diff) != "" || len(t.UntrackedFiles) > 0
-}
-
-// HeadlessGoal returns the generated prompt that should seed headless review
-// startup. Non-diff fallback cases are treated as failures so headless review
-// exits with a clear error instead of silently continuing with a manual prompt.
-func (t Task) HeadlessGoal() (string, error) {
-	switch t.FailureClassification {
-	case FailureNone:
-		return t.Prompt, nil
-	case FailureNoDiff:
-		if t.UntrackedOmitted > 0 {
-			return "", fmt.Errorf("review prompt could not be prepared: no reviewable changes were available; %s could not be inspected", untrackedFileCount(t.UntrackedOmitted))
-		}
-		return "", errors.New("review prompt could not be prepared: no reviewable changes were detected")
-	case FailureNotGit:
-		return "", errors.New("review prompt could not be prepared: this directory is not a git repository")
-	default:
-		return "", errors.New("review prompt could not be prepared")
-	}
 }
 
 // Build prepares a review prompt from the requested diff mode.

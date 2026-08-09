@@ -262,12 +262,8 @@ func TestBuildDefaultTrackedDiffSurvivesUntrackedDiscoveryFailure(t *testing.T) 
 	if severity != "warning" || !strings.Contains(status, "Git-untracked files could not be listed") {
 		t.Fatalf("StartupStatus() = (%q, %q), want degraded-discovery warning", status, severity)
 	}
-	goal, err := task.HeadlessGoal()
-	if err != nil {
-		t.Fatalf("HeadlessGoal() error = %v", err)
-	}
-	if !strings.Contains(goal, "Warning:") || !strings.Contains(goal, "review context may be incomplete") {
-		t.Fatalf("HeadlessGoal() missing degraded-discovery warning:\n%s", goal)
+	if !strings.Contains(task.Prompt, "Warning:") || !strings.Contains(task.Prompt, "review context may be incomplete") {
+		t.Fatalf("Prompt missing degraded-discovery warning:\n%s", task.Prompt)
 	}
 }
 
@@ -327,9 +323,6 @@ func TestBuildDefaultInspectionOnlyOmissionsExplainNoReviewableChanges(t *testin
 		if !strings.Contains(text, "2 review-eligible Git-untracked files could not be inspected") {
 			t.Fatalf("%s missing inspection failure detail:\n%s", label, text)
 		}
-	}
-	if _, err := task.HeadlessGoal(); err == nil || !strings.Contains(err.Error(), "2 review-eligible Git-untracked files could not be inspected") {
-		t.Fatalf("HeadlessGoal() error = %v, want inspection failure detail", err)
 	}
 }
 
@@ -400,10 +393,6 @@ func TestBuildDefaultUntrackedOnly(t *testing.T) {
 	if !strings.Contains(task.Prompt, "Untracked files are provided for reference") {
 		t.Fatalf("Prompt missing untracked reference note:\n%s", task.Prompt)
 	}
-	if _, err := task.HeadlessGoal(); err != nil {
-		t.Fatalf("HeadlessGoal() error = %v, want nil", err)
-	}
-
 	ctx := task.StartupContext()
 	if len(ctx.Attachments) != 1 {
 		t.Fatalf("StartupContext.Attachments length = %d, want 1", len(ctx.Attachments))
@@ -513,9 +502,6 @@ func TestBuildDefaultNoTrackedOrUntrackedChanges(t *testing.T) {
 	}
 	if task.Prompt == "" || !strings.Contains(task.Prompt, "No reviewable changes were detected.") {
 		t.Fatalf("Prompt missing no-diff reason:\n%s", task.Prompt)
-	}
-	if _, err := task.HeadlessGoal(); err == nil {
-		t.Fatal("HeadlessGoal() error = nil, want error")
 	}
 	if len(task.StartupContext().Attachments) != 0 {
 		t.Fatalf("StartupContext.Attachments = %+v, want none", task.StartupContext().Attachments)

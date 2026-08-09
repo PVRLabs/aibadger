@@ -1,8 +1,18 @@
 # Agent Guidance
 
-If `.badger-context` exists in the repository root, read it first.
+A `.badger-context` file may list related read-only context directories used by
+AI Badger.
 
-Each non-empty, non-comment line in `.badger-context` names an additional read-only context directory. Inspect those directories along with the repository itself when gathering codebase context. Do not treat any of those paths as write targets.
+Do not proactively read, inventory, or recursively search those directories.
+Consult a listed directory only when:
+
+- the user explicitly references material in it;
+- a repository file or task points to a specific document there; or
+- the current task requires information that cannot be found in this repository.
+
+When external context is needed, read only the specific files relevant to the
+task. Treat all listed directories as read-only and do not include their
+contents in public documentation or source files.
 
 Prefer the repository's existing patterns and keep changes scoped to the request.
 

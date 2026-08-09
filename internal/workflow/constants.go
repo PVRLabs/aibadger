@@ -16,7 +16,6 @@ const (
 	MaxTopologyPromptBytes    = defaults.MaxTopologyPromptBytes
 	MaxPromptTwoBytes         = defaults.MaxPromptTwoBytes
 	MaxFilesPerDirectory      = defaults.MaxFilesPerDirectory
-	StepNames                 = defaults.StepNames
 	TopologyPromptKind        = "Prompt 1: Topology"
 	CodeContextPromptKind     = "Prompt 2: Code Context"
 	PipelineFinalLabel        = "Apply"

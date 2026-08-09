@@ -29,5 +29,4 @@ const (
 	// MaxTotalScanFiles caps the total number of files processed during a
 	// generic-detector scan across all directories.
 	MaxTotalScanFiles = 10000
-	StepNames         = "scan, goal, topology (aliases: map, prompt1), extraction, context (alias: prompt2), write-plan (alias: write)"
 )

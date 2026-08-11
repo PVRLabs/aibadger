@@ -107,9 +107,10 @@ exits nonzero without writing stdout for generation failures such as no changes,
 an invalid Git root or ref, Git failure, invalid selections, or mandatory
 overflow. A destination write failure also returns nonzero; as with any stream,
 the destination may already contain a partial prefix when that happens. The
-operation is non-interactive and read-only and does not scan project topology,
-read stdin, access the clipboard, open the TUI or a browser, contact providers,
-or access the network. Normal output uses repository-relative paths and does
+operation is non-interactive and read-only. It scans project topology only when
+`--include-topology` is supplied. It does not read stdin, access the clipboard,
+open the TUI or a browser, contact providers, or access the network. Normal
+output uses repository-relative paths and does
 not expose the absolute repository root.
 
 Editor integrations can capability-check this operation with `badger api

@@ -12,6 +12,30 @@ if [ -z "$PREV_TAG" ]; then
 	PREV_TAG=$(git tag --sort=-version:refname | grep -v '\-dev' | head -1)
 fi
 
+if [ -f CHANGELOG.md ]; then
+  CHANGELOG_SECTION=$(awk -v tag="$NEW_TAG" '
+    $0 == "## [" tag "]" || index($0, "## [" tag "] - ") == 1 {
+      found = 1
+      next
+    }
+    found && /^## / { exit }
+    found && !started && /^[[:space:]]*$/ { next }
+    found {
+      started = 1
+      print
+    }
+  ' CHANGELOG.md)
+
+  if [ -n "$CHANGELOG_SECTION" ]; then
+    echo "## What's Changed"
+    echo
+    printf '%s\n' "$CHANGELOG_SECTION"
+    echo
+    echo "**Full Changelog**: https://github.com/PVRLabs/aibadger/compare/${PREV_TAG}...${NEW_TAG}"
+    exit 0
+  fi
+fi
+
 if git rev-parse -q --verify "refs/tags/${NEW_TAG}" >/dev/null; then
 	END_REF="$NEW_TAG"
 else

@@ -24,7 +24,10 @@ containing the `badger` binary (or `badger.exe` on Windows) and a matching
 
 1. Replace the development version constant in `internal/version/version.go`
    with the exact release version.
-2. Update user-facing version references in the README if needed.
+2. Move the user-facing release notes from `Unreleased` to a dated, matching
+   version heading in `CHANGELOG.md`, and update README version references if
+   needed. The release workflow uses that changelog section for GitHub Release
+   notes and appends the full comparison link.
 3. Run the test suite:
 
 ```bash

@@ -2,11 +2,6 @@
 
 ## Scope and context
 
-A `.badger-context` file may identify related read-only context directories.
-Do not search them proactively. Consult only the specific files needed when the
-user, task, or repository points there, or when this repository lacks required
-information. Never include private context contents in public source or docs.
-
 Prefer existing repository patterns and keep changes scoped to the request.
 
 Use `repo-map` to locate related repositories only when work crosses repository

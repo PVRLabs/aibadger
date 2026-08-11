@@ -9,6 +9,9 @@ information. Never include private context contents in public source or docs.
 
 Prefer existing repository patterns and keep changes scoped to the request.
 
+Use `repo-map` to locate related repositories only when work crosses repository
+boundaries. For a Homebrew formula update, use `repo-map get homebrew-tap`.
+
 ## Go and verification
 
 Use the Go version declared in `go.mod`. The public facade is `pkg/badger`;

@@ -68,7 +68,7 @@ jobs:
           else
             tar -czf "dist/${archive_name}" -C "${out_dir}" "${binary_name}"
           fi
-          sha256sum "dist/${archive_name}" > "dist/${archive_name}.sha256"
+          (cd dist && sha256sum "${archive_name}" > "${archive_name}.sha256")
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

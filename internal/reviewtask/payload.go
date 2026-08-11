@@ -387,14 +387,16 @@ func renderReviewContext(set ChangeSet, files []FileContext, maxFileBytes int) s
 		out.WriteString(status)
 	}
 	if len(set.Changes) > 0 {
-		out.WriteString("\nDiff:\n```diff\n")
+		var diff strings.Builder
 		for i, change := range set.Changes {
 			if i > 0 {
-				out.WriteString("\n\n")
+				diff.WriteString("\n\n")
 			}
-			out.WriteString(change.Patch)
+			diff.WriteString(change.Patch)
 		}
-		out.WriteString("\n```\n")
+		out.WriteString("\nDiff:\n")
+		out.WriteString(renderLiteralFence("diff", diff.String()))
+		out.WriteByte('\n')
 	}
 	if len(set.UntrackedPaths) > 0 {
 		out.WriteString("\n[REVIEW CONTEXT: GIT-UNTRACKED FILES]\n")
@@ -414,14 +416,31 @@ func renderReviewContext(set ChangeSet, files []FileContext, maxFileBytes int) s
 		}
 		out.WriteString("\n[REVIEW CONTEXT: CURRENT WORKING-TREE FILE]\nPath: ")
 		out.WriteString(file.Path)
-		out.WriteString("\n```text\n")
-		out.WriteString(file.Content)
-		if !strings.HasSuffix(file.Content, "\n") {
-			out.WriteByte('\n')
-		}
-		out.WriteString("```\n")
+		out.WriteByte('\n')
+		out.WriteString(renderLiteralFence("text", file.Content))
+		out.WriteByte('\n')
 	}
 	return strings.TrimPrefix(out.String(), "\n")
+}
+
+func renderLiteralFence(language, content string) string {
+	maxRun, run := 0, 0
+	for _, r := range content {
+		if r == '`' {
+			run++
+			if run > maxRun {
+				maxRun = run
+			}
+			continue
+		}
+		run = 0
+	}
+	fence := strings.Repeat("`", max(3, maxRun+1))
+	ending := "\n"
+	if strings.HasSuffix(content, "\n") {
+		ending = ""
+	}
+	return fence + language + "\n" + content + ending + fence
 }
 
 // renderFileContextStatus is the AI-facing vocabulary shared with the VS Code

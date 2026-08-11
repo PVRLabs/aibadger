@@ -54,6 +54,26 @@ func TestBuildInitialReviewPayloadIncludesEligibleCurrentFilesAndStatuses(t *tes
 	}
 }
 
+func TestRenderReviewContextFencesAndPreservesMarkdownSource(t *testing.T) {
+	badge := "[![GitHub stars](https://img.shields.io/github/stars/PVRLabs/statlite?style=flat)](https://github.com/PVRLabs/statlite/stargazers)"
+	diff := "+" + badge + "\n+```md\n+inside\n+```\n+````"
+	content := badge + "\n```md\ninside\n```\n````\n"
+	got := renderReviewContext(
+		oneModifiedChangeSet("README.md", diff),
+		[]FileContext{{Path: "README.md", Content: content, Status: ContextIncluded}},
+		64*1024,
+	)
+
+	for _, want := range []string{
+		"Diff:\n`````diff\n" + diff + "\n`````",
+		"Path: README.md\n`````text\n" + content + "`````",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("payload did not preserve safely fenced source %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestBuildInteractiveContextIncludesTrackedDiffStats(t *testing.T) {
 	repo := newGitRepo(t)
 	writeTrackedFile(t, repo, "app.go", "package main\n// one\n// two\n")

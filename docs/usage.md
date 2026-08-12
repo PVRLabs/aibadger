@@ -219,7 +219,9 @@ newer than a staged, branch, or commit diff.
 ### Deep Review API
 
 Editor integrations and scripts can generate a complete standalone review
-request from one Git repository with the stable non-interactive API:
+request from one Git repository with the stable non-interactive API. The
+official [VS Code companion](https://github.com/PVRLabs/aibadger-vscode) uses
+these operations for Deep Review:
 
 ```bash
 badger api review-context --root . --input guidance.txt

@@ -60,6 +60,8 @@ curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | 
 
 See [docs/install.md](docs/install.md) for Windows, source builds, and more.
 
+Also available with an official [VS Code companion](https://marketplace.visualstudio.com/items?itemName=pvrlabs.ai-badger).
+
 ## Quick Start
 
 1. Run `badger` in your project root. Interactive sessions start in Design focus.
@@ -97,6 +99,6 @@ Full usage: [docs/usage.md](docs/usage.md)
 
 **Star if this local AI coding context tool solves a real pain for you ⭐**
 
-Built with ❤️ by [PVR Labs](https://pvrlabs.xyz) — privacy-first developer tools.
+Built in San Diego by [PVR Labs](https://pvrlabs.xyz). 🌊
 
 [Website](https://pvrlabs.xyz/aibadger) • [X @kupolov](https://x.com/kupolov)

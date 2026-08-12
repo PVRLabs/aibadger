@@ -87,6 +87,14 @@ Release-style build:
 go build -tags aibadger_release -ldflags="-s -w" -o badger ./cmd/badger
 ```
 
+## VS Code
+
+Install the official [AI Badger for VS Code](https://marketplace.visualstudio.com/items?itemName=pvrlabs.ai-badger)
+extension from the Visual Studio Marketplace. Direct file copy and Git review
+work without the CLI; Ask and Deep Review need a local `badger` on `PATH`.
+
+Source and issues: [PVRLabs/aibadger-vscode](https://github.com/PVRLabs/aibadger-vscode).
+
 ## Verify
 
 Check the binary version:

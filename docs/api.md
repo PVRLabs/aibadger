@@ -3,7 +3,9 @@
 Badger provides a supported, stable, non-interactive command surface for
 editors, scripts, coding agents, and other local tools. The stable operations
 are `topology`, `prompt`, `extract`, `review-context`, and
-`review-continuation`.
+`review-continuation`. The official
+[VS Code companion](https://github.com/PVRLabs/aibadger-vscode) uses this API
+for Ask and Deep Review.
 
 Use `badger api --help` for an overview or add `--help` (or `-h`) to a stable
 operation for command-specific usage.

@@ -5,6 +5,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
@@ -21,23 +22,50 @@ func (m Model) viewScanComplete() string {
 	}
 
 	if m.promptDeliveryIsLarge(topologyPromptKind) {
-		return fmt.Sprintf("%s\n\n%s\n\n%s", renderSummary(m.eng.Topology), promptOnePrivacyText(m.cfg.Focus), m.viewLargePromptDelivery(topologyPromptKind, m.schemaA))
+		return fmt.Sprintf("%s\n\n%s\n\n%s", renderSummary(m.eng.Topology), promptOnePrivacyTextWithPaths(m.cfg.Focus, m.reviewSensitivePaths()), m.viewLargePromptDelivery(topologyPromptKind, m.schemaA))
 	}
 
 	note := fmt.Sprintf(
 		"Ready to copy %s to your clipboard.\n\n%s\nYou will pass this prompt to an AI chat.\n\n%s",
 		renderBold("Prompt 1: Topology"),
-		promptOnePrivacyText(m.cfg.Focus),
+		promptOnePrivacyTextWithPaths(m.cfg.Focus, m.reviewSensitivePaths()),
 		renderBold(fmt.Sprintf("Copy Prompt 1: Topology to clipboard (payload: %s)? (y/N)", protocol.FormatFileSize(int64(len(m.schemaA))))),
 	)
 	return fmt.Sprintf("%s\n\n%s", renderSummary(m.eng.Topology), note)
 }
 
 func promptOnePrivacyText(focus protocol.Focus) string {
+	return promptOnePrivacyTextWithPaths(focus, nil)
+}
+
+func promptOnePrivacyTextWithPaths(focus protocol.Focus, sensitivePaths []string) string {
 	if protocol.NormalizeFocus(focus) == protocol.FocusReview {
-		return "Privacy: Includes Git changes and may include eligible current working-tree file contents."
+		privacy := "Privacy: Includes Git changes and may include eligible current working-tree file contents."
+		if len(sensitivePaths) == 0 {
+			return privacy
+		}
+		lines := []string{"Review context includes changes from sensitive paths:"}
+		for _, path := range sensitivePaths {
+			lines = append(lines, "- "+escapeDisplayedPath(path))
+		}
+		lines = append(lines, "Their diff contents may contain secrets and will be copied to the clipboard.")
+		return privacy + "\n\n" + renderWarningLine(strings.Join(lines, "\n"))
 	}
 	return "Privacy: Structure only - no source code."
+}
+
+func escapeDisplayedPath(path string) string {
+	quoted := strconv.QuoteToGraphic(path)
+	return quoted[1 : len(quoted)-1]
+}
+
+func (m Model) reviewSensitivePaths() []string {
+	for _, attachment := range m.goalAttachments {
+		if attachment.Type == goalAttachmentReview {
+			return attachment.SensitivePaths
+		}
+	}
+	return nil
 }
 
 func (m Model) viewContextReady() string {

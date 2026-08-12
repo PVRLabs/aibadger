@@ -18,6 +18,10 @@ type Attachment struct {
 	FilesChanged int
 	Additions    int
 	Deletions    int
+	// SensitivePaths lists tracked repository-relative paths whose diffs may
+	// contain secrets. It is metadata for interactive delivery only; the
+	// attachment text remains complete and authoritative.
+	SensitivePaths []string
 }
 
 // Status is the user-facing message shown after startup preparation.

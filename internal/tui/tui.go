@@ -297,7 +297,7 @@ func startupGoalAttachments(attachmentsIn []startup.Attachment) []goalAttachment
 		kind := goalAttachmentType(strings.TrimSpace(attachment.Type))
 		source := strings.TrimSpace(attachment.Source)
 		if kind == goalAttachmentReview {
-			attachments = append(attachments, newGoalAttachment(goalAttachmentReview, source, attachment.Text, attachment.FilesChanged, attachment.Additions, attachment.Deletions))
+			attachments = append(attachments, newGoalReviewAttachment(source, attachment.Text, attachment.FilesChanged, attachment.Additions, attachment.Deletions, attachment.SensitivePaths))
 			continue
 		}
 		if kind == goalAttachmentText {

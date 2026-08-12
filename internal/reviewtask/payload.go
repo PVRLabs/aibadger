@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/defaults"
@@ -196,20 +197,40 @@ func initialPayloadStartupContext(payload InitialReviewPayload) startup.Context 
 	return startup.Context{
 		Goal: buildReviewInstruction(payload.Guidance),
 		Attachments: []startup.Attachment{{
-			Type:         "review context",
-			Source:       "review context",
-			Text:         contextPrompt,
-			SizeBytes:    int64(len(contextPrompt)),
-			Lines:        countReviewTextLines(contextPrompt),
-			FilesChanged: len(payload.ChangeSet.Changes) + len(payload.ChangeSet.UntrackedPaths),
-			Additions:    additions,
-			Deletions:    deletions,
+			Type:           "review context",
+			Source:         "review context",
+			Text:           contextPrompt,
+			SizeBytes:      int64(len(contextPrompt)),
+			Lines:          countReviewTextLines(contextPrompt),
+			FilesChanged:   len(payload.ChangeSet.Changes) + len(payload.ChangeSet.UntrackedPaths),
+			Additions:      additions,
+			Deletions:      deletions,
+			SensitivePaths: sensitiveTrackedPaths(payload.ChangeSet.Changes),
 		}},
 		Status: startup.Status{
 			Text:     "Loaded Git changes and supporting review context. Add optional guidance before submitting.",
 			Severity: "success",
 		},
 	}
+}
+
+func sensitiveTrackedPaths(changes []Change) []string {
+	seen := make(map[string]struct{})
+	paths := make([]string, 0)
+	for _, change := range changes {
+		for _, path := range []string{change.Path, change.PreviousPath} {
+			if path == "" || !promptpolicy.IsSensitivePath(path) {
+				continue
+			}
+			if _, ok := seen[path]; ok {
+				continue
+			}
+			seen[path] = struct{}{}
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 func reviewPatchStats(changes []Change) (additions, deletions int) {
@@ -345,7 +366,7 @@ func initialContextStatus(change Change) ContextStatus {
 	switch {
 	case change.Binary:
 		return ContextBinary
-	case promptpolicy.IsSensitivePath(change.Path):
+	case isSensitiveChange(change):
 		return ContextSensitive
 	case change.Kind == ChangeAdded:
 		return ContextAddedPatch
@@ -356,6 +377,10 @@ func initialContextStatus(change Change) ContextStatus {
 	default:
 		return ContextUnavailable
 	}
+}
+
+func isSensitiveChange(change Change) bool {
+	return promptpolicy.IsSensitivePath(change.Path) || promptpolicy.IsSensitivePath(change.PreviousPath)
 }
 
 func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileContext, maxFileBytes int, topologyParts ...string) string {

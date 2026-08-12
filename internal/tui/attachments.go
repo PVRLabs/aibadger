@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -44,15 +45,16 @@ const (
 )
 
 type goalAttachment struct {
-	Type         goalAttachmentType
-	Source       string
-	Summary      string
-	Text         string
-	SizeBytes    int64
-	Lines        int
-	FilesChanged int
-	Additions    int
-	Deletions    int
+	Type           goalAttachmentType
+	Source         string
+	Summary        string
+	Text           string
+	SizeBytes      int64
+	Lines          int
+	FilesChanged   int
+	Additions      int
+	Deletions      int
+	SensitivePaths []string
 }
 
 func newGoalTextAttachment(source, text string) goalAttachment {
@@ -79,6 +81,23 @@ func newGoalAttachment(kind goalAttachmentType, source, text string, filesChange
 		Deletions:    deletions,
 	}
 	attachment.Summary = formatGoalAttachmentSummary(attachment)
+	return attachment
+}
+
+func newGoalReviewAttachment(source, text string, filesChanged, additions, deletions int, sensitivePaths []string) goalAttachment {
+	attachment := newGoalAttachment(goalAttachmentReview, source, text, filesChanged, additions, deletions)
+	seen := make(map[string]struct{}, len(sensitivePaths))
+	for _, path := range sensitivePaths {
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		attachment.SensitivePaths = append(attachment.SensitivePaths, path)
+	}
+	sort.Strings(attachment.SensitivePaths)
 	return attachment
 }
 

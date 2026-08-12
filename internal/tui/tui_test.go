@@ -3999,6 +3999,67 @@ func TestLargeTopologyPromptShowsDeliveryMenu(t *testing.T) {
 	}
 }
 
+func TestReviewTopologyCopyWarnsAboutSensitivePaths(t *testing.T) {
+	cases := []struct {
+		name      string
+		threshold int
+		payload   string
+	}{
+		{name: "normal", threshold: 1024, payload: "small topology"},
+		{name: "large", threshold: 8, payload: strings.Repeat("x", 2*1024)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Focus = protocol.FocusReview
+			cfg.LargePromptByteThreshold = tc.threshold
+			m := NewModel("/tmp/project", cfg)
+			m.state = stateScanComplete
+			m.schemaA = tc.payload
+			m.goalAttachments = []goalAttachment{newGoalReviewAttachment(
+				"review context", "diff --git a/.env b/.env", 1, 1, 0,
+				[]string{"config/credentials.json", ".env", ".env"},
+			)}
+			m.eng = engine.FromTopology("/tmp/project", &model.ProjectTopology{Modules: []model.Module{{Name: "app", FileCount: 1}}})
+
+			view := m.viewScanComplete()
+			for _, want := range []string{
+				"Review context includes changes from sensitive paths:",
+				"- config/credentials.json",
+				"- .env",
+				"Their diff contents may contain secrets and will be copied to the clipboard.",
+			} {
+				if !strings.Contains(view, want) {
+					t.Fatalf("review disclosure missing %q:\n%s", want, view)
+				}
+			}
+			if strings.Count(view, "- .env") != 1 {
+				t.Fatalf("review disclosure did not deduplicate paths:\n%s", view)
+			}
+		})
+	}
+}
+
+func TestReviewTopologySensitivePathDisclosureEscapesDisplayPath(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel("/tmp/project", cfg)
+	m.state = stateScanComplete
+	m.schemaA = "small topology"
+	m.goalAttachments = []goalAttachment{newGoalReviewAttachment(
+		"review context", "diff", 1, 1, 0, []string{"config/secret\nfile.json"},
+	)}
+	m.eng = engine.FromTopology("/tmp/project", &model.ProjectTopology{Modules: []model.Module{{Name: "app", FileCount: 1}}})
+
+	view := m.viewScanComplete()
+	if !strings.Contains(view, `- config/secret\nfile.json`) {
+		t.Fatalf("sensitive path was not escaped:\n%s", view)
+	}
+	if strings.Contains(view, "config/secret\nfile.json") {
+		t.Fatalf("sensitive path introduced a literal line break:\n%s", view)
+	}
+}
+
 func TestNormalTopologyPromptDoesNotShowLargeWarning(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.state = stateScanComplete

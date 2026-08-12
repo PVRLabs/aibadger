@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -51,6 +52,25 @@ func TestBuildInitialReviewPayloadIncludesEligibleCurrentFilesAndStatuses(t *tes
 	}
 	if strings.Contains(result.Payload.Prompt, "Path: .env") {
 		t.Fatalf("sensitive file was duplicated as supporting context:\n%s", result.Payload.Prompt)
+	}
+}
+
+func TestSensitiveTrackedPathsIncludesSortedDeduplicatedRenamePaths(t *testing.T) {
+	got := sensitiveTrackedPaths([]Change{
+		{Path: "config/credentials.json", PreviousPath: ".env"},
+		{Path: ".env", PreviousPath: "notes.txt"},
+		{Path: "cmd/app.go", PreviousPath: "config/credentials.json"},
+	})
+	want := []string{".env", "config/credentials.json"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("sensitiveTrackedPaths() = %v, want %v", got, want)
+	}
+}
+
+func TestInitialContextStatusTreatsSensitiveRenameSourceAsSensitive(t *testing.T) {
+	got := initialContextStatus(Change{Path: "config/runtime.txt", PreviousPath: ".env", Kind: ChangeRenamed})
+	if got != ContextSensitive {
+		t.Fatalf("initialContextStatus() = %q, want %q", got, ContextSensitive)
 	}
 }
 

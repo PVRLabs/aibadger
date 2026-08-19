@@ -16,10 +16,17 @@ type improvedReviewContextContract struct {
 		MandatoryOverflow    string `json:"mandatory_overflow"`
 	} `json:"initial_payload"`
 	Modes []struct {
-		Mode                 string `json:"mode"`
-		AuthoritativeDiff    string `json:"authoritative_diff"`
-		AcceptsSelectedPaths bool   `json:"accepts_selected_paths"`
+		Mode                           string `json:"mode"`
+		AuthoritativeDiff              string `json:"authoritative_diff"`
+		IncludesUntrackedFullAdditions bool   `json:"includes_untracked_full_additions"`
+		SelectedUntracked              string `json:"selected_untracked"`
+		RepositoryUntracked            string `json:"repository_untracked"`
+		AcceptsSelectedPaths           bool   `json:"accepts_selected_paths"`
 	} `json:"modes"`
+	OptionalFilePolicy []struct {
+		Change   string `json:"change"`
+		FullFile string `json:"full_file"`
+	} `json:"optional_file_policy"`
 	SelectedPaths struct {
 		Form                 string `json:"form"`
 		DeletedChangedPath   string `json:"deleted_changed_path"`
@@ -48,8 +55,8 @@ func TestImprovedReviewContextContractFixture(t *testing.T) {
 		t.Fatalf("parse contract fixture: %v", err)
 	}
 
-	if contract.Version != 2 {
-		t.Fatalf("contract version = %d, want 2", contract.Version)
+	if contract.Version != 3 {
+		t.Fatalf("contract version = %d, want 3", contract.Version)
 	}
 	if !contract.InitialPayload.MandatoryDiff || contract.InitialPayload.MandatoryOverflow != "fail" {
 		t.Fatalf("mandatory diff policy = %+v, want complete-or-fail", contract.InitialPayload)
@@ -65,13 +72,22 @@ func TestImprovedReviewContextContractFixture(t *testing.T) {
 	}
 
 	wantModes := map[string]struct {
-		diff     string
-		selected bool
+		diff                       string
+		selected                   bool
+		includesUntrackedAdditions bool
+		selectedUntracked          string
+		repositoryUntracked        string
 	}{
-		"default": {diff: "HEAD_to_worktree", selected: true},
-		"staged":  {diff: "HEAD_to_index"},
-		"branch":  {diff: "merge_base_to_HEAD"},
-		"commit":  {diff: "requested_commit"},
+		"default": {
+			diff:                       "HEAD_to_worktree",
+			selected:                   true,
+			includesUntrackedAdditions: true,
+			selectedUntracked:          "bounded_complete_text",
+			repositoryUntracked:        "ranked_paths_with_bounded_complete_text",
+		},
+		"staged": {diff: "HEAD_to_index"},
+		"branch": {diff: "merge_base_to_HEAD"},
+		"commit": {diff: "requested_commit"},
 	}
 	if len(contract.Modes) != len(wantModes) {
 		t.Fatalf("mode count = %d, want %d", len(contract.Modes), len(wantModes))
@@ -81,10 +97,22 @@ func TestImprovedReviewContextContractFixture(t *testing.T) {
 		if !ok {
 			t.Fatalf("unexpected mode %q", mode.Mode)
 		}
-		if mode.AuthoritativeDiff != want.diff || mode.AcceptsSelectedPaths != want.selected {
-			t.Fatalf("mode %q = %+v, want diff %q selected=%t", mode.Mode, mode, want.diff, want.selected)
+		if mode.AuthoritativeDiff != want.diff ||
+			mode.AcceptsSelectedPaths != want.selected ||
+			mode.IncludesUntrackedFullAdditions != want.includesUntrackedAdditions ||
+			mode.SelectedUntracked != want.selectedUntracked ||
+			mode.RepositoryUntracked != want.repositoryUntracked {
+			t.Fatalf("mode %q = %+v, want %+v", mode.Mode, mode, want)
 		}
 		delete(wantModes, mode.Mode)
+	}
+
+	optionalPolicy := make(map[string]string, len(contract.OptionalFilePolicy))
+	for _, policy := range contract.OptionalFilePolicy {
+		optionalPolicy[policy.Change] = policy.FullFile
+	}
+	if got := optionalPolicy["untracked"]; got != "eligible_complete_worktree_addition" {
+		t.Fatalf("untracked optional-file policy = %q, want eligible_complete_worktree_addition", got)
 	}
 
 	if contract.SelectedPaths.Form != "repository_relative_literal" ||
@@ -93,10 +121,10 @@ func TestImprovedReviewContextContractFixture(t *testing.T) {
 		contract.SelectedPaths.Traversal != "reject" {
 		t.Fatalf("selected-path policy is incomplete: %+v", contract.SelectedPaths)
 	}
-	if contract.RepositoryUntracked.Content != "paths_only" ||
+	if contract.RepositoryUntracked.Content != "bounded_complete_text" ||
 		contract.RepositoryUntracked.MaxPaths != 25 ||
 		!contract.RepositoryUntracked.OmittedCount ||
-		contract.RepositoryUntracked.ExplicitSelection != "paths_only" {
+		contract.RepositoryUntracked.ExplicitSelection != "bounded_complete_text" {
 		t.Fatalf("repository-untracked policy is incomplete: %+v", contract.RepositoryUntracked)
 	}
 	if contract.SupportingContentSource != "current_checked_out_worktree" {

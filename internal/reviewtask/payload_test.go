@@ -111,7 +111,7 @@ func TestBuildInteractiveContextIncludesTrackedDiffStats(t *testing.T) {
 	}
 }
 
-func TestBuildInitialReviewPayloadRendersUntrackedPathsWithoutContents(t *testing.T) {
+func TestBuildInitialReviewPayloadIncludesSmallUntrackedWorkingTreeAddition(t *testing.T) {
 	repo := newGitRepo(t)
 	writeTrackedFile(t, repo, "notes/new.go", "package notes\nconst hidden = 42\n")
 
@@ -122,15 +122,15 @@ func TestBuildInitialReviewPayloadRendersUntrackedPathsWithoutContents(t *testin
 	if result.Failure != PayloadFailureNone || len(result.Payload.ChangeSet.Changes) != 0 {
 		t.Fatalf("result = %+v", result)
 	}
-	if !strings.Contains(result.Payload.Prompt, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") || !strings.Contains(result.Payload.Prompt, "not necessarily missing from the commit") || !strings.Contains(result.Payload.Prompt, "notes/new.go") {
+	if !strings.Contains(result.Payload.Prompt, "[REVIEW CONTEXT: GIT-UNTRACKED FILES]") || !strings.Contains(result.Payload.Prompt, "untracked working-tree additions") || !strings.Contains(result.Payload.Prompt, "notes/new.go") {
 		t.Fatalf("prompt missing untracked path section:\n%s", result.Payload.Prompt)
 	}
-	if strings.Contains(result.Payload.Prompt, "const hidden") || strings.Contains(result.Payload.Prompt, "Diff:") {
-		t.Fatalf("untracked contents or synthetic diff leaked:\n%s", result.Payload.Prompt)
+	if !strings.Contains(result.Payload.Prompt, "[REVIEW CONTEXT: UNTRACKED WORKING-TREE ADDITION]") || !strings.Contains(result.Payload.Prompt, "const hidden") || strings.Contains(result.Payload.Prompt, "Diff:") {
+		t.Fatalf("untracked addition was not represented as complete working-tree content:\n%s", result.Payload.Prompt)
 	}
 }
 
-func TestBuildInitialReviewPayloadSelectedUntrackedIsPathOnly(t *testing.T) {
+func TestBuildInitialReviewPayloadSelectedUntrackedUsesSameFilePolicy(t *testing.T) {
 	repo := newGitRepo(t)
 	writeTrackedFile(t, repo, "scratch/new.go", "package scratch\nconst selected = true\n")
 
@@ -141,8 +141,57 @@ func TestBuildInitialReviewPayloadSelectedUntrackedIsPathOnly(t *testing.T) {
 	if result.Failure != PayloadFailureNone || !strings.Contains(result.Payload.Prompt, "scratch/new.go") {
 		t.Fatalf("result = %+v", result)
 	}
-	if strings.Contains(result.Payload.Prompt, "const selected = true") || len(result.Payload.ChangeSet.Changes) != 0 {
-		t.Fatalf("selected untracked contents became authoritative changes: %+v", result.Payload)
+	if !strings.Contains(result.Payload.Prompt, "const selected = true") || !result.Payload.Files[0].Untracked || len(result.Payload.ChangeSet.Changes) != 0 {
+		t.Fatalf("selected untracked contents did not use untracked supporting context: %+v", result.Payload)
+	}
+}
+
+func TestUntrackedFilePolicyExactOversizedSensitiveBinaryAndUnstable(t *testing.T) {
+	set := ChangeSet{Mode: ModeDefault, UntrackedPaths: []string{"exact.go", "large.go", ".env", "data.bin", "unstable.go"}}
+	reader := func(path string, limit int) ([]byte, stableFileOutcome) {
+		switch filepath.Base(path) {
+		case "exact.go":
+			return []byte(strings.Repeat("x", limit)), stableFileOK
+		case "large.go":
+			return nil, stableFileOversized
+		case "data.bin":
+			return []byte{'a', 0, 'b'}, stableFileOK
+		case "unstable.go":
+			return nil, stableFileChanged
+		default:
+			t.Fatalf("sensitive file was read: %s", path)
+			return nil, stableFileUnavailable
+		}
+	}
+	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: 10000, maxFileBytes: 16}, reader)
+	statuses := payloadStatuses(result.Payload.Files)
+	if statuses["exact.go"] != ContextIncluded || statuses["large.go"] != ContextOversized || statuses[".env"] != ContextSensitive || statuses["data.bin"] != ContextBinary || statuses["unstable.go"] != ContextChangedDuringRead {
+		t.Fatalf("statuses = %v", statuses)
+	}
+	if strings.Contains(result.Payload.Prompt, "a\x00b") || strings.Contains(result.Payload.Prompt, "TOKEN=") {
+		t.Fatalf("binary or sensitive content leaked:\n%s", result.Payload.Prompt)
+	}
+	if !strings.Contains(result.Payload.Prompt, "large.go — path only: file exceeds 16 bytes full-file limit") ||
+		!strings.Contains(result.Payload.Prompt, "data.bin — path only: binary file") {
+		t.Fatalf("untracked omissions were not labeled path-only:\n%s", result.Payload.Prompt)
+	}
+}
+
+func TestTrackedTextClassificationRemainsGitAuthoritative(t *testing.T) {
+	set := ChangeSet{Mode: ModeDefault, Changes: []Change{{
+		Path:  "legacy.txt",
+		Kind:  ChangeModified,
+		Patch: "diff --git a/legacy.txt b/legacy.txt\n+textual patch",
+	}}}
+	latin1 := []byte{'c', 'a', 'f', 0xe9, '\n'}
+	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: 4096, maxFileBytes: 64}, func(string, int) ([]byte, stableFileOutcome) {
+		return latin1, stableFileOK
+	})
+	if result.Failure != PayloadFailureNone || result.Payload.Files[0].Status != ContextIncluded {
+		t.Fatalf("tracked Git-text file was reclassified: %+v", result)
+	}
+	if !strings.Contains(result.Payload.Prompt, string(latin1)) || strings.Contains(result.Payload.Prompt, "diff only: binary file") {
+		t.Fatalf("tracked working-tree context was omitted or mislabeled:\n%s", result.Payload.Prompt)
 	}
 }
 
@@ -152,12 +201,86 @@ func TestPayloadUntrackedOmissionTextParticipatesInMandatoryBudget(t *testing.T)
 	if baseline.Failure != PayloadFailureNone || !strings.Contains(baseline.Payload.Prompt, "7 additional relevant Git-untracked paths omitted") {
 		t.Fatalf("baseline = %+v", baseline)
 	}
-	exact := len(baseline.Payload.Prompt)
+	exact := len(renderInitialReviewPrompt(set, "", []FileContext{{Path: "new.go", Status: contextPending, Untracked: true}}, 100))
 	if got := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: exact, maxFileBytes: 100}, readStableReviewFile); got.Failure != PayloadFailureNone {
 		t.Fatalf("exact boundary = %+v", got)
 	}
 	if got := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: exact - 1, maxFileBytes: 100}, readStableReviewFile); got.Failure != PayloadFailureMandatoryOverflow {
 		t.Fatalf("overflow boundary = %+v", got)
+	}
+}
+
+func TestUntrackedOptionalBudgetStatusesCannotOverflowMandatoryPathOnlyPayload(t *testing.T) {
+	set := ChangeSet{Mode: ModeDefault, UntrackedPaths: []string{"a.go", "b.go", "c.go"}}
+	provisional := []FileContext{
+		{Path: "a.go", Status: contextPending, Untracked: true},
+		{Path: "b.go", Status: contextPending, Untracked: true},
+		{Path: "c.go", Status: contextPending, Untracked: true},
+	}
+	mandatory := renderInitialReviewPrompt(set, "", provisional, 1024)
+	reads := 0
+	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{
+		maxPayloadBytes: len(mandatory),
+		maxFileBytes:    1024,
+	}, func(string, int) ([]byte, stableFileOutcome) {
+		reads++
+		return []byte(strings.Repeat("content", 100)), stableFileOK
+	})
+	if result.Failure != PayloadFailureNone || result.Payload.Prompt != mandatory {
+		t.Fatalf("optional status expansion overflowed mandatory payload: failure=%q\nprompt:\n%s", result.Failure, result.Payload.Prompt)
+	}
+	if reads != 1 {
+		t.Fatalf("reads = %d, want stop after first optional file does not fit", reads)
+	}
+	for _, file := range result.Payload.Files {
+		if file.Status != ContextBudget || !file.suppressStatus {
+			t.Fatalf("file disposition = %+v, want suppressed budget status", file)
+		}
+	}
+}
+
+func TestSensitiveUntrackedStatusCannotOverflowMandatoryPathOnlyPayload(t *testing.T) {
+	set := ChangeSet{Mode: ModeDefault, UntrackedPaths: []string{".env"}}
+	pathOnly := []FileContext{{Path: ".env", Status: ContextSensitive, Untracked: true, suppressStatus: true}}
+	mandatory := renderInitialReviewPrompt(set, "", pathOnly, 1024)
+	reads := 0
+	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{
+		maxPayloadBytes: len(mandatory),
+		maxFileBytes:    1024,
+	}, func(string, int) ([]byte, stableFileOutcome) {
+		reads++
+		return []byte("TOKEN=must-not-be-read"), stableFileOK
+	})
+	if result.Failure != PayloadFailureNone || result.Payload.Prompt != mandatory {
+		t.Fatalf("sensitive status expansion overflowed mandatory payload: failure=%q\nprompt:\n%s", result.Failure, result.Payload.Prompt)
+	}
+	if reads != 0 {
+		t.Fatalf("sensitive untracked file reads = %d, want 0", reads)
+	}
+	if len(result.Payload.Files) != 1 || result.Payload.Files[0].Status != ContextSensitive || !result.Payload.Files[0].suppressStatus {
+		t.Fatalf("sensitive file disposition = %+v", result.Payload.Files)
+	}
+	if !strings.Contains(result.Payload.Prompt, "- .env") || strings.Contains(result.Payload.Prompt, "TOKEN=") {
+		t.Fatalf("sensitive path was lost or content leaked:\n%s", result.Payload.Prompt)
+	}
+}
+
+func TestStatusSuppressionRejectsOversizedMandatoryDiffWithoutStatusRetries(t *testing.T) {
+	const fileCount = 2000
+	set := ChangeSet{Mode: ModeDefault, Changes: make([]Change, 0, fileCount)}
+	files := make([]FileContext, 0, fileCount)
+	for i := 0; i < fileCount; i++ {
+		path := fmt.Sprintf("generated/file-%04d.go", i)
+		set.Changes = append(set.Changes, Change{Path: path, Kind: ChangeAdded, Patch: strings.Repeat("mandatory diff bytes", 8)})
+		files = append(files, FileContext{Path: path, Status: ContextAddedPatch})
+	}
+	if suppressFileStatusesToFit(set, "", files, reviewPayloadLimits{maxPayloadBytes: 1024, maxFileBytes: 1024}, "", true) {
+		t.Fatal("status suppression accepted an oversized authoritative diff")
+	}
+	for _, file := range files {
+		if file.suppressStatus {
+			t.Fatal("statuses were individually suppressed even though the mandatory diff alone overflowed")
+		}
 	}
 }
 

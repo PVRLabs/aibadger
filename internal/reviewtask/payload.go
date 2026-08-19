@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/PVRLabs/aibadger/internal/defaults"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
@@ -51,9 +52,11 @@ const (
 
 // FileContext records one changed path's explicit payload disposition.
 type FileContext struct {
-	Path    string
-	Status  ContextStatus
-	Content string
+	Path           string
+	Status         ContextStatus
+	Content        string
+	Untracked      bool
+	suppressStatus bool
 }
 
 // InitialReviewPayload is the fully rendered, bounded initial review request.
@@ -205,13 +208,33 @@ func initialPayloadStartupContext(payload InitialReviewPayload) startup.Context 
 			FilesChanged:   len(payload.ChangeSet.Changes) + len(payload.ChangeSet.UntrackedPaths),
 			Additions:      additions,
 			Deletions:      deletions,
-			SensitivePaths: sensitiveTrackedPaths(payload.ChangeSet.Changes),
+			SensitivePaths: sensitiveReviewPaths(payload.ChangeSet),
 		}},
 		Status: startup.Status{
 			Text:     "Loaded Git changes and supporting review context. Add optional guidance before submitting.",
 			Severity: "success",
 		},
 	}
+}
+
+func sensitiveReviewPaths(set ChangeSet) []string {
+	paths := sensitiveTrackedPaths(set.Changes)
+	seen := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		seen[path] = struct{}{}
+	}
+	for _, path := range set.UntrackedPaths {
+		if !promptpolicy.IsSensitivePath(path) {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 func sensitiveTrackedPaths(changes []Change) []string {
@@ -266,9 +289,19 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 	if len(set.Changes) == 0 && len(set.UntrackedPaths) == 0 {
 		return InitialReviewResult{Failure: PayloadFailureNoChanges}
 	}
-	files := make([]FileContext, len(set.Changes))
-	for i, change := range set.Changes {
-		files[i] = FileContext{Path: change.Path, Status: initialContextStatus(change)}
+	files := make([]FileContext, 0, len(set.Changes)+len(set.UntrackedPaths))
+	for _, change := range set.Changes {
+		files = append(files, FileContext{Path: change.Path, Status: initialContextStatus(change)})
+	}
+	for _, path := range set.UntrackedPaths {
+		status := contextPending
+		if promptpolicy.IsSensitivePath(path) {
+			status = ContextSensitive
+		}
+		files = append(files, FileContext{Path: path, Status: status, Untracked: true})
+	}
+	if !suppressFileStatusesToFit(set, guidance, files, limits, "", includeReviewInstructions) {
+		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 	}
 	topology := ""
 	if includeTopology {
@@ -301,11 +334,11 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 	}
 
-	for i, change := range set.Changes {
+	for i := range files {
 		if files[i].Status != contextPending {
 			continue
 		}
-		content, outcome := readFile(filepath.Join(root, filepath.FromSlash(change.Path)), limits.maxFileBytes)
+		content, outcome := readFile(filepath.Join(root, filepath.FromSlash(files[i].Path)), limits.maxFileBytes)
 		switch outcome {
 		case stableFileOversized:
 			files[i].Status = ContextOversized
@@ -314,8 +347,12 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		case stableFileChanged:
 			files[i].Status = ContextChangedDuringRead
 		case stableFileOK:
-			files[i].Status = ContextIncluded
-			files[i].Content = string(content)
+			if files[i].Untracked && !isReviewText(content) {
+				files[i].Status = ContextBinary
+			} else {
+				files[i].Status = ContextIncluded
+				files[i].Content = string(content)
+			}
 		}
 
 		if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)) <= limits.maxPayloadBytes {
@@ -325,9 +362,15 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 			files[i].Status = ContextBudget
 			files[i].Content = ""
 		}
+		if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)) > limits.maxPayloadBytes {
+			files[i].suppressStatus = true
+		}
 		for j := i + 1; j < len(files); j++ {
 			if files[j].Status == contextPending {
 				files[j].Status = ContextBudget
+				if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)) > limits.maxPayloadBytes {
+					files[j].suppressStatus = true
+				}
 			}
 		}
 		break
@@ -348,6 +391,9 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 			}
 			files[i].Status = ContextBudget
 			files[i].Content = ""
+			if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)) > limits.maxPayloadBytes {
+				files[i].suppressStatus = true
+			}
 			removed = true
 			break
 		}
@@ -360,6 +406,44 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 	}
 	return InitialReviewResult{Payload: InitialReviewPayload{ChangeSet: set, Guidance: guidance, Files: files, MaxFileBytes: limits.maxFileBytes, Prompt: prompt}}
+}
+
+func suppressFileStatusesToFit(set ChangeSet, guidance string, files []FileContext, limits reviewPayloadLimits, topology string, includeReviewInstructions bool) bool {
+	renderedBytes := len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions))
+	if renderedBytes <= limits.maxPayloadBytes {
+		return true
+	}
+	statusBytes := len(renderFileContextStatus(files, limits.maxFileBytes))
+	// When the complete status block disappears, renderReviewContext also
+	// trims the leading separator newline before the mandatory diff/path body.
+	const statusBodySeparatorBytes = 1
+	if statusBytes == 0 || renderedBytes-statusBytes-statusBodySeparatorBytes > limits.maxPayloadBytes {
+		return false
+	}
+
+	activeStatuses := 0
+	for _, file := range files {
+		if _, ok := renderFileContextStatusLine(file, limits.maxFileBytes); ok {
+			activeStatuses++
+		}
+	}
+	removedBytes := 0
+	for i := len(files) - 1; i >= 0; i-- {
+		line, ok := renderFileContextStatusLine(files[i], limits.maxFileBytes)
+		if !ok {
+			continue
+		}
+		files[i].suppressStatus = true
+		removedBytes += len(line) + 1 // renderFileContextStatus appends a newline per line.
+		activeStatuses--
+		if activeStatuses == 0 {
+			removedBytes += len("[FILE CONTEXT STATUS]\n") + statusBodySeparatorBytes
+		}
+		if renderedBytes-removedBytes <= limits.maxPayloadBytes {
+			return true
+		}
+	}
+	return false
 }
 
 func initialContextStatus(change Change) ContextStatus {
@@ -425,7 +509,7 @@ func renderReviewContext(set ChangeSet, files []FileContext, maxFileBytes int) s
 	}
 	if len(set.UntrackedPaths) > 0 {
 		out.WriteString("\n[REVIEW CONTEXT: GIT-UNTRACKED FILES]\n")
-		out.WriteString("Note: Untracked files are provided for reference and are not necessarily missing from the commit. Their contents are not included.\n\n")
+		out.WriteString("Note: These paths are untracked working-tree additions. Eligible complete contents are labeled separately below; omitted files remain path-only.\n\n")
 		for _, path := range set.UntrackedPaths {
 			out.WriteString("- ")
 			out.WriteString(escapeReviewPath(path))
@@ -439,13 +523,21 @@ func renderReviewContext(set ChangeSet, files []FileContext, maxFileBytes int) s
 		if file.Status != ContextIncluded {
 			continue
 		}
-		out.WriteString("\n[REVIEW CONTEXT: CURRENT WORKING-TREE FILE]\nPath: ")
-		out.WriteString(file.Path)
+		if file.Untracked {
+			out.WriteString("\n[REVIEW CONTEXT: UNTRACKED WORKING-TREE ADDITION]\nPath: ")
+		} else {
+			out.WriteString("\n[REVIEW CONTEXT: CURRENT WORKING-TREE FILE]\nPath: ")
+		}
+		out.WriteString(escapeReviewPath(file.Path))
 		out.WriteByte('\n')
 		out.WriteString(renderLiteralFence("text", file.Content))
 		out.WriteByte('\n')
 	}
 	return strings.TrimPrefix(out.String(), "\n")
+}
+
+func isReviewText(content []byte) bool {
+	return !strings.ContainsRune(string(content), '\x00') && utf8.Valid(content)
 }
 
 func renderLiteralFence(language, content string) string {
@@ -477,16 +569,31 @@ func renderFileContextStatus(files []FileContext, maxFileBytes int) string {
 	}
 	lines := make([]string, 0, len(files)+1)
 	for _, file := range files {
-		reason, ok := fileContextStatusReason(file.Status, maxFileBytes)
+		line, ok := renderFileContextStatusLine(file, maxFileBytes)
 		if !ok {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("- %s — diff only: %s", escapeReviewPath(file.Path), reason))
+		lines = append(lines, line)
 	}
 	if len(lines) == 0 {
 		return ""
 	}
 	return "[FILE CONTEXT STATUS]\n" + strings.Join(lines, "\n") + "\n"
+}
+
+func renderFileContextStatusLine(file FileContext, maxFileBytes int) (string, bool) {
+	if file.suppressStatus {
+		return "", false
+	}
+	reason, ok := fileContextStatusReason(file.Status, maxFileBytes)
+	if !ok {
+		return "", false
+	}
+	disposition := "diff only"
+	if file.Untracked {
+		disposition = "path only"
+	}
+	return fmt.Sprintf("- %s — %s: %s", escapeReviewPath(file.Path), disposition, reason), true
 }
 
 func fileContextStatusReason(status ContextStatus, maxFileBytes int) (string, bool) {

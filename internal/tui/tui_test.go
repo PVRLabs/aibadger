@@ -2179,8 +2179,9 @@ func TestSubmitGoalReviewCommandUsesUntrackedFilesOnly(t *testing.T) {
 	if !strings.Contains(got.goalAttachments[0].Text, "notes/todo.md") {
 		t.Fatalf("goal attachment missing untracked path:\n%s", got.goalAttachments[0].Text)
 	}
-	if strings.Contains(got.goalAttachments[0].Text, "secret untracked contents") {
-		t.Fatalf("goal attachment leaked untracked file contents:\n%s", got.goalAttachments[0].Text)
+	if !strings.Contains(got.goalAttachments[0].Text, "[REVIEW CONTEXT: UNTRACKED WORKING-TREE ADDITION]") ||
+		!strings.Contains(got.goalAttachments[0].Text, "secret untracked contents") {
+		t.Fatalf("goal attachment missing bounded untracked contents:\n%s", got.goalAttachments[0].Text)
 	}
 	if strings.Contains(got.goalAttachments[0].Text, "Diff:") {
 		t.Fatalf("goal attachment unexpectedly contains diff heading:\n%s", got.goalAttachments[0].Text)
@@ -2228,8 +2229,9 @@ func TestSubmitGoalReviewCommandUsesTrackedAndUntrackedAttachments(t *testing.T)
 	if !strings.Contains(got.goalAttachments[0].Text, "notes/todo.md") {
 		t.Fatalf("attachment missing untracked path:\n%s", got.goalAttachments[0].Text)
 	}
-	if strings.Contains(got.goalAttachments[0].Text, "secret untracked contents") {
-		t.Fatalf("attachment leaked untracked file contents:\n%s", got.goalAttachments[0].Text)
+	if !strings.Contains(got.goalAttachments[0].Text, "[REVIEW CONTEXT: UNTRACKED WORKING-TREE ADDITION]") ||
+		!strings.Contains(got.goalAttachments[0].Text, "secret untracked contents") {
+		t.Fatalf("attachment missing bounded untracked contents:\n%s", got.goalAttachments[0].Text)
 	}
 	if !strings.Contains(got.status.text, "Loaded Git changes and supporting review context") {
 		t.Fatalf("status = %q, want success review status", got.status.text)

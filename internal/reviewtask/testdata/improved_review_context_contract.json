@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "initial_payload": {
     "mandatory_diff": true,
     "topology": "omitted",
@@ -12,9 +12,9 @@
     {
       "mode": "default",
       "authoritative_diff": "HEAD_to_worktree",
-      "includes_untracked_full_additions": false,
-      "selected_untracked": "paths_only",
-      "repository_untracked": "ranked_paths_only",
+      "includes_untracked_full_additions": true,
+      "selected_untracked": "bounded_complete_text",
+      "repository_untracked": "ranked_paths_with_bounded_complete_text",
       "accepts_selected_paths": true
     },
     {
@@ -51,7 +51,7 @@
     },
     {
       "change": "untracked",
-      "full_file": "diff_only_complete_in_patch"
+      "full_file": "eligible_complete_worktree_addition"
     },
     {
       "change": "deleted",
@@ -94,11 +94,11 @@
     "cross_repository": "reject"
   },
   "repository_untracked": {
-    "content": "paths_only",
+    "content": "bounded_complete_text",
     "ordering": "review_priority_then_modification_time_then_path",
     "max_paths": 25,
     "omitted_count": true,
-    "explicit_selection": "paths_only"
+    "explicit_selection": "bounded_complete_text"
   },
   "supporting_content_source": "current_checked_out_worktree",
   "generation": "one_repository_inspection_per_explicit_request",

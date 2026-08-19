@@ -30,7 +30,7 @@ func TestBuildInitialReviewPayloadIncludesEligibleCurrentFilesAndStatuses(t *tes
 		t.Fatalf("statuses = %v", statuses)
 	}
 	if _, ok := statuses[".env"]; ok {
-		t.Fatalf("repository-wide untracked file received tracked status: %v", statuses)
+		t.Fatalf("sensitive untracked path received a payload status: %v", statuses)
 	}
 	if !strings.Contains(result.Payload.Prompt, "Check concurrency.") || !strings.Contains(result.Payload.Prompt, "current supporting content") {
 		t.Fatalf("prompt missing guidance or supporting content:\n%s", result.Payload.Prompt)
@@ -52,6 +52,9 @@ func TestBuildInitialReviewPayloadIncludesEligibleCurrentFilesAndStatuses(t *tes
 	}
 	if strings.Contains(result.Payload.Prompt, "Path: .env") {
 		t.Fatalf("sensitive file was duplicated as supporting context:\n%s", result.Payload.Prompt)
+	}
+	if strings.Contains(result.Payload.Prompt, ".env") || strings.Contains(result.Payload.Prompt, "TOKEN=secret") {
+		t.Fatalf("sensitive untracked path or contents leaked:\n%s", result.Payload.Prompt)
 	}
 }
 
@@ -146,8 +149,8 @@ func TestBuildInitialReviewPayloadSelectedUntrackedUsesSameFilePolicy(t *testing
 	}
 }
 
-func TestUntrackedFilePolicyExactOversizedSensitiveBinaryAndUnstable(t *testing.T) {
-	set := ChangeSet{Mode: ModeDefault, UntrackedPaths: []string{"exact.go", "large.go", ".env", "data.bin", "unstable.go"}}
+func TestUntrackedFilePolicyExactOversizedBinaryAndUnstable(t *testing.T) {
+	set := ChangeSet{Mode: ModeDefault, UntrackedPaths: []string{"exact.go", "large.go", "data.bin", "unstable.go"}}
 	reader := func(path string, limit int) ([]byte, stableFileOutcome) {
 		switch filepath.Base(path) {
 		case "exact.go":
@@ -159,13 +162,13 @@ func TestUntrackedFilePolicyExactOversizedSensitiveBinaryAndUnstable(t *testing.
 		case "unstable.go":
 			return nil, stableFileChanged
 		default:
-			t.Fatalf("sensitive file was read: %s", path)
+			t.Fatalf("unexpected file read: %s", path)
 			return nil, stableFileUnavailable
 		}
 	}
 	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: 10000, maxFileBytes: 16}, reader)
 	statuses := payloadStatuses(result.Payload.Files)
-	if statuses["exact.go"] != ContextIncluded || statuses["large.go"] != ContextOversized || statuses[".env"] != ContextSensitive || statuses["data.bin"] != ContextBinary || statuses["unstable.go"] != ContextChangedDuringRead {
+	if statuses["exact.go"] != ContextIncluded || statuses["large.go"] != ContextOversized || statuses["data.bin"] != ContextBinary || statuses["unstable.go"] != ContextChangedDuringRead {
 		t.Fatalf("statuses = %v", statuses)
 	}
 	if strings.Contains(result.Payload.Prompt, "a\x00b") || strings.Contains(result.Payload.Prompt, "TOKEN=") {
@@ -239,29 +242,34 @@ func TestUntrackedOptionalBudgetStatusesCannotOverflowMandatoryPathOnlyPayload(t
 	}
 }
 
-func TestSensitiveUntrackedStatusCannotOverflowMandatoryPathOnlyPayload(t *testing.T) {
-	set := ChangeSet{Mode: ModeDefault, UntrackedPaths: []string{".env"}}
-	pathOnly := []FileContext{{Path: ".env", Status: ContextSensitive, Untracked: true, suppressStatus: true}}
-	mandatory := renderInitialReviewPrompt(set, "", pathOnly, 1024)
+func TestPayloadBoundaryOmitsSensitiveUntrackedPaths(t *testing.T) {
 	reads := 0
-	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{
-		maxPayloadBytes: len(mandatory),
+	result := buildInitialReviewPayload("/unused", ChangeSet{
+		Mode: ModeDefault, UntrackedPaths: []string{".env"},
+	}, "", reviewPayloadLimits{
+		maxPayloadBytes: 4096,
 		maxFileBytes:    1024,
 	}, func(string, int) ([]byte, stableFileOutcome) {
 		reads++
 		return []byte("TOKEN=must-not-be-read"), stableFileOK
 	})
-	if result.Failure != PayloadFailureNone || result.Payload.Prompt != mandatory {
-		t.Fatalf("sensitive status expansion overflowed mandatory payload: failure=%q\nprompt:\n%s", result.Failure, result.Payload.Prompt)
+	if result.Failure != PayloadFailureNoChanges || result.Payload.Prompt != "" {
+		t.Fatalf("sensitive-only unsanitized change set = %+v, want no reviewable changes", result)
 	}
 	if reads != 0 {
 		t.Fatalf("sensitive untracked file reads = %d, want 0", reads)
 	}
-	if len(result.Payload.Files) != 1 || result.Payload.Files[0].Status != ContextSensitive || !result.Payload.Files[0].suppressStatus {
-		t.Fatalf("sensitive file disposition = %+v", result.Payload.Files)
-	}
-	if !strings.Contains(result.Payload.Prompt, "- .env") || strings.Contains(result.Payload.Prompt, "TOKEN=") {
-		t.Fatalf("sensitive path was lost or content leaked:\n%s", result.Payload.Prompt)
+
+	mixed := buildInitialReviewPayload("/unused", ChangeSet{
+		Mode: ModeDefault, UntrackedPaths: []string{"safe.go", ".env"},
+	}, "", reviewPayloadLimits{maxPayloadBytes: 4096, maxFileBytes: 1024}, func(path string, _ int) ([]byte, stableFileOutcome) {
+		if filepath.Base(path) == ".env" {
+			t.Fatal("sensitive untracked file was read from mixed change set")
+		}
+		return []byte("package safe\n"), stableFileOK
+	})
+	if mixed.Failure != PayloadFailureNone || strings.Contains(mixed.Payload.Prompt, ".env") || strings.Contains(mixed.Payload.Prompt, "TOKEN=") {
+		t.Fatalf("mixed unsanitized change set leaked sensitive path or contents: %+v", mixed)
 	}
 }
 

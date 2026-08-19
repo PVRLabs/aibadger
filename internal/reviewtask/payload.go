@@ -286,6 +286,7 @@ func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limi
 }
 
 func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, includeTopology bool, maxFilesPerDirectory int, includeReviewInstructions bool, readFile stableFileReader) InitialReviewResult {
+	set = omitSensitiveUntrackedPaths(set)
 	if len(set.Changes) == 0 && len(set.UntrackedPaths) == 0 {
 		return InitialReviewResult{Failure: PayloadFailureNoChanges}
 	}
@@ -406,6 +407,20 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 	}
 	return InitialReviewResult{Payload: InitialReviewPayload{ChangeSet: set, Guidance: guidance, Files: files, MaxFileBytes: limits.maxFileBytes, Prompt: prompt}}
+}
+
+func omitSensitiveUntrackedPaths(set ChangeSet) ChangeSet {
+	if len(set.UntrackedPaths) == 0 {
+		return set
+	}
+	paths := make([]string, 0, len(set.UntrackedPaths))
+	for _, path := range set.UntrackedPaths {
+		if !promptpolicy.IsSensitivePath(path) {
+			paths = append(paths, path)
+		}
+	}
+	set.UntrackedPaths = paths
+	return set
 }
 
 func suppressFileStatusesToFit(set ChangeSet, guidance string, files []FileContext, limits reviewPayloadLimits, topology string, includeReviewInstructions bool) bool {

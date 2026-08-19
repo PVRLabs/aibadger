@@ -95,6 +95,7 @@
   },
   "repository_untracked": {
     "content": "bounded_complete_text",
+    "sensitive_paths": "omitted",
     "ordering": "review_priority_then_modification_time_then_path",
     "max_paths": 25,
     "omitted_count": true,

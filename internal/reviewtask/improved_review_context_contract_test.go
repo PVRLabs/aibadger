@@ -35,6 +35,7 @@ type improvedReviewContextContract struct {
 	} `json:"selected_paths"`
 	RepositoryUntracked struct {
 		Content           string `json:"content"`
+		SensitivePaths    string `json:"sensitive_paths"`
 		MaxPaths          int    `json:"max_paths"`
 		OmittedCount      bool   `json:"omitted_count"`
 		ExplicitSelection string `json:"explicit_selection"`
@@ -122,6 +123,7 @@ func TestImprovedReviewContextContractFixture(t *testing.T) {
 		t.Fatalf("selected-path policy is incomplete: %+v", contract.SelectedPaths)
 	}
 	if contract.RepositoryUntracked.Content != "bounded_complete_text" ||
+		contract.RepositoryUntracked.SensitivePaths != "omitted" ||
 		contract.RepositoryUntracked.MaxPaths != 25 ||
 		!contract.RepositoryUntracked.OmittedCount ||
 		contract.RepositoryUntracked.ExplicitSelection != "bounded_complete_text" {

@@ -30,9 +30,11 @@ agent understands the conversation; AI Badger understands the repository.
    ```
 
    Summarize the current branch (including detached HEAD when applicable) and
-   each changed path/status entry. If Git is unavailable or the root is not a
-   Git repository, state that the shallow Git metadata is unavailable and
-   continue when the Badger command can do so.
+   each changed path/status entry. Include this shallow Git summary in the same
+   temporary handoff input passed to Badger through `--input`; do not leave it
+   only in command output or agent notes. If Git is unavailable or the root is
+   not a Git repository, state that the shallow Git metadata is unavailable
+   and continue when the Badger command can do so.
 
    Do not run or inspect `git diff`, `git show`, `git log`, `git blame`, or
    commands that read diffs, file contents, commit bodies, or broader history.

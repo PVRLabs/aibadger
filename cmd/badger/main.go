@@ -35,6 +35,12 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "skills" {
+		if err := runSkillsCommand(os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 
 	cfg := loadConfig(os.Args[1:])
 	if cfg.showHelp {
@@ -554,6 +560,7 @@ func printUsage() {
 Usage:
   badger [design|code|review|followup] [options]
   badger badge
+  badger skills install
   badger api <command> --help
   badger version
 
@@ -578,6 +585,9 @@ Stable API:
                             [--mode <default|staged|branch|commit>]
   badger api review-continuation --root <repository>
                                  --input <selector-file>
+
+Skills:
+  badger skills install  Install bundled official skills to ~/.agents/skills/.
 
 Options:
   -h, --help       Print help and exit.

@@ -1,8 +1,13 @@
 # Agent Integrations
 
-AI Badger remains primarily a human-facing tool for preparing repository
-context for an external AI chat. For coding agents that already have repository
-tools, Badger provides a compact topology for initial orientation:
+AI Badger provides two official Agent Skills for common cross-session
+workflows. `badger-handoff` continues work in another AI session, while
+`badger-review` prepares a quick, one-shot independent review. Install both
+offline with `badger skills install`; see the [official skills guide](../skills/README.md)
+for behavior, limitations, privacy boundaries, and installation details.
+
+For coding agents that already have repository tools, Badger also provides a
+compact topology for initial orientation:
 
 ```bash
 badger api topology --root .
@@ -38,10 +43,6 @@ Avoid rerunning it unless repository structure has materially changed. If
 Badger is unavailable or fails, continue with native repository exploration.
 
 The stable [`api topology`](api.md#api-topology) operation is the current
-coding-agent primitive. The `prompt` and `extract` operations produce the two
-prompts used by Badger's human AI-chat workflow; agents with direct repository
-access do not normally need them.
-
-Future installable handoff and external-review skills can build on this API to
-prepare context for another model or conversation. Those workflows are
-separate from topology-based orientation and are not included yet.
+topology-based coding-agent primitive. The official handoff and review skills
+are separate workflow integrations built on Badger's existing prompt and
+review-context APIs.

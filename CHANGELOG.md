@@ -4,6 +4,22 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.4.1] - 2026-08-19
+
+### Highlights
+
+- Deep Review and `review-context` in default working-tree mode now include bounded complete contents of eligible untracked files, instead of listing those paths only.
+- Interactive review warns before copying when the prepared context includes sensitive paths.
+
+### Safety and reliability
+
+- Omit sensitive untracked paths and their contents from review payloads.
+- Publish portable `.sha256` files for release archives so checksum verification does not depend on a `dist/` path prefix.
+
+### Docs
+
+- Linked the official VS Code companion from the README and install, API, and usage guides.
+
 ## [v0.4.0] - 2026-08-11
 
 ### Highlights

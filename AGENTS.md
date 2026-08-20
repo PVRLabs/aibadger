@@ -5,7 +5,10 @@
 Prefer existing repository patterns and keep changes scoped to the request.
 
 Use `repo-map` to locate related repositories only when work crosses repository
-boundaries. For a Homebrew formula update, use `repo-map get homebrew-tap`.
+boundaries. For a Homebrew formula update, edit `Formula/badger.rb` in
+[`homebrew-tap`](https://github.com/PVRLabs/homebrew-tap). Use
+`repo-map get homebrew-tap` when that name is registered; otherwise clone the
+tap. See `docs/releasing.md`.
 
 ## Go and verification
 

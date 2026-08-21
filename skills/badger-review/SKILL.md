@@ -1,6 +1,6 @@
 ---
 name: badger-review
-description: Prepare a quick, independent review of current-session work using the session's intent and AI Badger's authoritative Git and repository context. Use when a coding session needs one standalone review request; use the deeper interactive review workflow for additional context rounds.
+description: Prepare current-session work as an AI Badger review package for an independent AI reviewer. Use when the user explicitly asks to hand off a review to another AI or chat, asks for a Badger review package, or asks to copy review context for external review. Do not use for ordinary code review, bug finding, or requests for the current agent to inspect changes itself.
 ---
 
 # Badger Review
@@ -8,6 +8,17 @@ description: Prepare a quick, independent review of current-session work using t
 Prepare one standalone review package for the current coding session. The
 calling agent understands the conversation; AI Badger understands the
 repository and review Git context.
+
+Do not invoke this skill merely because the user asks to review code, find
+bugs, find serious issues, inspect changes, or assess correctness. In those
+cases, the current agent should perform the review normally with its native
+repository tools. Use this skill only when the requested outcome is a
+portable Badger review package for another AI or reviewer.
+
+Typical triggers include “prepare this for independent review,” “create a
+Badger review package,” or “send these changes to another reviewer.” Requests
+such as “review this code,” “find bugs,” or “check my changes” are ordinary
+reviews and must not invoke this skill.
 
 ## Workflow
 
@@ -33,20 +44,22 @@ repository and review Git context.
    ```bash
    badger api review-context \
      --root <repository> \
-     --input <guidance-file>
+     --input <guidance-file> \
+     --clipboard
    ```
 
    Do not add a second `FILE:`, `PREFIX:`, or `NEAR:` round and do not invoke
    `api review-continuation`.
-7. Return the command's complete stdout as the one-shot portable review
-   package. Preserve stderr for diagnostics and preserve the command's exit
-   status. Do not add an agent-authored review envelope around the output.
+7. On success, report only that the complete one-shot review package is on the
+   clipboard and can be pasted into another AI reviewer. Preserve stderr for
+   diagnostics and preserve the command's exit status. Do not reproduce the
+   package or add an agent-authored review envelope around it.
 
 AI Badger owns repository scanning, topology, authoritative review Git state,
 supporting-file selection, untracked-file policy, privacy exclusions, limits,
-and prompt construction. This skill must not scan or read repository file
-contents, reconstruct review context, use the clipboard, enter the TUI, or
-contact an AI provider.
+prompt construction, and native clipboard delivery. This skill must not scan
+or read repository file contents, reconstruct review context, implement its own
+clipboard integration, enter the TUI, or contact an AI provider.
 
 If the command fails, report its stderr and nonzero result without claiming a
 review package was produced. If a deeper or multi-round review is needed,

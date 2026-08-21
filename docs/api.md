@@ -18,10 +18,13 @@ Input files (`--input`, `--goal-file`) are UTF-8, caller-managed files. Badger
 reads them without modifying or retaining them. Caller-provided paths are
 resolved relative to the current working directory, not the `--root`.
 
-Usable output goes to stdout. Errors and warnings go only to stderr. A nonzero
-exit status means the operation could not produce usable output. A zero exit
-with content on stderr means usable output was produced alongside diagnostics
-(for example, partial extraction with some failed selectors).
+Usable output goes to stdout. Errors and warnings go only to stderr. The
+`prompt` and `review-context` operations also accept `--clipboard`; in that
+mode, Badger copies the complete output using its native clipboard support and
+writes only a short confirmation to stdout. A nonzero exit status means the
+operation could not produce usable output. A zero exit with content on stderr
+means usable output was produced alongside diagnostics (for example, partial
+extraction with some failed selectors).
 
 The API outputs only directly usable AI-facing text. It does not produce JSON,
 structured topology, or extraction metadata. All existing safety rules apply:
@@ -75,7 +78,8 @@ badger api review-context --root <repository> \
   [--mode <default|staged|branch|commit>] [--ref <revision>] \
   [--input <guidance-file>] [--paths-file <paths.json>] \
   [--include-topology] \
-  [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>]
+  [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>] \
+  [--clipboard]
 ```
 
 The default mode reviews staged and unstaged tracked changes and relevant
@@ -101,8 +105,12 @@ generation time, including in staged, branch, and commit modes. Supporting
 content may therefore be newer than the reviewed diff and never changes which
 patch is authoritative.
 
-The operation builds the complete AI-facing review request before writing
-stdout. With `--include-topology`, Badger owns the project scan, source-tree
+The operation builds the complete AI-facing review request before delivery.
+Without `--clipboard`, it writes that request to stdout exactly as usual. With
+`--clipboard`, it copies the request using Badger's native clipboard support
+and writes only a short success message to stdout. Clipboard failure exits
+nonzero and never prints the complete request as a fallback. With
+`--include-topology`, Badger owns the project scan, source-tree
 format, ordering, and shared payload budget; the authoritative diff remains
 mandatory. Without that flag, topology is not inspected or included. It
 exits nonzero without writing stdout for generation failures such as no changes,
@@ -110,18 +118,18 @@ an invalid Git root or ref, Git failure, invalid selections, or mandatory
 overflow. A destination write failure also returns nonzero; as with any stream,
 the destination may already contain a partial prefix when that happens. The
 operation is non-interactive and read-only. It scans project topology only when
-`--include-topology` is supplied. It does not read stdin, access the clipboard,
-open the TUI or a browser, contact providers, or access the network. Normal
-output uses repository-relative paths and does
+`--include-topology` is supplied. It does not read stdin, open the TUI or a
+browser, contact providers, or access the network. It accesses the clipboard
+only when `--clipboard` is supplied. Normal output uses repository-relative paths and does
 not expose the absolute repository root.
 
 Editor integrations can capability-check this operation with `badger api
 --help` and `badger api review-context --help`; the latter advertises
-`--include-topology` when supported. On success, stdout is the complete
-request to copy verbatim; on failure,
-stderr contains the
-`Error: ...` diagnostic and stdout is empty. The command never writes to the
-clipboard or contacts an AI provider.
+`--include-topology` and `--clipboard` when supported. Without `--clipboard`,
+successful stdout is the complete request to copy verbatim. With it, successful
+stdout is only the clipboard confirmation. On failure, stderr contains the
+`Error: ...` diagnostic and stdout is empty. The command never contacts an AI
+provider.
 
 ### `api review-continuation`
 
@@ -197,7 +205,7 @@ disabled with `.badger-disable`, or the repository cannot be scanned.
 Print a complete Prompt 1 (Map) — topology plus task and extraction constraint.
 
 ```bash
-badger api prompt --root <project> --focus <code|design> --input <goal-file>
+badger api prompt --root <project> --focus <code|design> --input <goal-file> [--clipboard]
 ```
 
 `--focus` selects the initial instruction set. Supported values are `code` and
@@ -233,6 +241,11 @@ Add timeout handling to the API client.
 Send the complete stdout payload to the model. Prompt 1 contains topology and
 file metadata, but not source-file contents. Its constraint asks the model to
 return extraction selectors for the context it needs.
+
+Alternatively, pass `--clipboard` to copy the complete prompt using Badger's
+native clipboard support. In that mode stdout contains only a short success
+message. Clipboard failure exits nonzero without printing the prompt as a
+fallback. Other behavior is unchanged.
 
 ### `api extract`
 

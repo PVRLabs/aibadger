@@ -36,21 +36,31 @@ include diffs, file contents, commit contents, or broad history.
 
 ## How the workflows behave
 
-Review is intentionally a quick, one-shot independent review. It uses the
-stable `badger api review-context` operation and returns the complete review
-package. For another focused repository-context round, use interactive Badger
+Review is intentionally a quick, one-shot independent review. It is not a
+replacement for the coding agent's normal review capability: use it only when
+the requested outcome is a package for an independent or external reviewer.
+It uses the stable `badger api review-context --clipboard` operation. Badger copies the
+complete review package using its native clipboard support, while the calling
+agent reports only a short confirmation. Paste the package into another AI
+reviewer. For another focused repository-context round, use interactive Badger
 Review/TUI instead of expecting the skill to orchestrate additional `FILE`,
 `PREFIX`, or `NEAR` requests.
 
-Handoff reuses the stable `badger api prompt --focus design` operation. The
-result gives the receiving model repository topology and Badger's existing
-`FILE`, `PREFIX`, and `NEAR` selection protocol for requesting focused context.
-Handoff is a Design task whose input summarizes an existing session; there is
-no separate handoff API or command.
+Handoff is specifically for moving work to another AI session; it is not an
+ordinary summary or status-report workflow. It reuses the stable
+`badger api prompt --focus design --clipboard`
+operation. Badger copies the complete package using its native clipboard
+support, while the calling agent reports only a short confirmation. After it is
+pasted into the receiving session, the package gives that model repository
+topology and Badger's existing `FILE`, `PREFIX`, and `NEAR` selection protocol
+for requesting focused context. Handoff is a Design task whose input summarizes
+an existing session; there is no separate handoff API or command.
 
 ## Installation
 
-First install AI Badger and make the `badger` command available. An
+First install an AI Badger release that supports the native `--clipboard` API
+option and make the `badger` command available. No particular release version
+is specified here. An
 independently installed skill requires that command and does not install it or
 access the network automatically. See [the installation guide](../docs/install.md).
 

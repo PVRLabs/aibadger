@@ -63,7 +63,7 @@ Failures:
 `)
 	case "prompt":
 		fmt.Fprint(w, `Usage:
-  badger api prompt --root <project> --focus <code|design> --input <goal-file>
+  badger api prompt --root <project> --focus <code|design> --input <goal-file> [--clipboard]
 
 Purpose:
   Produce the complete first-stage Badger prompt for the human AI-chat
@@ -75,19 +75,23 @@ Required arguments:
   --input <file>     UTF-8 file containing the goal or question.
 
 Optional arguments:
+  --clipboard         Copy the complete prompt to the clipboard and write only
+                      a short confirmation to stdout.
   --help, -h         Print this help and exit.
 
 Example:
   badger api prompt --root . --focus code --input goal.txt
 
 Output and side effects:
-  Writes the complete prompt to stdout and diagnostics only to stderr. This
-  command is non-interactive and read-only. It does not use the clipboard,
-  open a browser, access the network, or change Badger settings.
+  Without --clipboard, writes the complete prompt to stdout. With --clipboard,
+  copies it using Badger's native clipboard support and writes only a short
+  confirmation to stdout. Diagnostics go only to stderr. This command is
+  non-interactive and read-only. It does not open a browser, access the
+  network, or change Badger settings.
 
 Failures:
   Exits nonzero for invalid arguments, root or input errors, an empty goal,
-  a disabled project, or a repository scan failure.
+  a disabled project, a repository scan failure, or clipboard delivery failure.
 `)
 	case "extract":
 		fmt.Fprint(w, `Usage:
@@ -121,7 +125,7 @@ Failures:
 `)
 	case "review-context":
 		fmt.Fprint(w, `Usage:
-  badger api review-context --root <repository> [--mode <default|staged|branch|commit>] [--ref <revision>] [--input <guidance-file>] [--paths-file <paths.json>] [--include-topology] [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>]
+  badger api review-context --root <repository> [--mode <default|staged|branch|commit>] [--ref <revision>] [--input <guidance-file>] [--paths-file <paths.json>] [--include-topology] [--max-payload-bytes <bytes>] [--max-file-bytes <bytes>] [--clipboard]
 
 Purpose:
   Produce a complete standalone review request from authoritative Git state.
@@ -141,24 +145,28 @@ Optional arguments:
                         before the review context under the shared byte limit.
   --max-payload-bytes <bytes>  Positive complete-prompt byte limit.
   --max-file-bytes <bytes>     Positive per-file supporting-context limit.
+  --clipboard            Copy the complete request to the clipboard and write
+                         only a short confirmation to stdout.
   --help, -h           Print this help and exit.
 
 Example:
   badger api review-context --root . --mode default --input guidance.txt
 
 Output and side effects:
-  Writes the complete AI-facing review request to stdout. Topology is included
-  only when --include-topology is explicitly supplied.
-  Diagnostics go only to stderr. This command is deterministic for unchanged Git state,
-  non-interactive, and read-only. It does not use stdin, the clipboard, a
-  browser, the TUI, providers, or the network.
+  Without --clipboard, writes the complete AI-facing review request to stdout.
+  With --clipboard, copies it using Badger's native clipboard support and
+  writes only a short confirmation to stdout. Topology is included only when
+  --include-topology is explicitly supplied. Diagnostics go only to stderr.
+  This command is deterministic for unchanged Git state, non-interactive, and
+  read-only. It does not use stdin, a browser, the TUI, providers, or the network.
 
 Failures:
   Exits nonzero without writing stdout for generation failures such as invalid
   arguments or inputs, invalid Git roots or refs, no reviewable changes, Git
   failures, invalid selected paths, or mandatory payload overflow. A stdout
   destination failure also exits nonzero but may have accepted a partial
-  prefix. Normal output uses root-relative paths.
+  prefix. Clipboard failure exits nonzero without printing the complete request
+  as a fallback. Normal output uses root-relative paths.
 `)
 	case "review-continuation":
 		fmt.Fprint(w, `Usage:
@@ -197,9 +205,11 @@ Arguments:
   -h for its required and optional arguments.
 
 Output and side effects:
-  Usable content is written to stdout. Diagnostics are written only to
-  stderr. API commands are non-interactive and read-only; they do not use the
-  clipboard, open a browser, access the network, or change Badger settings.
+  API commands are non-interactive. They normally write usable prompt text to
+  stdout; prompt and review-context can instead copy their complete package
+  with --clipboard and write only a short confirmation. Diagnostics are
+  written only to stderr. API commands are read-only; they do not open a
+  browser, access the network, or change Badger settings.
 
 Failures:
   Invalid arguments, invalid or disabled roots, unreadable inputs, scan

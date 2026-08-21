@@ -1,12 +1,16 @@
 ---
 name: badger-handoff
-description: Continue work in another AI session with the important current-session state and focused AI Badger repository context. Use when handing partially completed coding work to a new session or agent.
+description: Prepare the current coding session for continuation in another AI chat or coding-agent session using AI Badger. Use when the user explicitly wants to hand off, transfer, export, or continue the current work in another AI session. Do not use for ordinary summaries, status reports, or continuing work in the current session.
 ---
 
 # Badger Handoff
 
 Prepare a portable continuation package for another AI session. The calling
 agent understands the conversation; AI Badger understands the repository.
+
+Do not invoke this skill for an ordinary session summary or when the user wants
+to continue working in the current agent. The intended outcome must be
+continuation in another AI session.
 
 ## Workflow
 
@@ -48,19 +52,20 @@ agent understands the conversation; AI Badger understands the repository.
    badger api prompt \
      --root <repository> \
      --focus design \
-     --input <handoff-summary-file>
+     --input <handoff-summary-file> \
+     --clipboard
    ```
 
-   Return the command's complete stdout as the portable handoff plus
-   repository map. Preserve stderr for diagnostics and preserve the command's
-   exit status. Do not add a separate repository scan or reconstruct Badger's
-   prompt.
+   On success, report only that the complete handoff package is on the
+   clipboard and can be pasted into another AI session. Preserve stderr for
+   diagnostics and preserve the command's exit status. Do not reproduce the
+   package, add a separate repository scan, or reconstruct Badger's prompt.
 
 The receiving AI may use Badger's existing `FILE:`, `PREFIX:`, and `NEAR:`
 selector protocol to request focused context in its new session. This remains
 a Design task; the session summary is simply the input to that existing API.
 
 This skill must not scan or read repository file contents, inspect diffs or
-history, use the clipboard, enter the TUI, install Badger, or contact an AI
-provider. If the command fails, report its stderr and nonzero result without
-claiming a handoff was produced.
+history, implement its own clipboard integration, enter the TUI, install
+Badger, or contact an AI provider. If the command fails, report its stderr and
+nonzero result without claiming a handoff was produced.

@@ -229,8 +229,10 @@ badger api review-context --root . --input guidance.txt
 
 Here, complete means directly usable review instructions plus Git and
 supporting-file context; it does not mean the interactive TUI's topology is
-included. The command does not inspect project topology, use the clipboard,
-launch a provider, or access the network. The Git diff is authoritative;
+included. Add `--clipboard` to copy the complete request through Badger's
+native clipboard support and receive only a short stdout confirmation. Without
+that flag, the complete request remains on stdout. The command does not inspect
+project topology, launch a provider, or access the network. The Git diff is authoritative;
 eligible complete changed-file context is optional and bounded by the effective
 file and total limits. If the AI returns only
 `FILE:`, `PREFIX:`, or `NEAR:` selectors for additional context, pass them to

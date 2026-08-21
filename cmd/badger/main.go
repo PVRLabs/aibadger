@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/clipboard"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/startup"
@@ -108,7 +110,10 @@ type apiConfig struct {
 	maxReviewPayloadBytes int
 	maxReviewFileBytes    int
 	includeReviewTopology bool
+	clipboard             bool
 }
+
+var copyAPIOutputToClipboard = clipboard.Copy
 
 func runAPI(args []string, stdout, stderr io.Writer) error {
 	if operation, ok := apiHelpRequest(args); ok {
@@ -123,7 +128,12 @@ func runAPI(args []string, stdout, stderr io.Writer) error {
 
 	cfg := badger.DefaultConfig()
 	cfg.Root = api.root
-	return badger.RunAPI(cfg, badger.APIOptions{
+	apiStdout := stdout
+	var clipboardOutput bytes.Buffer
+	if api.clipboard {
+		apiStdout = &clipboardOutput
+	}
+	err = badger.RunAPI(cfg, badger.APIOptions{
 		Operation:             api.operation,
 		InputPath:             api.inputPath,
 		GoalFilePath:          api.goalFilePath,
@@ -134,9 +144,24 @@ func runAPI(args []string, stdout, stderr io.Writer) error {
 		MaxReviewPayloadBytes: api.maxReviewPayloadBytes,
 		MaxReviewFileBytes:    api.maxReviewFileBytes,
 		IncludeReviewTopology: api.includeReviewTopology,
-		Stdout:                stdout,
+		Stdout:                apiStdout,
 		Stderr:                stderr,
 	})
+	if err != nil || !api.clipboard {
+		return err
+	}
+	if err := copyAPIOutputToClipboard(clipboardOutput.String()); err != nil {
+		return fmt.Errorf("clipboard copy failed: %w", err)
+	}
+	_, err = fmt.Fprintln(stdout, apiClipboardSuccessMessage(api.operation))
+	return err
+}
+
+func apiClipboardSuccessMessage(operation string) string {
+	if operation == "review-context" {
+		return "Review package copied to clipboard."
+	}
+	return "Prompt package copied to clipboard."
 }
 
 func parseAPIConfig(args []string) (apiConfig, error) {
@@ -232,6 +257,8 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 			}
 		case arg == "--include-topology":
 			cfg.includeReviewTopology = true
+		case arg == "--clipboard":
+			cfg.clipboard = true
 		default:
 			return apiConfig{}, fmt.Errorf("unknown api flag: %s", arg)
 		}
@@ -263,6 +290,9 @@ func parseAPIConfig(args []string) (apiConfig, error) {
 			return apiConfig{}, fmt.Errorf("api review-context mode %s does not accept --paths-file", cfg.reviewMode)
 		}
 		return cfg, nil
+	}
+	if cfg.clipboard && cfg.operation != "prompt" {
+		return apiConfig{}, fmt.Errorf("api %s does not accept --clipboard", cfg.operation)
 	}
 	if cfg.operation == "review-continuation" {
 		if cfg.inputPath == "" {
@@ -593,7 +623,8 @@ Options:
   -h, --help       Print help and exit.
   --version        Print version and exit.
 
-API commands are non-interactive and write usable prompt text to stdout.
+API commands are non-interactive. They normally write usable prompt text to
+stdout; supported commands can instead copy it with --clipboard.
 Run badger api --help or add --help to a command for complete options.
 `, badger.Name, buildInfoLine())
 

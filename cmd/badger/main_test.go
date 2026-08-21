@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -420,7 +421,8 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 		"badger api review-context --root <repository>",
 		"[--mode <default|staged|branch|commit>]",
 		"badger api review-continuation --root <repository>",
-		"API commands are non-interactive and write usable prompt text to stdout.",
+		"API commands are non-interactive. They normally write usable prompt text to",
+		"stdout; supported commands can instead copy it with --clipboard.",
 		"Run badger api --help or add --help to a command for complete options.",
 	} {
 		if !strings.Contains(out, want) {
@@ -518,8 +520,8 @@ func TestParseAPIConfig(t *testing.T) {
 		},
 		{
 			name: "design prompt",
-			args: []string{"prompt", "--focus=design", "--root", "/project", "--input", "goal.txt"},
-			want: apiConfig{operation: "prompt", root: "/project", inputPath: "goal.txt", focus: protocol.FocusDesign},
+			args: []string{"prompt", "--focus=design", "--root", "/project", "--input", "goal.txt", "--clipboard"},
+			want: apiConfig{operation: "prompt", root: "/project", inputPath: "goal.txt", focus: protocol.FocusDesign, clipboard: true},
 		},
 		{
 			name: "design extract",
@@ -528,8 +530,8 @@ func TestParseAPIConfig(t *testing.T) {
 		},
 		{
 			name: "default review context",
-			args: []string{"review-context", "--root", "/project", "--input", "guidance.txt", "--paths-file", "paths.json", "--max-payload-bytes", "500000", "--max-file-bytes=64000"},
-			want: apiConfig{operation: "review-context", root: "/project", inputPath: "guidance.txt", reviewMode: "default", pathsFilePath: "paths.json", maxReviewPayloadBytes: 500000, maxReviewFileBytes: 64000},
+			args: []string{"review-context", "--root", "/project", "--input", "guidance.txt", "--paths-file", "paths.json", "--max-payload-bytes", "500000", "--max-file-bytes=64000", "--clipboard"},
+			want: apiConfig{operation: "review-context", root: "/project", inputPath: "guidance.txt", reviewMode: "default", pathsFilePath: "paths.json", maxReviewPayloadBytes: 500000, maxReviewFileBytes: 64000, clipboard: true},
 		},
 		{
 			name: "topology-aware review context",
@@ -608,6 +610,8 @@ func TestParseAPIConfig(t *testing.T) {
 		{name: "continuation rejects mode", args: []string{"review-continuation", "--root", "/project", "--input", "selectors.txt", "--mode", "default"}, wantErr: "api review-continuation accepts only --root, --input, --max-payload-bytes, and --max-file-bytes"},
 		{name: "continuation rejects topology", args: []string{"review-continuation", "--root", "/project", "--input", "selectors.txt", "--include-topology"}, wantErr: "api review-continuation accepts only --root, --input, --max-payload-bytes, and --max-file-bytes"},
 		{name: "scan rejects review topology", args: []string{"scan", "--root", "/project", "--include-topology"}, wantErr: "api scan does not accept review-context options"},
+		{name: "topology rejects clipboard", args: []string{"topology", "--root", "/project", "--clipboard"}, wantErr: "api topology does not accept --clipboard"},
+		{name: "extract rejects clipboard", args: []string{"extract", "--root", "/project", "--input", "selectors.txt", "--goal-file", "goal.txt", "--clipboard"}, wantErr: "api extract does not accept --clipboard"},
 	}
 
 	for _, tt := range tests {
@@ -659,7 +663,7 @@ func TestRunAPIHelp(t *testing.T) {
 		{
 			name: "prompt help",
 			args: []string{"prompt", "--help"},
-			want: []string{"--focus <code|design>", "--input <goal-file>", "first-stage", "Example:", "Failures:"},
+			want: []string{"--focus <code|design>", "--input <goal-file>", "--clipboard", "first-stage", "Example:", "Failures:"},
 		},
 		{
 			name: "extract help",
@@ -669,7 +673,7 @@ func TestRunAPIHelp(t *testing.T) {
 		{
 			name: "review context help",
 			args: []string{"review-context", "--help"},
-			want: []string{"--mode <default|staged|branch|commit>", "--paths-file <paths.json>", "--include-topology", "standalone review request", "Project topology", "stdout", "destination failure", "partial", "read-only"},
+			want: []string{"--mode <default|staged|branch|commit>", "--paths-file <paths.json>", "--include-topology", "--clipboard", "standalone review request", "Project topology", "stdout", "destination failure", "partial", "read-only"},
 		},
 	}
 
@@ -708,5 +712,80 @@ func TestRunAPIGoalUsesInputFile(t *testing.T) {
 	}
 	if diagnostics.Len() != 0 {
 		t.Fatalf("runAPI() diagnostics = %q, want empty", diagnostics.String())
+	}
+}
+
+func TestRunAPIClipboardDelivery(t *testing.T) {
+	originalCopy := copyAPIOutputToClipboard
+	t.Cleanup(func() { copyAPIOutputToClipboard = originalCopy })
+
+	promptRoot := t.TempDir()
+	promptInput := filepath.Join(promptRoot, "goal.txt")
+	writeFile(t, promptRoot, "goal.txt", "continue the current work\n")
+
+	reviewRoot := newGitRepo(t)
+	writeFile(t, reviewRoot, "app.go", "package main\n\nfunc main() {\n\tprintln(\"changed\")\n}\n")
+	reviewInput := filepath.Join(reviewRoot, "guidance.txt")
+	writeFile(t, reviewRoot, "guidance.txt", "review the implementation\n")
+
+	tests := []struct {
+		name         string
+		args         []string
+		confirmation string
+		payloadText  string
+	}{
+		{
+			name:         "prompt",
+			args:         []string{"prompt", "--root", promptRoot, "--focus", "design", "--input", promptInput},
+			confirmation: "Prompt package copied to clipboard.\n",
+			payloadText:  "continue the current work",
+		},
+		{
+			name:         "review context",
+			args:         []string{"review-context", "--root", reviewRoot, "--input", reviewInput},
+			confirmation: "Review package copied to clipboard.\n",
+			payloadText:  "review the implementation",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var normal bytes.Buffer
+			if err := runAPI(tt.args, &normal, io.Discard); err != nil {
+				t.Fatalf("runAPI(no flag) error = %v", err)
+			}
+
+			var copied string
+			copyAPIOutputToClipboard = func(payload string) error {
+				copied = payload
+				return nil
+			}
+			var stdout bytes.Buffer
+			if err := runAPI(append(append([]string(nil), tt.args...), "--clipboard"), &stdout, io.Discard); err != nil {
+				t.Fatalf("runAPI(--clipboard) error = %v", err)
+			}
+			if copied != normal.String() {
+				t.Fatalf("clipboard payload differs from no-flag stdout")
+			}
+			if !strings.Contains(copied, tt.payloadText) {
+				t.Fatalf("clipboard payload missing %q", tt.payloadText)
+			}
+			if got := stdout.String(); got != tt.confirmation {
+				t.Fatalf("stdout = %q, want %q", got, tt.confirmation)
+			}
+			if strings.Contains(stdout.String(), tt.payloadText) {
+				t.Fatalf("stdout leaked complete package: %q", stdout.String())
+			}
+
+			copyAPIOutputToClipboard = func(string) error { return fmt.Errorf("clipboard unavailable") }
+			stdout.Reset()
+			err := runAPI(append(append([]string(nil), tt.args...), "--clipboard"), &stdout, io.Discard)
+			if err == nil || err.Error() != "clipboard copy failed: clipboard unavailable" {
+				t.Fatalf("runAPI(--clipboard) error = %v", err)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("clipboard failure stdout = %q, want empty", stdout.String())
+			}
+		})
 	}
 }

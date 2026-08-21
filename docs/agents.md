@@ -45,4 +45,7 @@ Badger is unavailable or fails, continue with native repository exploration.
 The stable [`api topology`](api.md#api-topology) operation is the current
 topology-based coding-agent primitive. The official handoff and review skills
 are separate workflow integrations built on Badger's existing prompt and
-review-context APIs.
+review-context APIs. They use those APIs' native `--clipboard` option so the
+calling agent reports only a short confirmation; paste the complete clipboard
+package into the receiving AI session. See [Official Agent
+Skills](../skills/README.md) for installation, behavior, and limitations.

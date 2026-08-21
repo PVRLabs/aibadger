@@ -541,6 +541,8 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 	for _, want := range []string{
 		"badger badge",
 		"badger continue",
+		"badger skills install",
+		"~/.agents/skills/",
 		"Launch the TUI with /badge preloaded",
 		"Interactive focuses:",
 		"design      Explore or design changes (default).",

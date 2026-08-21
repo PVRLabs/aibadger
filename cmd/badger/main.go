@@ -40,6 +40,12 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "skills" {
+		if err := runSkillsCommand(os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 
 	cfg := loadConfig(os.Args[1:])
 	if cfg.showHelp {
@@ -644,6 +650,7 @@ Usage:
   badger [design|code|review|followup] [options]
   badger continue
   badger badge
+  badger skills install
   badger api <command> --help
   badger version
 
@@ -659,6 +666,9 @@ Workspace handoff:
   badger continue reads one explicit, ephemeral session handoff. The file
   supports mode: review, mode: design, or mode: handoff and accepts no flags
   or arguments. See docs/usage.md for the format and mode behavior.
+
+Agent Skills:
+  badger skills install installs bundled official skills to ~/.agents/skills/.
 
 Review options:
   badger review [--staged | --branch <ref> | --commit <sha>]

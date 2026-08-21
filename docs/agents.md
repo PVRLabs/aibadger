@@ -42,6 +42,17 @@ coding-agent primitive. The `prompt` and `extract` operations produce the two
 prompts used by Badger's human AI-chat workflow; agents with direct repository
 access do not normally need them.
 
-Future installable handoff and external-review skills can build on this API to
-prepare context for another model or conversation. Those workflows are
-separate from topology-based orientation and are not included yet.
+For session transfer or an independent review, install Badger's two official
+producers with:
+
+```bash
+badger skills install
+```
+
+This offline command writes `handoff` and `badger-code-review` to
+`~/.agents/skills/` and preserves unrelated Skills and files. The producers
+write only compact conversation/session context to `.badger-handoff`; they do
+not inspect repositories, collect Git state, invoke Badger, or use a
+clipboard. After a Skill reports success, run `badger continue` in a separate
+terminal from the written file's directory. Badger independently collects
+repository context for `review` and `handoff` modes.

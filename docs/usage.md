@@ -105,6 +105,28 @@ The handoff file is ephemeral and may contain sensitive conversation context.
 Do not commit it. Badger removes a valid file before starting the workflow;
 invalid files are reported and left in place so they can be corrected.
 
+## Install the official Agent Skills
+
+Badger bundles two small offline Agent Skills that produce the handoff file:
+
+- `handoff` transfers a broad coding, debugging, planning, or architecture
+  session. It normally writes `mode: handoff`, or `mode: design` when the
+  conversation is reasoning-only and current worktree state is irrelevant.
+- `badger-code-review` prepares compact guidance for an independent Badger
+  review and writes `mode: review`.
+
+Install or update both definitions with the released Badger binary:
+
+```bash
+badger skills install
+```
+
+Installation is offline and writes only to `~/.agents/skills/`. Existing
+unrelated Skills and files are preserved. After using either installed Skill,
+open a separate terminal in the directory where it wrote `.badger-handoff` and
+run `badger continue`. Badger validates and removes an accepted handoff before
+starting the selected workflow.
+
 ## Explore a project with no initial goal
 
 Run `badger` without arguments to start in Design focus. Leave the editor empty

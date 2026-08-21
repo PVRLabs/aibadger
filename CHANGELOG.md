@@ -4,6 +4,8 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.5.0] - 2026-08-21
+
 ### Highlights
 
 - Added the official `handoff` and `badger-review` Agent Skills for continuing

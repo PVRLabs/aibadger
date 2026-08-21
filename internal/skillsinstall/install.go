@@ -15,7 +15,7 @@ const (
 	installFileMode = 0o600
 )
 
-var officialSkillOrder = []string{"handoff", "badger-code-review"}
+var officialSkillOrder = []string{"handoff", "badger-review"}
 
 // Install atomically installs the supplied official definitions below
 // skillsRoot. It does not inspect or remove unrelated files.

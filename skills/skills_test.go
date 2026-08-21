@@ -9,7 +9,7 @@ import (
 
 func TestDefinitionsAreCanonicalAndDeterministic(t *testing.T) {
 	defs := Definitions()
-	wantNames := []string{"handoff", "badger-code-review"}
+	wantNames := []string{"handoff", "badger-review"}
 	if len(defs) != len(wantNames) {
 		t.Fatalf("Definitions() length = %d, want %d", len(defs), len(wantNames))
 	}

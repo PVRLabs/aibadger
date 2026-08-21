@@ -22,7 +22,7 @@ func TestRunSkillsCommandInstallsIntoResolvedHome(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
-	for _, name := range []string{"handoff", "badger-code-review"} {
+	for _, name := range []string{"handoff", "badger-review"} {
 		path := filepath.Join(home, ".agents", "skills", name, "SKILL.md")
 		if _, err := os.Stat(path); err != nil {
 			t.Fatal(err)
@@ -31,12 +31,22 @@ func TestRunSkillsCommandInstallsIntoResolvedHome(t *testing.T) {
 			t.Fatalf("stdout = %q, want %s", stdout.String(), path)
 		}
 	}
+	for _, want := range []string{
+		"Badger Skills are ready.",
+		"handoff        Transfer the current session to Badger",
+		"badger-review  Prepare recent work for an independent Badger review",
+		"The Skill will tell you where to run `badger continue`.",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
 }
 
 func TestRunSkillsCommandHelp(t *testing.T) {
 	for _, test := range []struct{ args, want []string }{
 		{args: []string{"--help"}, want: []string{"badger skills install", "command details"}},
-		{args: []string{"install", "--help"}, want: []string{"~/.agents/skills/", "handoff", "badger-code-review", "no network"}},
+		{args: []string{"install", "--help"}, want: []string{"~/.agents/skills/", "handoff", "badger-review", "no network"}},
 	} {
 		var stdout, stderr bytes.Buffer
 		if err := runSkillsCommand(test.args, &stdout, &stderr); err != nil {

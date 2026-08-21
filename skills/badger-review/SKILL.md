@@ -1,6 +1,6 @@
 ---
-name: badger-code-review
-description: Prepare current-session guidance for an independent AI Badger code review. Use only for a Badger-specific review of recent work, not generic review or session continuation.
+name: badger-review
+description: Prepare current-session guidance for an independent AI Badger review of recent repository work. Use only when the user wants a Badger review, not for generic review requests or session continuation.
 ---
 
 # Badger Code Review

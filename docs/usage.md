@@ -112,7 +112,7 @@ Badger bundles two small offline Agent Skills that produce the handoff file:
 - `handoff` transfers a broad coding, debugging, planning, or architecture
   session. It normally writes `mode: handoff`, or `mode: design` when the
   conversation is reasoning-only and current worktree state is irrelevant.
-- `badger-code-review` prepares compact guidance for an independent Badger
+- `badger-review` prepares compact guidance for an independent Badger
   review and writes `mode: review`.
 
 Install or update both definitions with the released Badger binary:

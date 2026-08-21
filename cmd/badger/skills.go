@@ -48,6 +48,9 @@ func runSkillsCommand(args []string, stdout, stderr io.Writer) error {
 	if err != nil && !diagnostics.Wrote {
 		return reportSkillsCommandError(stderr, err)
 	}
+	if err == nil {
+		printSkillsNextSteps(stdout)
+	}
 	return err
 }
 
@@ -78,5 +81,9 @@ func printSkillsHelp(w io.Writer) {
 }
 
 func printSkillsInstallHelp(w io.Writer) {
-	fmt.Fprint(w, "Usage:\n  badger skills install\n\nPurpose:\n  Install or update all bundled official Agent Skills from this binary.\n\nDestination:\n  ~/.agents/skills/\n\nThe command installs handoff and badger-code-review, preserves unrelated\nskills and files, uses no network, and does not inspect a repository.\n")
+	fmt.Fprint(w, "Usage:\n  badger skills install\n\nPurpose:\n  Install or update all bundled official Agent Skills from this binary.\n\nDestination:\n  ~/.agents/skills/\n\nThe command installs handoff and badger-review, preserves unrelated\nskills and files, uses no network, and does not inspect a repository.\n")
+}
+
+func printSkillsNextSteps(w io.Writer) {
+	fmt.Fprint(w, "\nBadger Skills are ready.\n\nIn your coding agent:\n  handoff        Transfer the current session to Badger\n  badger-review  Prepare recent work for an independent Badger review\n\nThe Skill will tell you where to run `badger continue`.\n")
 }

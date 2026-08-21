@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Transfer the current coding, debugging, planning, or architecture session to AI Badger. Use for broad session continuation; use badger-code-review for an independent review.
+description: Transfer the current coding, debugging, planning, or architecture session to AI Badger. Use for broad session continuation; use badger-review for an independent review.
 ---
 
 # Badger Handoff

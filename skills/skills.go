@@ -12,14 +12,14 @@ type Definition struct {
 //go:embed handoff/SKILL.md
 var handoff []byte
 
-//go:embed badger-code-review/SKILL.md
-var badgerCodeReview []byte
+//go:embed badger-review/SKILL.md
+var badgerReview []byte
 
 // Definitions returns the official definitions in deterministic installation
 // order. The returned slice is independent of the package's internal state.
 func Definitions() []Definition {
 	return []Definition{
 		{Name: "handoff", Content: string(handoff)},
-		{Name: "badger-code-review", Content: string(badgerCodeReview)},
+		{Name: "badger-review", Content: string(badgerReview)},
 	}
 }

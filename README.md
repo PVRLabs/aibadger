@@ -77,7 +77,7 @@ Also available with an official [VS Code companion](https://marketplace.visualst
 - `badger design` — explicitly start in Design focus with an empty editor
 - `badger continue` — consume a handoff prepared by another AI coding session
 - `badger skills install` — install or update the bundled `handoff` and
-  `badger-code-review` Skills offline in `~/.agents/skills/`
+  `badger-review` Skills offline in `~/.agents/skills/`
 
 To continue work from another agent, run `badger continue` from the same
 directory where that agent wrote `.badger-handoff`. The file is an ephemeral,

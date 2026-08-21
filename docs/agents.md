@@ -49,7 +49,7 @@ producers with:
 badger skills install
 ```
 
-This offline command writes `handoff` and `badger-code-review` to
+This offline command writes `handoff` and `badger-review` to
 `~/.agents/skills/` and preserves unrelated Skills and files. The producers
 write only compact conversation/session context to `.badger-handoff`; they do
 not inspect repositories, collect Git state, invoke Badger, or use a

@@ -32,7 +32,7 @@ func TestInstallWritesExactDefinitionsInDeterministicOrder(t *testing.T) {
 		}
 	}
 	want := "installed handoff: " + filepath.Join(root, "handoff", "SKILL.md") + "\n" +
-		"installed badger-code-review: " + filepath.Join(root, "badger-code-review", "SKILL.md") + "\n"
+		"installed badger-review: " + filepath.Join(root, "badger-review", "SKILL.md") + "\n"
 	if stdout.String() != want {
 		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
 	}
@@ -61,7 +61,7 @@ func TestInstallUpdatesAndPreservesUnrelatedContent(t *testing.T) {
 	if err := Install(root, skills.Definitions(), &stdout, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(stdout.String(), "updated handoff: ") || !strings.Contains(stdout.String(), "updated badger-code-review: ") {
+	if !strings.HasPrefix(stdout.String(), "updated handoff: ") || !strings.Contains(stdout.String(), "updated badger-review: ") {
 		t.Fatalf("stdout = %q, want deterministic updated reports", stdout.String())
 	}
 	assertFileContents(t, other, "keep\n")

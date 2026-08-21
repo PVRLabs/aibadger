@@ -4,6 +4,16 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+### Highlights
+
+- Added the official `handoff` and `badger-review` Agent Skills for continuing
+  active sessions and requesting independent reviews with Badger.
+
+### Installation
+
+- Added offline Skill installation through `badger skills install` and public
+  installation through the skills.sh ecosystem.
+
 ## [v0.4.1] - 2026-08-19
 
 ### Highlights

@@ -95,6 +95,26 @@ work without the CLI; Ask and Deep Review need a local `badger` on `PATH`.
 
 Source and issues: [PVRLabs/aibadger-vscode](https://github.com/PVRLabs/aibadger-vscode).
 
+## Agent Skills
+
+Badger provides the official `handoff` and `badger-review` Agent Skills. Install
+both through the [skills.sh](https://skills.sh/PVRLabs/aibadger) ecosystem:
+
+```bash
+npx skills add PVRLabs/aibadger
+```
+
+If the Badger binary is already installed, you can instead install its bundled
+copies without network access:
+
+```bash
+badger skills install
+```
+
+Both methods install the Skill definitions. They do not install the `badger`
+CLI itself. To complete the workflow, the CLI must be installed separately and
+available on `PATH`.
+
 ## Verify
 
 Check the binary version:

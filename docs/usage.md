@@ -115,16 +115,25 @@ Badger bundles two small offline Agent Skills that produce the handoff file:
 - `badger-review` prepares compact guidance for an independent Badger
   review and writes `mode: review`.
 
-Install or update both definitions with the released Badger binary:
+Install both through the [skills.sh](https://skills.sh/PVRLabs/aibadger)
+ecosystem:
+
+```bash
+npx skills add PVRLabs/aibadger
+```
+
+Or install or update the copies bundled with the released Badger binary:
 
 ```bash
 badger skills install
 ```
 
-Installation is offline and writes only to `~/.agents/skills/`. Existing
-unrelated Skills and files are preserved. After using either installed Skill,
-open a separate terminal in the directory where it wrote `.badger-handoff` and
-run `badger continue`. Badger validates and removes an accepted handoff before
+The bundled installation is offline and writes only to `~/.agents/skills/`.
+Existing unrelated Skills and files are preserved. Neither installation method
+installs the `badger` CLI. To complete the workflow, the CLI must be installed
+separately and available on `PATH`. After using either installed Skill, open a
+separate terminal in the directory where it wrote `.badger-handoff` and run
+`badger continue`. Badger validates and removes an accepted handoff before
 starting the selected workflow.
 
 ## Explore a project with no initial goal
@@ -175,7 +184,7 @@ index abc..def 100644
 +    }
 ```
 
-Press Enter. Then follow Steps 2-5 above.
+Press Enter. Then follow Steps 2-4 above.
 
 ## Example Tasks
 

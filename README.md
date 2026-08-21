@@ -10,6 +10,7 @@ Get **precise, token-efficient context** on demand without uploading your entire
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8.svg)](go.mod)
 [![Homebrew](https://img.shields.io/badge/Homebrew-available-brightgreen)](https://github.com/PVRLabs/homebrew-tap)
+[![skills.sh](https://skills.sh/b/PVRLabs/aibadger)](https://skills.sh/PVRLabs/aibadger)
 
 **No cloud • No API keys • No telemetry • Fully local**
 
@@ -62,6 +63,32 @@ See [docs/install.md](docs/install.md) for Windows, source builds, and more.
 
 Also available with an official [VS Code companion](https://marketplace.visualstudio.com/items?itemName=pvrlabs.ai-badger).
 
+## Agent Skills
+
+Badger provides two Agent Skills for moving an active AI coding session into
+Badger:
+
+- `handoff` transfers coding, debugging, planning, or architecture work.
+- `badger-review` requests an independent Badger review of recent repository
+  work.
+
+Install both through the [skills.sh](https://skills.sh/PVRLabs/aibadger)
+ecosystem:
+
+```bash
+npx skills add PVRLabs/aibadger
+```
+
+Or install the copies bundled with Badger, entirely offline:
+
+```bash
+badger skills install
+```
+
+To complete the workflow, the `badger` CLI must be installed and available on
+`PATH`. See [docs/usage.md](docs/usage.md#install-the-official-agent-skills) for
+the workflow.
+
 ## Quick Start
 
 1. Run `badger` in your project root. Interactive sessions start in Design focus.
@@ -84,11 +111,6 @@ directory where that agent wrote `.badger-handoff`. The file is an ephemeral,
 conversation-only handoff; do not commit it or include diffs, Git status, or
 repository files in its body. See [docs/usage.md](docs/usage.md) for the three
 supported modes and the exact format.
-
-To install the two official producers, run `badger skills install`. The command
-uses no network, preserves unrelated files under `~/.agents/skills/`, and does
-not inspect a repository. The installed Skill writes `.badger-handoff`; use
-`badger continue` in a separate terminal to consume it.
 
 For editor integrations and scripts, the stable `badger api review-context`
 operation generates a standalone, topology-free review request from one Git

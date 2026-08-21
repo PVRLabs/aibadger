@@ -545,7 +545,7 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 		"Interactive focuses:",
 		"design      Explore or design changes (default).",
 		"review      Review Git changes with optional supporting context.",
-		"continue    Consume an explicit workspace handoff file.",
+		"continue    Consume .badger-handoff from the invocation directory.",
 		"badger review [--staged | --branch <ref> | --commit <sha>]",
 		"[extra guidance]",
 		"badger api <command> --help",

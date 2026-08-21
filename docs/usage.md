@@ -68,6 +68,43 @@ The AI then reports findings, risks, or a clear no-issues result.
 > [!NOTE]
 > Most prompts can be copied directly. When Prompt 2 is unusually large (≈128 KB or more), Badger shows a delivery menu with clipboard, temp-file, and manual-copy options. Clipboard is recommended. Saving to a temp file is available when you prefer to attach the file rather than paste it.
 
+## Continue from another AI coding session
+
+An external coding agent can leave a short session summary for Badger in a
+workspace-local `.badger-handoff` file. From a separate terminal, invoke
+`badger continue` in that same directory:
+
+```bash
+cd '/path/to/your-project'
+badger continue
+```
+
+The file is consumed only by this explicit command. Its body is conversation
+or session context, not a repository snapshot. Keep diffs, Git status,
+repository topology, source files, and untracked-file contents out of the
+body; Badger collects current repository context itself when the selected mode
+requires it.
+
+The small text format is:
+
+```text
+BADGER-HANDOFF-V1
+mode: handoff
+
+I finished the parser and focused tests. Please review the remaining edge cases.
+```
+
+Use `mode: review` when Badger should independently review the current Git
+worktree, `mode: design` for reasoning where current changes are not inherently
+part of the request, or `mode: handoff` to continue active repository work with
+the current Git/worktree context. Design and Handoff seed the body as literal
+initial goal text, so a body beginning with a slash command is not dispatched
+on the first submission.
+
+The handoff file is ephemeral and may contain sensitive conversation context.
+Do not commit it. Badger removes a valid file before starting the workflow;
+invalid files are reported and left in place so they can be corrected.
+
 ## Explore a project with no initial goal
 
 Run `badger` without arguments to start in Design focus. Leave the editor empty

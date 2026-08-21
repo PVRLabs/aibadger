@@ -652,8 +652,13 @@ Interactive focuses:
   code        Prepare context for implementation work.
   review      Review Git changes with optional supporting context.
   followup    Continue an existing AI conversation.
-  continue    Consume an explicit workspace handoff file.
+  continue    Consume .badger-handoff from the invocation directory.
   badge       Launch the TUI with /badge preloaded.
+
+Workspace handoff:
+  badger continue reads one explicit, ephemeral session handoff. The file
+  supports mode: review, mode: design, or mode: handoff and accepts no flags
+  or arguments. See docs/usage.md for the format and mode behavior.
 
 Review options:
   badger review [--staged | --branch <ref> | --commit <sha>]

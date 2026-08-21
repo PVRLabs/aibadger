@@ -75,6 +75,13 @@ Also available with an official [VS Code companion](https://marketplace.visualst
 - `badger code` — explicitly start in Code focus
 - `badger review` — Git changes and bounded supporting context for immediate findings
 - `badger design` — explicitly start in Design focus with an empty editor
+- `badger continue` — consume a handoff prepared by another AI coding session
+
+To continue work from another agent, run `badger continue` from the same
+directory where that agent wrote `.badger-handoff`. The file is an ephemeral,
+conversation-only handoff; do not commit it or include diffs, Git status, or
+repository files in its body. See [docs/usage.md](docs/usage.md) for the three
+supported modes and the exact format.
 
 For editor integrations and scripts, the stable `badger api review-context`
 operation generates a standalone, topology-free review request from one Git

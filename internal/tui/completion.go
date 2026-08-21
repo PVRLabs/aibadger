@@ -63,9 +63,11 @@ func (m *Model) refreshCompletionCandidate() {
 		m.setCompletionCandidate(candidate, prevCandidate, prevActiveIndex)
 		return
 	}
-	if candidate, ok := m.slashCompletionCandidate(input, cursor); ok {
-		m.setCompletionCandidate(candidate, prevCandidate, prevActiveIndex)
-		return
+	if !m.startupGoalLiteral {
+		if candidate, ok := m.slashCompletionCandidate(input, cursor); ok {
+			m.setCompletionCandidate(candidate, prevCandidate, prevActiveIndex)
+			return
+		}
 	}
 	m.setCompletionCandidate(completionCandidate{}, prevCandidate, prevActiveIndex)
 }

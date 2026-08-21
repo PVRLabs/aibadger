@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/handoff"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/startup"
@@ -21,6 +22,10 @@ type appConfig struct {
 	reviewMode       reviewtask.Mode
 	reviewRef        string
 	reviewExtraFocus string
+	startupGoal      string
+	literalStartup   bool
+	continueCommand  bool
+	handoffContinue  bool
 	showHelp         bool
 	showVersion      bool
 	cpuprofile       string // Profile mode: CPU profile output path
@@ -50,6 +55,24 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", cfg.parseErr)
 		os.Exit(1)
 	}
+	var invocationRoot string
+	if cfg.continueCommand {
+		var err error
+		invocationRoot, err = os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: resolving invocation directory: %v\n", err)
+			os.Exit(1)
+		}
+		content, err := handoff.Consume(invocationRoot)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if err := applyContinueContent(&cfg, content); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	// Profile mode: start CPU profiling if --cpuprofile flag provided
 	var cpuprofile *os.File
 	if profileBuild && cfg.cpuprofile != "" {
@@ -68,6 +91,9 @@ func main() {
 	}
 
 	badgerCfg := badger.DefaultConfig()
+	if invocationRoot != "" {
+		badgerCfg.Root = invocationRoot
+	}
 	badgerCfg.BuildInfo = buildInfoLine()
 	applyInteractiveFocus(&badgerCfg, &cfg)
 	if cfg.showBadge {
@@ -84,6 +110,9 @@ func main() {
 	}
 	if cfg.focus == protocol.FocusFollowup {
 		applyFollowupStartup(&badgerCfg, cfg)
+	}
+	if cfg.handoffContinue {
+		applyHandoffStartup(&badgerCfg, cfg.startupGoal)
 	}
 	if err := badger.Run(badgerCfg); err != nil {
 		fmt.Printf("TUI error: %v\n", err)
@@ -332,6 +361,28 @@ func interactiveFocus(focus protocol.Focus) protocol.Focus {
 	return focus
 }
 
+func applyContinueContent(cfg *appConfig, content handoff.Content) error {
+	cfg.focusExplicit = true
+	switch content.Mode {
+	case handoff.ModeReview:
+		cfg.focus = protocol.FocusReview
+		cfg.reviewMode = reviewtask.ModeDefault
+		cfg.reviewExtraFocus = content.Body
+	case handoff.ModeDesign:
+		cfg.focus = protocol.FocusDesign
+		cfg.startupGoal = content.Body
+		cfg.literalStartup = true
+	case handoff.ModeHandoff:
+		cfg.focus = protocol.FocusDesign
+		cfg.startupGoal = content.Body
+		cfg.literalStartup = true
+		cfg.handoffContinue = true
+	default:
+		return fmt.Errorf("unsupported handoff mode %q", content.Mode)
+	}
+	return nil
+}
+
 func applyInteractiveFocus(cfg *badger.Config, app *appConfig) {
 	app.focus = interactiveFocus(app.focus)
 	cfg.Focus = protocol.NormalizeFocus(app.focus)
@@ -349,6 +400,9 @@ func stripFocusCommand(args []string, cfg *appConfig) []string {
 			continue
 		}
 		switch arg {
+		case "continue":
+			cfg.continueCommand = true
+			return append(append([]string(nil), args[:i]...), args[i+1:]...)
 		case string(protocol.FocusCode), string(protocol.FocusReview), string(protocol.FocusDesign), string(protocol.FocusFollowup):
 			cfg.focus = protocol.Focus(arg)
 			cfg.focusExplicit = true
@@ -363,6 +417,12 @@ func stripFocusCommand(args []string, cfg *appConfig) []string {
 }
 
 func parseArgs(args []string, cfg *appConfig) error {
+	if cfg.continueCommand {
+		if len(args) > 0 {
+			return fmt.Errorf("continue command does not accept flags or arguments")
+		}
+		return nil
+	}
 	if len(args) > 0 && args[0] == "version" {
 		cfg.showVersion = true
 		return nil
@@ -506,7 +566,8 @@ func validateReviewOptions(mode reviewtask.Mode, ref string) error {
 func applyDesignStartup(cfg *badger.Config, app appConfig) {
 	cfg.SkipOnboarding = true
 	cfg.Startup = badger.StartupContext{
-		Goal: "",
+		Goal:        app.startupGoal,
+		LiteralGoal: app.literalStartup,
 		Status: badger.StartupStatus{
 			Text:     "Focus set to Design.",
 			Severity: "success",
@@ -531,6 +592,34 @@ func applyReviewStartup(cfg *badger.Config, app appConfig) error {
 
 type reviewContextBuilder func(string, reviewtask.Options) (startup.Context, error)
 
+func applyHandoffStartup(cfg *badger.Config, body string) {
+	applyHandoffStartupWithBuilder(cfg, body, reviewtask.BuildInteractiveContext)
+}
+
+func applyHandoffStartupWithBuilder(cfg *badger.Config, body string, buildReview reviewContextBuilder) {
+	cfg.SkipOnboarding = true
+	cfg.Startup = badger.StartupContext{
+		Goal:        body,
+		LiteralGoal: true,
+		Status: badger.StartupStatus{
+			Text:     "Handoff loaded. Edit the goal before submitting.",
+			Severity: "success",
+		},
+	}
+	ctx, err := buildReview(cfg.Root, reviewtask.Options{
+		Mode:           reviewtask.ModeDefault,
+		MaxPromptBytes: cfg.MaxTopologyPromptBytes,
+	})
+	if err != nil {
+		cfg.Startup.Status = badger.StartupStatus{
+			Text:     "Handoff loaded, but current Git context could not be prepared. Edit the goal and continue.",
+			Severity: "warning",
+		}
+		return
+	}
+	cfg.Startup.Attachments = ctx.Attachments
+}
+
 func applyReviewStartupWithBuilder(cfg *badger.Config, app appConfig, buildReview reviewContextBuilder) error {
 	ctx, err := buildReview(cfg.Root, reviewtask.Options{
 		Mode:           app.reviewMode,
@@ -553,6 +642,7 @@ func printUsage() {
 
 Usage:
   badger [design|code|review|followup] [options]
+  badger continue
   badger badge
   badger api <command> --help
   badger version
@@ -562,6 +652,7 @@ Interactive focuses:
   code        Prepare context for implementation work.
   review      Review Git changes with optional supporting context.
   followup    Continue an existing AI conversation.
+  continue    Consume an explicit workspace handoff file.
   badge       Launch the TUI with /badge preloaded.
 
 Review options:

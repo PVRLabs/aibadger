@@ -3,7 +3,10 @@ package startup
 // Context groups the launch-time seed data passed from CLI preparation into
 // the TUI and headless runners.
 type Context struct {
-	Goal        string
+	Goal string
+	// LiteralGoal makes the seeded goal bypass slash-command completion and
+	// dispatch for its first submission.
+	LiteralGoal bool
 	Attachments []Attachment
 	Status      Status
 }

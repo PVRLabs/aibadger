@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PVRLabs/aibadger/internal/handoff"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/startup"
@@ -98,6 +99,49 @@ func TestLoadConfigBareFocusIsImplicit(t *testing.T) {
 	}
 	if cfg.focusExplicit {
 		t.Fatal("focusExplicit = true, want false")
+	}
+}
+
+func TestLoadConfigContinueCommand(t *testing.T) {
+	cfg := loadConfig([]string{"continue"})
+	if !cfg.continueCommand {
+		t.Fatal("continueCommand = false, want true")
+	}
+	if cfg.parseErr != nil {
+		t.Fatalf("parseErr = %v, want nil", cfg.parseErr)
+	}
+
+	for _, args := range [][]string{{"continue", "extra"}, {"continue", "--help"}, {"continue", "--staged"}} {
+		cfg := loadConfig(args)
+		if cfg.parseErr == nil || cfg.parseErr.Error() != "continue command does not accept flags or arguments" {
+			t.Fatalf("loadConfig(%v) parseErr = %v, want continue argument rejection", args, cfg.parseErr)
+		}
+	}
+}
+
+func TestApplyContinueContentMapsAllModes(t *testing.T) {
+	tests := []struct {
+		mode            handoff.Mode
+		focus           protocol.Focus
+		reviewExtra     string
+		startupGoal     string
+		literalStartup  bool
+		handoffContinue bool
+	}{
+		{mode: handoff.ModeReview, focus: protocol.FocusReview, reviewExtra: "review body"},
+		{mode: handoff.ModeDesign, focus: protocol.FocusDesign, startupGoal: "design body", literalStartup: true},
+		{mode: handoff.ModeHandoff, focus: protocol.FocusDesign, startupGoal: "handoff body", literalStartup: true, handoffContinue: true},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.mode), func(t *testing.T) {
+			cfg := appConfig{}
+			if err := applyContinueContent(&cfg, handoff.Content{Mode: tt.mode, Body: tt.startupGoal + tt.reviewExtra}); err != nil {
+				t.Fatalf("applyContinueContent() error = %v", err)
+			}
+			if cfg.focus != tt.focus || !cfg.focusExplicit || cfg.reviewExtraFocus != tt.reviewExtra || cfg.startupGoal != tt.startupGoal || cfg.literalStartup != tt.literalStartup || cfg.handoffContinue != tt.handoffContinue {
+				t.Fatalf("config = %+v, want focus=%q reviewExtra=%q startupGoal=%q literal=%t handoff=%t", cfg, tt.focus, tt.reviewExtra, tt.startupGoal, tt.literalStartup, tt.handoffContinue)
+			}
+		})
 	}
 }
 
@@ -217,6 +261,9 @@ func TestApplyDesignStartupInteractive(t *testing.T) {
 	if cfg.Startup.Goal != "" {
 		t.Fatalf("Startup.Goal = %q, want empty", cfg.Startup.Goal)
 	}
+	if cfg.Startup.LiteralGoal {
+		t.Fatal("LiteralGoal = true for ordinary Design startup")
+	}
 	if cfg.Startup.Status.Severity != "success" {
 		t.Fatalf("Startup.Status.Severity = %q, want %q", cfg.Startup.Status.Severity, "success")
 	}
@@ -238,6 +285,19 @@ func TestApplyDesignStartupAlwaysStartsEmpty(t *testing.T) {
 	applyDesignStartup(&cfg, app)
 	if cfg.Startup.Goal != "" {
 		t.Fatalf("Startup.Goal = %q, want empty", cfg.Startup.Goal)
+	}
+}
+
+func TestApplyDesignStartupUsesContinuationGoal(t *testing.T) {
+	cfg := badger.DefaultConfig()
+	app := appConfig{focus: protocol.FocusDesign, startupGoal: "continue this design discussion", literalStartup: true}
+
+	applyDesignStartup(&cfg, app)
+	if cfg.Startup.Goal != app.startupGoal {
+		t.Fatalf("Startup.Goal = %q, want %q", cfg.Startup.Goal, app.startupGoal)
+	}
+	if !cfg.Startup.LiteralGoal {
+		t.Fatal("LiteralGoal = false for Design continuation")
 	}
 }
 
@@ -347,6 +407,82 @@ func TestApplyReviewStartupPresentationUsesPreparedContext(t *testing.T) {
 	}
 }
 
+func TestApplyHandoffStartupUsesBodyAndReviewAttachment(t *testing.T) {
+	cfg := badger.DefaultConfig()
+	cfg.Root = t.TempDir()
+	body := "continue from the other agent"
+	build := func(root string, opts reviewtask.Options) (startup.Context, error) {
+		if root != cfg.Root || opts.Mode != reviewtask.ModeDefault {
+			t.Fatalf("builder inputs = root %q, options %#v", root, opts)
+		}
+		return startup.Context{
+			Attachments: []startup.Attachment{{Type: "review context", Text: "diff", SensitivePaths: []string{".env"}}},
+			Status:      startup.Status{Text: "review status", Severity: "success"},
+		}, nil
+	}
+
+	applyHandoffStartupWithBuilder(&cfg, body, build)
+	if cfg.Startup.Goal != body {
+		t.Fatalf("Startup.Goal = %q, want %q", cfg.Startup.Goal, body)
+	}
+	if !cfg.Startup.LiteralGoal {
+		t.Fatal("LiteralGoal = false, want true for Handoff startup")
+	}
+	if cfg.Startup.Status.Severity != "success" {
+		t.Fatalf("Startup.Status.Severity = %q, want success", cfg.Startup.Status.Severity)
+	}
+	if len(cfg.Startup.Attachments) != 1 || cfg.Startup.Attachments[0].SensitivePaths[0] != ".env" {
+		t.Fatalf("Startup.Attachments = %+v, want review attachment with sensitive metadata", cfg.Startup.Attachments)
+	}
+}
+
+func TestApplyHandoffStartupFallsBackToBodyWithWarning(t *testing.T) {
+	cfg := badger.DefaultConfig()
+	cfg.Root = t.TempDir()
+	body := "keep this accepted session"
+	applyHandoffStartupWithBuilder(&cfg, body, func(string, reviewtask.Options) (startup.Context, error) {
+		return startup.Context{}, os.ErrPermission
+	})
+
+	if cfg.Startup.Goal != body {
+		t.Fatalf("Startup.Goal = %q, want %q", cfg.Startup.Goal, body)
+	}
+	if cfg.Startup.Status.Severity != "warning" {
+		t.Fatalf("Startup.Status.Severity = %q, want warning", cfg.Startup.Status.Severity)
+	}
+	if len(cfg.Startup.Attachments) != 0 {
+		t.Fatalf("Startup.Attachments = %+v, want none", cfg.Startup.Attachments)
+	}
+}
+
+func TestApplyHandoffStartupCleanResultIsSilent(t *testing.T) {
+	cfg := badger.DefaultConfig()
+	cfg.Root = t.TempDir()
+	applyHandoffStartupWithBuilder(&cfg, "body-only continuation", func(string, reviewtask.Options) (startup.Context, error) {
+		return startup.Context{}, nil
+	})
+
+	if cfg.Startup.Status.Severity != "success" {
+		t.Fatalf("Startup.Status.Severity = %q, want success", cfg.Startup.Status.Severity)
+	}
+	if len(cfg.Startup.Attachments) != 0 {
+		t.Fatalf("Startup.Attachments = %+v, want none", cfg.Startup.Attachments)
+	}
+}
+
+func TestApplyHandoffStartupNonGitResultIsSilent(t *testing.T) {
+	cfg := badger.DefaultConfig()
+	cfg.Root = t.TempDir()
+	applyHandoffStartup(&cfg, "continue outside Git")
+
+	if cfg.Startup.Status.Severity != "success" {
+		t.Fatalf("Startup.Status.Severity = %q, want success", cfg.Startup.Status.Severity)
+	}
+	if len(cfg.Startup.Attachments) != 0 {
+		t.Fatalf("Startup.Attachments = %+v, want none for non-Git directory", cfg.Startup.Attachments)
+	}
+}
+
 func newGitRepo(t *testing.T) string {
 	t.Helper()
 
@@ -404,10 +540,12 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 
 	for _, want := range []string{
 		"badger badge",
+		"badger continue",
 		"Launch the TUI with /badge preloaded",
 		"Interactive focuses:",
 		"design      Explore or design changes (default).",
 		"review      Review Git changes with optional supporting context.",
+		"continue    Consume an explicit workspace handoff file.",
 		"badger review [--staged | --branch <ref> | --commit <sha>]",
 		"[extra guidance]",
 		"badger api <command> --help",

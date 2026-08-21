@@ -83,6 +83,7 @@ type Model struct {
 	goalPasteBaseline       string
 	goalPasteBuffer         string
 	goalPasteCapture        bool
+	startupGoalLiteral      bool
 
 	eng                     *engine.Engine
 	session                 *workflow.Session
@@ -242,7 +243,7 @@ func NewModel(root string, cfg Config) Model {
 }
 
 func (m *Model) applyStartupGoal() {
-	if strings.TrimSpace(m.cfg.Startup.Goal) == badgeCommand {
+	if !m.cfg.Startup.LiteralGoal && strings.TrimSpace(m.cfg.Startup.Goal) == badgeCommand {
 		m.state = stateBadgePermissionPrompt
 		m.status = tuiMessage{}
 		m.err = nil
@@ -257,6 +258,7 @@ func (m *Model) applyStartupGoal() {
 	m.state = stateHome
 	m.status = startupMessage(m.cfg.Startup.Status.Severity, m.cfg.Startup.Status.Text)
 	m.err = nil
+	m.startupGoalLiteral = m.cfg.Startup.LiteralGoal
 	m.setGoalInputValue(m.cfg.Startup.Goal)
 	m.setGoalAttachments(startupGoalAttachments(m.cfg.Startup.Attachments))
 	m.resizeGoalEditor()
@@ -599,6 +601,8 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 		return m.submitGoal()
 	}
 	instruction := strings.TrimSpace(m.goalInput.Value())
+	literalGoal := m.startupGoalLiteral
+	m.startupGoalLiteral = false
 	goal := assembleGoalSubmission(instruction, m.goalAttachments)
 	if goal == "" {
 		if protocol.NormalizeFocus(m.cfg.Focus) != protocol.FocusDesign || instruction != "" || len(m.goalAttachments) != 0 {
@@ -606,29 +610,31 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 		}
 		goal = protocol.DefaultExplorationTask
 	}
-	if instruction == m.cfg.ExitCommand {
-		return m, tea.Quit
-	}
-	if instruction == helpCommand {
-		m.state = stateHelp
-		m.goalInput.Blur()
-		m.status = tuiMessage{}
-		return m, nil
-	}
-	if reviewExtraFocus, ok := parseReviewCommand(instruction); ok {
-		return m.handleReviewCommand(reviewExtraFocus)
-	}
-	if instruction == designCommand {
-		return m.handleDesignCommand()
-	}
-	if instruction == codeCommand {
-		return m.handleCodeCommand()
-	}
-	if instruction == followupCommand {
-		return m.handleFollowupCommand()
-	}
-	if instruction == badgeCommand {
-		return m.handleBadgeCommand()
+	if !literalGoal {
+		if instruction == m.cfg.ExitCommand {
+			return m, tea.Quit
+		}
+		if instruction == helpCommand {
+			m.state = stateHelp
+			m.goalInput.Blur()
+			m.status = tuiMessage{}
+			return m, nil
+		}
+		if reviewExtraFocus, ok := parseReviewCommand(instruction); ok {
+			return m.handleReviewCommand(reviewExtraFocus)
+		}
+		if instruction == designCommand {
+			return m.handleDesignCommand()
+		}
+		if instruction == codeCommand {
+			return m.handleCodeCommand()
+		}
+		if instruction == followupCommand {
+			return m.handleFollowupCommand()
+		}
+		if instruction == badgeCommand {
+			return m.handleBadgeCommand()
+		}
 	}
 	m.goal = goal
 	m.status = tuiMessage{}

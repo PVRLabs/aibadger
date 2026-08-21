@@ -255,6 +255,98 @@ func TestNewModelAppliesStartupDesignGoalWithEnoughHeight(t *testing.T) {
 	}
 }
 
+func TestStartupGoalSlashCommandsSubmitLiterallyOnce(t *testing.T) {
+	for _, goal := range []string{
+		"/review this approach from the previous session...",
+		"/design",
+		"/code",
+		"/followup",
+		"/badge",
+		"/help",
+		"/exit",
+	} {
+		t.Run(goal, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Focus = protocol.FocusDesign
+			cfg.SkipOnboarding = true
+			cfg.Startup.Goal = goal
+			cfg.Startup.LiteralGoal = true
+			cfg.Startup.Status = startup.Status{Text: "Handoff loaded.", Severity: "success"}
+
+			m := NewModel("/tmp/project", cfg)
+			if _, ok := m.completionVisible(); ok {
+				t.Fatal("slash completion is visible for a literal startup goal")
+			}
+			next, cmd := m.submitGoal()
+			got := next.(Model)
+			if got.state != stateScanning {
+				t.Fatalf("state = %v, want %v", got.state, stateScanning)
+			}
+			if got.goal != goal {
+				t.Fatalf("goal = %q, want literal startup goal %q", got.goal, goal)
+			}
+			if got.cfg.Focus != protocol.FocusDesign {
+				t.Fatalf("Focus = %q, want %q", got.cfg.Focus, protocol.FocusDesign)
+			}
+			if got.startupGoalLiteral {
+				t.Fatal("startupGoalLiteral remained set after submission")
+			}
+			if cmd == nil {
+				t.Fatal("literal startup goal returned nil scan command")
+			}
+		})
+	}
+}
+
+func TestStartupGoalLiteralRuleDoesNotDisableLaterCommands(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusDesign
+	cfg.SkipOnboarding = true
+	cfg.Startup.Goal = "/design"
+	cfg.Startup.LiteralGoal = true
+	cfg.Startup.Status = startup.Status{Text: "Handoff loaded.", Severity: "success"}
+
+	first, _ := NewModel("/tmp/project", cfg).submitGoal()
+	m := first.(Model)
+	m.state = stateHome
+	m.setGoalInputValue(codeCommand)
+
+	next, cmd := m.submitGoal()
+	got := next.(Model)
+	if got.cfg.Focus != protocol.FocusCode {
+		t.Fatalf("Focus = %q, want later slash command to select %q", got.cfg.Focus, protocol.FocusCode)
+	}
+	if cmd == nil {
+		t.Fatal("later /code command returned nil blink command")
+	}
+}
+
+func TestOrdinaryStartupGoalStillAllowsReplacementSlashCommand(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	cfg.SkipOnboarding = true
+	cfg.Startup.Goal = "Review the prepared changes."
+	cfg.Startup.Status = startup.Status{Text: "Review loaded.", Severity: "success"}
+
+	m := NewModel("/tmp/project", cfg)
+	m.setGoalInputValue(designCommand)
+	if _, ok := m.completionVisible(); !ok {
+		t.Fatal("slash completion is hidden for an ordinary startup goal")
+	}
+
+	next, cmd := m.submitGoal()
+	got := next.(Model)
+	if got.cfg.Focus != protocol.FocusDesign {
+		t.Fatalf("Focus = %q, want replacement command to select %q", got.cfg.Focus, protocol.FocusDesign)
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if cmd == nil {
+		t.Fatal("replacement /design command returned nil blink command")
+	}
+}
+
 func TestNewModelAppliesEmptyDesignStartupStatus(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Focus = protocol.FocusDesign

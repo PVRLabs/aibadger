@@ -22,13 +22,13 @@ func (m Model) viewScanComplete() string {
 	}
 
 	if m.promptDeliveryIsLarge(topologyPromptKind) {
-		return fmt.Sprintf("%s\n\n%s\n\n%s", renderSummary(m.eng.Topology), promptOnePrivacyTextWithPaths(m.cfg.Focus, m.reviewSensitivePaths()), m.viewLargePromptDelivery(topologyPromptKind, m.schemaA))
+		return fmt.Sprintf("%s\n\n%s\n\n%s", renderSummary(m.eng.Topology), promptOnePrivacyTextWithAttachment(m.cfg.Focus, m.reviewSensitivePaths(), m.hasReviewAttachment()), m.viewLargePromptDelivery(topologyPromptKind, m.schemaA))
 	}
 
 	note := fmt.Sprintf(
 		"Ready to copy %s to your clipboard.\n\n%s\nYou will pass this prompt to an AI chat.\n\n%s",
 		renderBold("Prompt 1: Topology"),
-		promptOnePrivacyTextWithPaths(m.cfg.Focus, m.reviewSensitivePaths()),
+		promptOnePrivacyTextWithAttachment(m.cfg.Focus, m.reviewSensitivePaths(), m.hasReviewAttachment()),
 		renderBold(fmt.Sprintf("Copy Prompt 1: Topology to clipboard (payload: %s)? (y/N)", protocol.FormatFileSize(int64(len(m.schemaA))))),
 	)
 	return fmt.Sprintf("%s\n\n%s", renderSummary(m.eng.Topology), note)
@@ -39,7 +39,11 @@ func promptOnePrivacyText(focus protocol.Focus) string {
 }
 
 func promptOnePrivacyTextWithPaths(focus protocol.Focus, sensitivePaths []string) string {
-	if protocol.NormalizeFocus(focus) == protocol.FocusReview {
+	return promptOnePrivacyTextWithAttachment(focus, sensitivePaths, false)
+}
+
+func promptOnePrivacyTextWithAttachment(focus protocol.Focus, sensitivePaths []string, reviewAttachment bool) string {
+	if protocol.NormalizeFocus(focus) == protocol.FocusReview || reviewAttachment {
 		privacy := "Privacy: Includes Git changes and may include eligible current working-tree file contents."
 		if len(sensitivePaths) == 0 {
 			return privacy
@@ -66,6 +70,15 @@ func (m Model) reviewSensitivePaths() []string {
 		}
 	}
 	return nil
+}
+
+func (m Model) hasReviewAttachment() bool {
+	for _, attachment := range m.goalAttachments {
+		if attachment.Type == goalAttachmentReview {
+			return true
+		}
+	}
+	return false
 }
 
 func (m Model) viewContextReady() string {

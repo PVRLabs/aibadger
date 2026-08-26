@@ -108,9 +108,12 @@ repository identity or an instruction.
 The label is bounded to 128 UTF-8 bytes, remains one line, and replaces
 control/newline and marker-framing characters with `_`; an empty or root-like
 label falls back to `repository`. The marker and its separator newline count
-against the existing review payload byte limit. With optional topology, the
-marker comes first, followed by the existing topology and then `[TASK]` in
-their existing relative order.
+against the existing review payload byte limit. Standalone output places the
+task framing first, followed by the marker and repository review context when
+topology is omitted. With optional topology, topology retains its global
+position before the task framing, and the marker still immediately precedes
+repository review context. Interactive review attachments remain marker-first
+because their editable task guidance is kept separate from the attachment.
 
 The same marker applies when prepared review context is attached to interactive
 `/review` or to a `mode: handoff` session. The handoff session text itself is

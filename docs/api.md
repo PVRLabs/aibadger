@@ -69,10 +69,13 @@ project map and will manage its own repository access.
 Print a complete review request from current Git state. “Complete” means the
 output is directly usable without assembling another review-context envelope.
 Topology is omitted unless `--include-topology` is explicitly requested.
-On success, the first line is `[REPOSITORY: <label>]`, where `<label>` is the
-sanitized local repository directory basename. The marker is additive display
-metadata: consumers must treat stdout as opaque and must not require `[TASK]`
-at byte zero or treat the label as authoritative repository identity.
+On success, topology appears first only when `--include-topology` is requested;
+the task framing is then followed by `[REPOSITORY: <label>]`, where `<label>` is
+the sanitized local repository directory basename, before the repository review
+context. Without topology, the task framing is the first section. The marker is
+additive display metadata: consumers must treat stdout as opaque and must not
+require `[TASK]` at byte zero or treat the label as authoritative repository
+identity.
 
 ```bash
 badger api review-context --root <repository> \
@@ -121,10 +124,11 @@ not expose the absolute repository root.
 
 The repository marker, its separator, and the sanitized label count toward the
 same payload byte limit as the existing review framing and context. With
-`--include-topology`, the marker precedes topology and topology retains its
-existing position before `[TASK]`. The basename sanitizer is bounded to 128
-UTF-8 bytes, replaces control/newline and marker-framing characters with `_`,
-and uses `repository` for an empty or root-like basename. No Git remote,
+`--include-topology`, topology retains its existing global position before
+`[TASK]`; the marker follows the task framing and precedes repository review
+context. The basename sanitizer is bounded to 128 UTF-8 bytes, replaces
+control/newline and marker-framing characters with `_`, and uses `repository`
+for an empty or root-like basename. No Git remote,
 branch, organization, parent directory, repository ID, or other metadata is
 used for the label.
 

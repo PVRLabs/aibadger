@@ -564,7 +564,6 @@ func renderReviewPayload(set ChangeSet, guidance string, files []FileContext, ma
 	if len(labels) > 0 {
 		label = labels[0]
 	}
-	out.WriteString(repositoryMarker(label))
 	if topology != "" {
 		out.WriteString(topology)
 		out.WriteByte('\n')
@@ -574,6 +573,7 @@ func renderReviewPayload(set ChangeSet, guidance string, files []FileContext, ma
 		out.WriteString(fmt.Sprintf(reviewInstructions.SchemaAConstraint, buildReviewInstruction(guidance)))
 		out.WriteByte('\n')
 	}
+	out.WriteString(repositoryMarker(label))
 	out.WriteString(renderReviewContext(set, files, maxFileBytes))
 	return out.String()
 }

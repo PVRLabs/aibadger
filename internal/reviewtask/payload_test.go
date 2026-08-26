@@ -57,8 +57,10 @@ func TestBuildInitialReviewPayloadMarksBasenameAndCountsMarkerBytes(t *testing.T
 		t.Fatalf("result failure = %q", result.Failure)
 	}
 	wantMarker := "[REPOSITORY: privacy-safe-repo]\n"
-	if !strings.HasPrefix(result.Payload.Prompt, wantMarker) {
-		t.Fatalf("prompt prefix = %q, want %q", result.Payload.Prompt[:min(len(result.Payload.Prompt), len(wantMarker))], wantMarker)
+	markerIndex := strings.Index(result.Payload.Prompt, wantMarker)
+	taskIndex := strings.Index(result.Payload.Prompt, "[TASK]")
+	if markerIndex <= taskIndex {
+		t.Fatalf("prompt marker/task order = marker:%d task:%d; want task before marker", markerIndex, taskIndex)
 	}
 	if strings.Contains(result.Payload.Prompt, root) || result.Payload.RepositoryLabel != "privacy-safe-repo" {
 		t.Fatalf("payload exposed root or wrong label: %#v", result.Payload)
@@ -67,7 +69,11 @@ func TestBuildInitialReviewPayloadMarksBasenameAndCountsMarkerBytes(t *testing.T
 	files := []FileContext{{Path: "app.go", Status: ContextAddedPatch, suppressStatus: true}}
 	minimum := renderInitialReviewPromptForLabel("privacy-safe-repo", set, "", files, 1024)
 	markerBytes := len(repositoryMarker("privacy-safe-repo"))
-	withoutMarker := strings.TrimPrefix(minimum, repositoryMarker("privacy-safe-repo"))
+	markerOffset := strings.Index(minimum, repositoryMarker("privacy-safe-repo"))
+	if markerOffset < 0 {
+		t.Fatalf("minimum payload omitted repository marker:\n%s", minimum)
+	}
+	withoutMarker := minimum[:markerOffset] + minimum[markerOffset+markerBytes:]
 	if len(minimum) != len(withoutMarker)+markerBytes {
 		t.Fatalf("minimum payload = %d, body = %d, marker = %d; marker was not counted", len(minimum), len(withoutMarker), markerBytes)
 	}
@@ -76,7 +82,7 @@ func TestBuildInitialReviewPayloadMarksBasenameAndCountsMarkerBytes(t *testing.T
 	}
 }
 
-func TestBuildInitialReviewPayloadTopologyKeepsMarkerAndTaskOrder(t *testing.T) {
+func TestBuildInitialReviewPayloadTopologyKeepsGlobalPositionAndMarkerPlacement(t *testing.T) {
 	repo := newGitRepo(t)
 	writeTrackedFile(t, repo, "app.go", "package main\n// changed\n")
 	result, err := BuildInitialReviewPayload(repo, Options{Mode: ModeDefault, IncludeTopology: true})
@@ -87,14 +93,12 @@ func TestBuildInitialReviewPayloadTopologyKeepsMarkerAndTaskOrder(t *testing.T) 
 		t.Fatalf("result failure = %q", result.Failure)
 	}
 	prompt := result.Payload.Prompt
-	if !strings.HasPrefix(prompt, "[REPOSITORY: "+repositoryLabel(repo)+"]\n") {
-		t.Fatalf("prompt does not begin with repository marker:\n%s", prompt)
-	}
 	marker := strings.Index(prompt, "[REPOSITORY:")
 	topology := strings.Index(prompt, "[PROJECT TOPOLOGY]")
 	task := strings.Index(prompt, "[TASK]")
-	if marker != 0 || topology < 0 || task < 0 || !(marker < topology && topology < task) {
-		t.Fatalf("section order marker=%d topology=%d task=%d:\n%s", marker, topology, task, prompt)
+	reviewContext := strings.Index(prompt, "[REVIEW CONTEXT:")
+	if marker < 0 || topology < 0 || task < 0 || reviewContext < 0 || !(topology < task && task < marker && marker < reviewContext) {
+		t.Fatalf("section order topology=%d task=%d marker=%d review_context=%d:\n%s", topology, task, marker, reviewContext, prompt)
 	}
 }
 

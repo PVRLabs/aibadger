@@ -30,8 +30,10 @@ func TestRunAPIReviewContextProducesStablePrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunAPI() error = %v", err)
 	}
-	if !strings.HasPrefix(stdout.String(), "[REPOSITORY: "+filepath.Base(root)+"]\n") {
-		t.Fatalf("stdout does not begin with basename marker:\n%s", stdout.String())
+	marker := "[REPOSITORY: " + filepath.Base(root) + "]\n"
+	markerIndex, taskIndex := strings.Index(stdout.String(), marker), strings.Index(stdout.String(), "[TASK]")
+	if markerIndex <= taskIndex {
+		t.Fatalf("stdout marker/task order = marker:%d task:%d; want task before marker:\n%s", markerIndex, taskIndex, stdout.String())
 	}
 	for _, want := range []string{"Additional focus:\nCheck concurrency", "Diff:\n```diff", "+const changed = true"} {
 		if !strings.Contains(stdout.String(), want) {
@@ -92,8 +94,9 @@ func TestRunAPIReviewContextSequentialRepositoriesUseBasenamesOnly(t *testing.T)
 			t.Fatalf("RunAPI(%s) error = %v", name, err)
 		}
 		want := "[REPOSITORY: " + name + "]\n"
-		if !strings.HasPrefix(stdout.String(), want) {
-			t.Fatalf("%s stdout prefix = %q, want %q", name, stdout.String()[:min(len(stdout.String()), len(want))], want)
+		markerIndex, taskIndex := strings.Index(stdout.String(), want), strings.Index(stdout.String(), "[TASK]")
+		if markerIndex <= taskIndex {
+			t.Fatalf("%s stdout marker/task order = marker:%d task:%d, want task before marker", name, markerIndex, taskIndex)
 		}
 		if strings.Contains(stdout.String(), parent) {
 			t.Fatalf("%s stdout leaked parent root %q", name, parent)

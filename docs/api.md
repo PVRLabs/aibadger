@@ -156,12 +156,13 @@ it does not repeat the initial diff, changed-file blocks, guidance, or
 topology. Files are read from the current filesystem when this command runs and
 may therefore be newer than the initial review context. Existing extraction
 safety, deduplication, partial-success, and deterministic ordering rules apply.
-The first line is `[REPOSITORY: <label>]`, using the same sanitized local
-repository basename as `review-context`. The marker bytes count against the
-same payload limit; the selector, supplemental-context, and budgeting behavior
-otherwise remain unchanged. Warnings go to stderr. Positive byte-limit options
-override the normal Prompt 2 limits; the call fails without stdout if no usable
-supplemental context fits.
+The payload begins with `[REVIEW CONTINUATION]` framing and places
+`[REPOSITORY: <label>]` immediately before `[CONTEXT]`, using the same
+sanitized local repository basename as `review-context`. The marker bytes count
+against the same payload limit; the selector, supplemental-context, and
+budgeting behavior otherwise remain unchanged. Warnings go to stderr. Positive
+byte-limit options override the normal Prompt 2 limits; the call fails without
+stdout if no usable supplemental context fits.
 
 ### `api topology`
 

@@ -420,13 +420,6 @@ func formatPackageLine(pkg model.Package) string {
 
 // GenerateSchemaB builds the context prompt with extracted code.
 func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []ExtractionResult, query string) (string, []ExtractionMetadata) {
-	return f.GenerateSchemaBWithPrefix(t, extractions, query, "")
-}
-
-// GenerateSchemaBWithPrefix builds the context prompt with extracted code and
-// prepends an additive framing prefix. Prefix bytes participate in the Prompt
-// 2 budget while the existing fixed-section and drop behavior remains intact.
-func (f *Formatter) GenerateSchemaBWithPrefix(t *model.ProjectTopology, extractions []ExtractionResult, query, prefix string) (string, []ExtractionMetadata) {
 	var metadata []ExtractionMetadata
 	processed := make([]ExtractionResult, 0, len(extractions))
 
@@ -459,18 +452,10 @@ func (f *Formatter) GenerateSchemaBWithPrefix(t *model.ProjectTopology, extracti
 	// Target is MaxPromptTwoBytes. Fixed prompt sections (topology, task,
 	// instructions) are never dropped; if they alone exceed the target the
 	// final output may exceed it.
-	budgetEnabled := f.MaxPromptTwoBytes > 0
-	maxPromptTwoBytes := f.MaxPromptTwoBytes
-	if budgetEnabled && prefix != "" {
-		maxPromptTwoBytes -= len(prefix)
-		if maxPromptTwoBytes < 0 {
-			maxPromptTwoBytes = 0
-		}
-	}
-	if budgetEnabled {
+	if f.MaxPromptTwoBytes > 0 {
 		for {
 			body := f.buildSchemaBBody(t, processed, metadata, constraint)
-			if len(body) <= maxPromptTwoBytes || len(processed) == 0 {
+			if len(body) <= f.MaxPromptTwoBytes || len(processed) == 0 {
 				break
 			}
 			lastIdx := len(processed) - 1
@@ -480,14 +465,14 @@ func (f *Formatter) GenerateSchemaBWithPrefix(t *model.ProjectTopology, extracti
 	}
 
 	body := f.buildSchemaBBody(t, processed, metadata, constraint)
-	return prefix + body, metadata
+	return body, metadata
 }
 
 // GenerateReviewContinuation renders only supplemental context for an
 // existing review conversation. It intentionally omits topology, task text,
 // changed-file blocks, and the initial diff.
-func (f *Formatter) GenerateReviewContinuation(extractions []ExtractionResult) (string, []ExtractionMetadata) {
-	const framing = "[REVIEW CONTINUATION]\nSupplemental repository context requested for the existing review follows.\nThese files reflect the filesystem at continuation time and may be newer than the initial review context.\nContinue the existing review and report findings, risks, or a clear no-issues result. Do not request more FILE:, PREFIX:, or NEAR: selectors in this response.\n\n[CONTEXT]\n"
+func (f *Formatter) GenerateReviewContinuation(extractions []ExtractionResult, repositoryMarker string) (string, []ExtractionMetadata) {
+	const framing = "[REVIEW CONTINUATION]\nSupplemental repository context requested for the existing review follows.\nThese files reflect the filesystem at continuation time and may be newer than the initial review context.\nContinue the existing review and report findings, risks, or a clear no-issues result. Do not request more FILE:, PREFIX:, or NEAR: selectors in this response.\n\n"
 	processed := make([]ExtractionResult, 0, len(extractions))
 	metadata := make([]ExtractionMetadata, 0, len(extractions))
 	for _, extraction := range extractions {
@@ -503,6 +488,8 @@ func (f *Formatter) GenerateReviewContinuation(extractions []ExtractionResult) (
 	build := func(items []ExtractionResult) string {
 		var sb strings.Builder
 		sb.WriteString(framing)
+		sb.WriteString(repositoryMarker)
+		sb.WriteString("[CONTEXT]\n")
 		for i, extraction := range items {
 			label := "Extracted Span"
 			if strings.HasPrefix(extraction.Content, "Binary file: ") {

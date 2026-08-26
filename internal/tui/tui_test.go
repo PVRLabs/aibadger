@@ -1811,19 +1811,26 @@ func TestImprovedReviewSubmissionUsesPromptOneThenAcceptsOptionalSelectors(t *te
 		t.Fatalf("review continuation = %#v, want successful context", continuation)
 	}
 	wantMarker := reviewtask.RepositoryMarker(repo)
-	if !strings.HasPrefix(continuation.schema, wantMarker) {
-		t.Fatalf("Review Prompt 2 missing repository marker %q:\n%s", wantMarker, continuation.schema)
+	if !strings.HasPrefix(continuation.schema, "[REVIEW CONTINUATION]\n") {
+		t.Fatalf("Review Prompt 2 missing continuation framing:\n%s", continuation.schema)
 	}
 	if strings.Contains(continuation.schema, repo) {
 		t.Fatalf("Review Prompt 2 exposed absolute repository root %q:\n%s", repo, continuation.schema)
 	}
-	for _, want := range []string{"[PROJECT TOPOLOGY]", "[TASK]", "Continue the existing review", "[OUTPUT CONSTRAINT]", "[CONTEXT]", "app.go"} {
+	markerIndex := strings.Index(continuation.schema, wantMarker)
+	contextIndex := strings.Index(continuation.schema, "[CONTEXT]\n")
+	if markerIndex < 0 || contextIndex != markerIndex+len(wantMarker) {
+		t.Fatalf("Review Prompt 2 marker is not immediately before [CONTEXT]:\n%s", continuation.schema)
+	}
+	for _, want := range []string{"[REVIEW CONTINUATION]", "Supplemental repository context requested", "Continue the existing review", "[CONTEXT]", "app.go"} {
 		if !strings.Contains(continuation.schema, want) {
 			t.Fatalf("Review Prompt 2 missing %q:\n%s", want, continuation.schema)
 		}
 	}
-	if strings.Contains(continuation.schema, "[FILE CONTEXT STATUS]") {
-		t.Fatalf("Review Prompt 2 resent initial review context:\n%s", continuation.schema)
+	for _, forbidden := range []string{"[PROJECT TOPOLOGY]", "[TASK]", "[OUTPUT CONSTRAINT]", "[FILE CONTEXT STATUS]"} {
+		if strings.Contains(continuation.schema, forbidden) {
+			t.Fatalf("Review Prompt 2 retained initial Schema B framing %q:\n%s", forbidden, continuation.schema)
+		}
 	}
 	_ = next
 }

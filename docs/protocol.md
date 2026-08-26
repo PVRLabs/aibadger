@@ -82,9 +82,10 @@ selector-only response can be pasted into interactive Review or passed to
 requested file context and compact review framing, so it does not resend the
 initial diff. Files reflect the filesystem at continuation time rather than a
 persisted review snapshot. A generated continuation payload, whether produced
-by interactive Review or `api review-continuation`, begins with the same
-`[REPOSITORY: <label>]` marker as the initial review context; its selector and
-supplemental-context semantics are otherwise unchanged.
+by interactive Review or `api review-continuation`, begins with compact
+`[REVIEW CONTINUATION]` framing and places the same `[REPOSITORY: <label>]`
+marker immediately before `[CONTEXT]`; its selector and supplemental-context
+semantics are otherwise unchanged.
 
 Interactive Review composes generated review context into the normal Prompt 1
 schema, so it includes `[PROJECT TOPOLOGY]` and `[SOURCE TREE]`. The stable
@@ -95,8 +96,10 @@ Prompt 1 are byte-for-byte equivalent.
 
 ### Review-context attachment framing
 
-Every generated repository review-context attachment begins with the display
-marker `[REPOSITORY: <label>]`. The label is only the local repository root's
+Every generated initial repository review-context attachment begins with the
+display marker `[REPOSITORY: <label>]`. Continuation attachments begin with
+`[REVIEW CONTINUATION]` framing and place the marker immediately before
+`[CONTEXT]`. The label is only the local repository root's
 directory basename; it is not derived from Git remotes, branches,
 organizations, parent directories, repository IDs, or other metadata. Duplicate
 basenames are allowed, and the marker is display metadata rather than trusted

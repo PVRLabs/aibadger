@@ -255,17 +255,10 @@ func validateAPIOperation(opts APIOptions) error {
 }
 
 func runReviewContinuationAPI(cfg Config, input string, api APIOptions, stdout, stderr io.Writer) error {
-	marker := reviewtask.RepositoryMarker(cfg.Root)
 	eng := engine.FromTopology(cfg.Root, nil)
 	maxPayload := cfg.MaxPromptTwoBytes
 	if api.MaxReviewPayloadBytes > 0 {
 		maxPayload = api.MaxReviewPayloadBytes
-	}
-	if maxPayload > 0 {
-		maxPayload -= len(marker)
-		if maxPayload < 1 {
-			maxPayload = 1
-		}
 	}
 	maxFile := cfg.MaxContextFileBytes
 	if api.MaxReviewFileBytes > 0 {
@@ -295,7 +288,7 @@ func runReviewContinuationAPI(cfg Config, input string, api APIOptions, stdout, 
 	}
 	printExtractionWarnings(stderr, extractedCount, failed, excluded)
 	printExtractionMetadata(stderr, metadata)
-	if _, err := fmt.Fprint(stdout, marker, prompt); err != nil {
+	if _, err := fmt.Fprint(stdout, prompt); err != nil {
 		return fmt.Errorf("writing review continuation: %w", err)
 	}
 	return nil

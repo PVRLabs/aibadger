@@ -11,7 +11,6 @@ import (
 	"github.com/PVRLabs/aibadger/internal/engine"
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/github"
-	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 	tea "github.com/charmbracelet/bubbletea"
@@ -79,9 +78,7 @@ func contextCmd(session *workflow.Session, goal string, commands []extractor.Com
 
 func reviewContinuationCmd(session *workflow.Session, commands []extractor.Command) tea.Cmd {
 	return func() tea.Msg {
-		const task = "Continue the existing review using the additional unchanged context requested by the AI. Report final findings, risks, or a clear no-issues result."
-		marker := reviewtask.RepositoryMarker(session.Engine.Root)
-		schema, metadata, extractedCount, failedCommands, safetyExclusions, err := session.GenerateContextDetailedWithPrefix(task, commands, marker)
+		schema, metadata, extractedCount, failedCommands, safetyExclusions, err := session.GenerateReviewContinuation(commands)
 		return contextDoneMsg{
 			schema:           schema,
 			metadata:         metadata,

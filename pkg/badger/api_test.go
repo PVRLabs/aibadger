@@ -632,8 +632,14 @@ func TestRunAPIReviewContinuationProducesOnlySupplementalCurrentContext(t *testi
 	if err != nil {
 		t.Fatalf("RunAPI() error = %v", err)
 	}
-	if !strings.HasPrefix(stdout.String(), "[REPOSITORY: "+filepath.Base(root)+"]\n[REVIEW CONTINUATION]\n") {
-		t.Fatalf("continuation stdout does not begin with repository marker:\n%s", stdout.String())
+	if !strings.HasPrefix(stdout.String(), "[REVIEW CONTINUATION]\n") {
+		t.Fatalf("continuation stdout does not begin with compact continuation framing:\n%s", stdout.String())
+	}
+	marker := "[REPOSITORY: " + filepath.Base(root) + "]\n"
+	markerIndex := strings.Index(stdout.String(), marker)
+	contextIndex := strings.Index(stdout.String(), "[CONTEXT]\n")
+	if markerIndex < 0 || contextIndex != markerIndex+len(marker) {
+		t.Fatalf("continuation stdout does not place repository marker immediately before [CONTEXT]:\n%s", stdout.String())
 	}
 	if strings.Contains(stdout.String(), root) {
 		t.Fatalf("continuation stdout leaked absolute root %q", root)
@@ -656,8 +662,8 @@ func TestRunAPIReviewContinuationProducesOnlySupplementalCurrentContext(t *testi
 	}
 
 	// With one selected file, the exact successful output size is also the
-	// exact total budget boundary: the continuation formatter receives the
-	// remaining bytes after the marker.
+	// exact total budget boundary: the continuation formatter accounts for the
+	// repository marker inside the complete output.
 	singleSelector := writeAPITestInput(t, "single-review-selector.txt", "FILE:main.go\n")
 	var baseline bytes.Buffer
 	if err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-continuation", InputPath: singleSelector, Stdout: &baseline, Stderr: &stderr}); err != nil {

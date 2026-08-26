@@ -312,7 +312,8 @@ file and total limits. If the AI returns only
 `FILE:`, `PREFIX:`, or `NEAR:` selectors for additional context, pass them to
 `badger api review-continuation --root . --input selectors.txt`. Findings-only
 responses end the review and do not require continuation. Successful
-continuation output begins with `[REPOSITORY: <label>]`, using the same
+continuation output uses compact `[REVIEW CONTINUATION]` framing and places
+`[REPOSITORY: <label>]` immediately before `[CONTEXT]`, using the same
 sanitized local repository basename as the initial review request; the
 continuation selector and context behavior otherwise remains unchanged.
 

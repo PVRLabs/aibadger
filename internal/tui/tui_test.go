@@ -2347,6 +2347,61 @@ func TestSubmitGoalReviewCommandUsesTrackedAndUntrackedAttachments(t *testing.T)
 	}
 }
 
+func TestInitialReviewPromptContractMatchesCLIStartupAndReviewCommand(t *testing.T) {
+	repo := newReviewRepo(t, "println(\"updated\")")
+	prepared, err := reviewtask.BuildInteractiveContext(repo, reviewtask.Options{Mode: reviewtask.ModeDefault})
+	if err != nil {
+		t.Fatalf("BuildInteractiveContext() error = %v", err)
+	}
+	eng, err := engine.New(repo, 0)
+	if err != nil {
+		t.Fatalf("engine.New() error = %v", err)
+	}
+
+	render := func(t *testing.T, m Model) string {
+		t.Helper()
+		next, cmd := m.submitGoal()
+		got := next.(Model)
+		if cmd == nil || got.state != stateScanning {
+			t.Fatalf("review submission = state %v cmd %v, want scanning with command", got.state, cmd)
+		}
+		next, cmd = got.Update(scanDoneMsg{eng: eng})
+		got = next.(Model)
+		if cmd != nil || got.state != stateScanComplete {
+			t.Fatalf("review serialization = state %v cmd %v err %v", got.state, cmd, got.err)
+		}
+		return got.schemaA
+	}
+
+	cliCfg := DefaultConfig()
+	cliCfg.Focus = protocol.FocusReview
+	cliCfg.Startup = prepared
+	cliCfg.SkipOnboarding = true
+	cliPrompt := render(t, NewModel(repo, cliCfg))
+
+	commandModel := NewModel(repo, DefaultConfig())
+	commandModel.goalInput.SetValue("/review")
+	next, _ := commandModel.submitGoal()
+	commandPrompt := render(t, next.(Model))
+	if commandPrompt != cliPrompt {
+		t.Fatalf("/review and badger review startup produced different final prompts:\n/review:\n%s\nbadger review:\n%s", commandPrompt, cliPrompt)
+	}
+
+	for _, want := range []string{
+		"If the supplied diff, changed-file context, project topology, source tree, and external context are sufficient, output the final review findings.",
+		"If there are no actionable findings, state that clearly.",
+		"If additional unchanged context is genuinely necessary",
+		"output ONLY a machine-readable list",
+		"FILE:<path>",
+		"PREFIX:<path>#<literal prefix from the start of the target line>",
+		"NEAR:<path>#<literal string from a nearby unique line or comment>",
+	} {
+		if strings.Count(cliPrompt, want) != 1 {
+			t.Fatalf("final TUI Review prompt contains %q %d times, want exactly once:\n%s", want, strings.Count(cliPrompt, want), cliPrompt)
+		}
+	}
+}
+
 func TestSubmitGoalDesignCommandSwitchesFocus(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/design")

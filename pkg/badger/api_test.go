@@ -41,8 +41,40 @@ func TestRunAPIReviewContextProducesStablePrompt(t *testing.T) {
 	if strings.Contains(stdout.String(), root) {
 		t.Fatalf("stdout leaked absolute root %q", root)
 	}
+	assertInitialReviewSelectorContract(t, stdout.String())
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunAPIReviewContextTopologyStdoutKeepsSelectorContract(t *testing.T) {
+	root := writeAPIReviewRepo(t)
+	var stdout bytes.Buffer
+	if err := RunAPI(Config{Root: root}, APIOptions{
+		Operation: "review-context", IncludeReviewTopology: true, Stdout: &stdout,
+	}); err != nil {
+		t.Fatalf("RunAPI() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "[PROJECT TOPOLOGY]") {
+		t.Fatalf("topology review-context stdout missing topology:\n%s", stdout.String())
+	}
+	assertInitialReviewSelectorContract(t, stdout.String())
+}
+
+func assertInitialReviewSelectorContract(t *testing.T, output string) {
+	t.Helper()
+	for _, want := range []string{
+		"If the supplied diff, changed-file context, project topology, source tree, and external context are sufficient, output the final review findings.",
+		"If there are no actionable findings, state that clearly.",
+		"If additional unchanged context is genuinely necessary",
+		"output ONLY a machine-readable list",
+		"FILE:<path>",
+		"PREFIX:<path>#<literal prefix from the start of the target line>",
+		"NEAR:<path>#<literal string from a nearby unique line or comment>",
+	} {
+		if strings.Count(output, want) != 1 {
+			t.Fatalf("review-context stdout contains %q %d times, want exactly once:\n%s", want, strings.Count(output, want), output)
+		}
 	}
 }
 
@@ -648,6 +680,9 @@ func TestRunAPIReviewContinuationProducesOnlySupplementalCurrentContext(t *testi
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
 		}
+	}
+	if !strings.Contains(stdout.String(), "Do not request more FILE:, PREFIX:, or NEAR: selectors in this response.") {
+		t.Fatalf("continuation stdout invites or permits another selector round:\n%s", stdout.String())
 	}
 	for _, forbidden := range []string{"[PROJECT TOPOLOGY]", "diff --git"} {
 		if strings.Contains(stdout.String(), forbidden) {

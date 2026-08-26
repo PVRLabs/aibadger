@@ -4,6 +4,8 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.5.1] - 2026-08-26
+
 ### Review integrations
 
 - Added a basename-derived `[REPOSITORY: <label>]` marker to generated

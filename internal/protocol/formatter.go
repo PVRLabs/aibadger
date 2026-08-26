@@ -420,6 +420,13 @@ func formatPackageLine(pkg model.Package) string {
 
 // GenerateSchemaB builds the context prompt with extracted code.
 func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []ExtractionResult, query string) (string, []ExtractionMetadata) {
+	return f.GenerateSchemaBWithPrefix(t, extractions, query, "")
+}
+
+// GenerateSchemaBWithPrefix builds the context prompt with extracted code and
+// prepends an additive framing prefix. Prefix bytes participate in the Prompt
+// 2 budget while the existing fixed-section and drop behavior remains intact.
+func (f *Formatter) GenerateSchemaBWithPrefix(t *model.ProjectTopology, extractions []ExtractionResult, query, prefix string) (string, []ExtractionMetadata) {
 	var metadata []ExtractionMetadata
 	processed := make([]ExtractionResult, 0, len(extractions))
 
@@ -452,10 +459,18 @@ func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []Extr
 	// Target is MaxPromptTwoBytes. Fixed prompt sections (topology, task,
 	// instructions) are never dropped; if they alone exceed the target the
 	// final output may exceed it.
-	if f.MaxPromptTwoBytes > 0 {
+	budgetEnabled := f.MaxPromptTwoBytes > 0
+	maxPromptTwoBytes := f.MaxPromptTwoBytes
+	if budgetEnabled && prefix != "" {
+		maxPromptTwoBytes -= len(prefix)
+		if maxPromptTwoBytes < 0 {
+			maxPromptTwoBytes = 0
+		}
+	}
+	if budgetEnabled {
 		for {
 			body := f.buildSchemaBBody(t, processed, metadata, constraint)
-			if len(body) <= f.MaxPromptTwoBytes || len(processed) == 0 {
+			if len(body) <= maxPromptTwoBytes || len(processed) == 0 {
 				break
 			}
 			lastIdx := len(processed) - 1
@@ -465,7 +480,7 @@ func (f *Formatter) GenerateSchemaB(t *model.ProjectTopology, extractions []Extr
 	}
 
 	body := f.buildSchemaBBody(t, processed, metadata, constraint)
-	return body, metadata
+	return prefix + body, metadata
 }
 
 // GenerateReviewContinuation renders only supplemental context for an

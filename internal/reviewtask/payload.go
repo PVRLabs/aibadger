@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/PVRLabs/aibadger/internal/defaults"
@@ -20,8 +21,62 @@ import (
 const (
 	maxInitialReviewPayloadBytes    = 512 * 1024
 	maxInitialReviewFileBytes       = 64 * 1024
+	maxRepositoryLabelBytes         = 128
 	minimumInteractiveTopologyBytes = 40 * 1024
 )
+
+const repositoryFallbackLabel = "repository"
+
+// repositoryLabel derives display-only metadata from the supplied repository
+// root. It deliberately does not resolve or inspect Git metadata: sequential
+// review payloads must remain attributable by the local directory basename
+// only.
+func repositoryLabel(root string) string {
+	return sanitizeRepositoryLabel(filepath.Base(filepath.Clean(root)))
+}
+
+func sanitizeRepositoryLabel(label string) string {
+	label = strings.ToValidUTF8(label, "_")
+	var sanitized strings.Builder
+	for _, r := range label {
+		switch {
+		case unicode.IsControl(r), r == '\u2028', r == '\u2029', r == '[', r == ']', r == ':':
+			sanitized.WriteByte('_')
+		default:
+			sanitized.WriteRune(r)
+		}
+	}
+	label = truncateUTF8(sanitized.String(), maxRepositoryLabelBytes)
+	if strings.TrimSpace(label) == "" || label == "." || label == ".." || label == "/" || label == "\\" {
+		return repositoryFallbackLabel
+	}
+	return label
+}
+
+func truncateUTF8(value string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(value) <= maxBytes {
+		return value
+	}
+	value = value[:maxBytes]
+	for !utf8.ValidString(value) {
+		value = value[:len(value)-1]
+	}
+	return value
+}
+
+func repositoryMarker(label string) string {
+	return "[REPOSITORY: " + sanitizeRepositoryLabel(label) + "]\n"
+}
+
+// RepositoryMarker returns the display-only marker for a repository root.
+// Callers that add it around another payload must account for its bytes in
+// that payload's limit.
+func RepositoryMarker(root string) string {
+	return repositoryMarker(repositoryLabel(root))
+}
 
 // ContextStatus explains how one changed file is represented in an initial
 // review payload.
@@ -64,6 +119,10 @@ type InitialReviewPayload struct {
 	ChangeSet ChangeSet
 	Guidance  string
 	Files     []FileContext
+	// RepositoryLabel is display metadata derived from the repository root's
+	// basename. It is kept separate from the review context so interactive
+	// rendering can reconstruct its attachment without copying Prompt.
+	RepositoryLabel string
 	// MaxFileBytes is the effective per-file limit used when rendering status
 	// reasons. It keeps interactive delivery byte-for-byte equivalent to the
 	// initial review payload that produced it.
@@ -195,7 +254,7 @@ func maximumInteractivePayloadBudget(maxPromptBytes int) int {
 }
 
 func initialPayloadStartupContext(payload InitialReviewPayload) startup.Context {
-	contextPrompt := renderReviewContext(payload.ChangeSet, payload.Files, payload.MaxFileBytes)
+	contextPrompt := repositoryMarker(payload.RepositoryLabel) + renderReviewContext(payload.ChangeSet, payload.Files, payload.MaxFileBytes)
 	additions, deletions := reviewPatchStats(payload.ChangeSet.Changes)
 	return startup.Context{
 		Goal: buildReviewInstruction(payload.Guidance),
@@ -286,6 +345,7 @@ func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limi
 }
 
 func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, includeTopology bool, maxFilesPerDirectory int, includeReviewInstructions bool, readFile stableFileReader) InitialReviewResult {
+	label := repositoryLabel(root)
 	set = omitSensitiveUntrackedPaths(set)
 	if len(set.Changes) == 0 && len(set.UntrackedPaths) == 0 {
 		return InitialReviewResult{Failure: PayloadFailureNoChanges}
@@ -301,14 +361,14 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		}
 		files = append(files, FileContext{Path: path, Status: status, Untracked: true})
 	}
-	if !suppressFileStatusesToFit(set, guidance, files, limits, "", includeReviewInstructions) {
+	if !suppressFileStatusesToFit(set, guidance, files, limits, "", includeReviewInstructions, label) {
 		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 	}
 	topology := ""
 	if includeTopology {
 		// Reserve the complete mandatory review request before rendering topology.
 		// This guarantees topology can never consume or hide the authoritative diff.
-		mandatory := renderReviewPayload(set, guidance, files, limits.maxFileBytes, "", includeReviewInstructions)
+		mandatory := renderReviewPayload(set, guidance, files, limits.maxFileBytes, "", includeReviewInstructions, label)
 		// renderInitialReviewPrompt inserts one separator newline between the
 		// topology block and the review instruction. Reserve it alongside the
 		// mandatory review payload so an exactly-filled topology remains valid.
@@ -331,7 +391,7 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 	// block. This is the smallest truthful provisional prompt, so it cannot
 	// reject a review merely because a status may disappear after a successful
 	// read.
-	if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)) > limits.maxPayloadBytes {
+	if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, label)) > limits.maxPayloadBytes {
 		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 	}
 
@@ -356,20 +416,20 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 			}
 		}
 
-		if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)) <= limits.maxPayloadBytes {
+		if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, label)) <= limits.maxPayloadBytes {
 			continue
 		}
 		if files[i].Status == ContextIncluded {
 			files[i].Status = ContextBudget
 			files[i].Content = ""
 		}
-		if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)) > limits.maxPayloadBytes {
+		if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, label)) > limits.maxPayloadBytes {
 			files[i].suppressStatus = true
 		}
 		for j := i + 1; j < len(files); j++ {
 			if files[j].Status == contextPending {
 				files[j].Status = ContextBudget
-				if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)) > limits.maxPayloadBytes {
+				if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, label)) > limits.maxPayloadBytes {
 					files[j].suppressStatus = true
 				}
 			}
@@ -383,7 +443,7 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 			files[i].Status = ContextBudget
 		}
 	}
-	prompt := renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)
+	prompt := renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, label)
 	for len(prompt) > limits.maxPayloadBytes {
 		removed := false
 		for i := len(files) - 1; i >= 0; i-- {
@@ -392,7 +452,7 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 			}
 			files[i].Status = ContextBudget
 			files[i].Content = ""
-			if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)) > limits.maxPayloadBytes {
+			if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, label)) > limits.maxPayloadBytes {
 				files[i].suppressStatus = true
 			}
 			removed = true
@@ -401,12 +461,12 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		if !removed {
 			return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 		}
-		prompt = renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions)
+		prompt = renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, label)
 	}
 	if len(prompt) > limits.maxPayloadBytes {
 		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
 	}
-	return InitialReviewResult{Payload: InitialReviewPayload{ChangeSet: set, Guidance: guidance, Files: files, MaxFileBytes: limits.maxFileBytes, Prompt: prompt}}
+	return InitialReviewResult{Payload: InitialReviewPayload{ChangeSet: set, Guidance: guidance, Files: files, RepositoryLabel: label, MaxFileBytes: limits.maxFileBytes, Prompt: prompt}}
 }
 
 func omitSensitiveUntrackedPaths(set ChangeSet) ChangeSet {
@@ -423,8 +483,8 @@ func omitSensitiveUntrackedPaths(set ChangeSet) ChangeSet {
 	return set
 }
 
-func suppressFileStatusesToFit(set ChangeSet, guidance string, files []FileContext, limits reviewPayloadLimits, topology string, includeReviewInstructions bool) bool {
-	renderedBytes := len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions))
+func suppressFileStatusesToFit(set ChangeSet, guidance string, files []FileContext, limits reviewPayloadLimits, topology string, includeReviewInstructions bool, labels ...string) bool {
+	renderedBytes := len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, labels...))
 	if renderedBytes <= limits.maxPayloadBytes {
 		return true
 	}
@@ -490,8 +550,21 @@ func renderInitialReviewPrompt(set ChangeSet, guidance string, files []FileConte
 	return renderReviewPayload(set, guidance, files, maxFileBytes, topology, true)
 }
 
-func renderReviewPayload(set ChangeSet, guidance string, files []FileContext, maxFileBytes int, topology string, includeReviewInstructions bool) string {
+func renderInitialReviewPromptForLabel(label string, set ChangeSet, guidance string, files []FileContext, maxFileBytes int, topologyParts ...string) string {
+	topology := ""
+	if len(topologyParts) > 0 {
+		topology = topologyParts[0]
+	}
+	return renderReviewPayload(set, guidance, files, maxFileBytes, topology, true, label)
+}
+
+func renderReviewPayload(set ChangeSet, guidance string, files []FileContext, maxFileBytes int, topology string, includeReviewInstructions bool, labels ...string) string {
 	var out strings.Builder
+	label := repositoryFallbackLabel
+	if len(labels) > 0 {
+		label = labels[0]
+	}
+	out.WriteString(repositoryMarker(label))
 	if topology != "" {
 		out.WriteString(topology)
 		out.WriteByte('\n')

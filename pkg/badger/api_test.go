@@ -30,6 +30,9 @@ func TestRunAPIReviewContextProducesStablePrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunAPI() error = %v", err)
 	}
+	if !strings.HasPrefix(stdout.String(), "[REPOSITORY: "+filepath.Base(root)+"]\n") {
+		t.Fatalf("stdout does not begin with basename marker:\n%s", stdout.String())
+	}
 	for _, want := range []string{"Additional focus:\nCheck concurrency", "Diff:\n```diff", "+const changed = true"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
@@ -40,6 +43,33 @@ func TestRunAPIReviewContextProducesStablePrompt(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunAPIReviewContextSequentialRepositoriesUseBasenamesOnly(t *testing.T) {
+	parent := t.TempDir()
+	var labels []string
+	for _, name := range []string{"first-review", "second-review"} {
+		root := filepath.Join(parent, name)
+		if err := os.Mkdir(root, 0755); err != nil {
+			t.Fatal(err)
+		}
+		writeAPIReviewRepoAt(t, root)
+		var stdout bytes.Buffer
+		if err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-context", Stdout: &stdout}); err != nil {
+			t.Fatalf("RunAPI(%s) error = %v", name, err)
+		}
+		want := "[REPOSITORY: " + name + "]\n"
+		if !strings.HasPrefix(stdout.String(), want) {
+			t.Fatalf("%s stdout prefix = %q, want %q", name, stdout.String()[:min(len(stdout.String()), len(want))], want)
+		}
+		if strings.Contains(stdout.String(), parent) {
+			t.Fatalf("%s stdout leaked parent root %q", name, parent)
+		}
+		labels = append(labels, want)
+	}
+	if labels[0] == labels[1] {
+		t.Fatalf("sequential repository labels unexpectedly equal: %q", labels)
 	}
 }
 
@@ -602,6 +632,12 @@ func TestRunAPIReviewContinuationProducesOnlySupplementalCurrentContext(t *testi
 	if err != nil {
 		t.Fatalf("RunAPI() error = %v", err)
 	}
+	if !strings.HasPrefix(stdout.String(), "[REPOSITORY: "+filepath.Base(root)+"]\n[REVIEW CONTINUATION]\n") {
+		t.Fatalf("continuation stdout does not begin with repository marker:\n%s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), root) {
+		t.Fatalf("continuation stdout leaked absolute root %q", root)
+	}
 	for _, want := range []string{"[REVIEW CONTINUATION]", "filesystem at continuation time", "continuationState", "--- File: go.mod (Full File) ---"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
@@ -617,6 +653,25 @@ func TestRunAPIReviewContinuationProducesOnlySupplementalCurrentContext(t *testi
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+
+	// With one selected file, the exact successful output size is also the
+	// exact total budget boundary: the continuation formatter receives the
+	// remaining bytes after the marker.
+	singleSelector := writeAPITestInput(t, "single-review-selector.txt", "FILE:main.go\n")
+	var baseline bytes.Buffer
+	if err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-continuation", InputPath: singleSelector, Stdout: &baseline, Stderr: &stderr}); err != nil {
+		t.Fatalf("baseline single-file continuation error = %v", err)
+	}
+	exactBytes := baseline.Len()
+	stdout.Reset()
+	if err := RunAPI(Config{Root: root}, APIOptions{Operation: "review-continuation", InputPath: singleSelector, MaxReviewPayloadBytes: exactBytes, Stdout: &stdout, Stderr: &stderr}); err != nil {
+		t.Fatalf("exact marker-inclusive continuation limit error = %v", err)
+	}
+	stdout.Reset()
+	err = RunAPI(Config{Root: root}, APIOptions{Operation: "review-continuation", InputPath: singleSelector, MaxReviewPayloadBytes: exactBytes - 1, Stdout: &stdout, Stderr: &stderr})
+	if err == nil || !strings.Contains(err.Error(), "leaves no usable supplemental context") || stdout.Len() != 0 {
+		t.Fatalf("one byte below marker-inclusive continuation limit = error %v stdout %q", err, stdout.String())
 	}
 }
 
@@ -1018,6 +1073,12 @@ func writeAPITestProject(t *testing.T) string {
 func writeAPIReviewRepo(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
+	writeAPIReviewRepoAt(t, root)
+	return root
+}
+
+func writeAPIReviewRepoAt(t *testing.T, root string) {
+	t.Helper()
 	runAPIGit(t, root, "init")
 	runAPIGit(t, root, "config", "user.email", "test@example.com")
 	runAPIGit(t, root, "config", "user.name", "Test User")
@@ -1029,7 +1090,6 @@ func writeAPIReviewRepo(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nconst changed = true\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	return root
 }
 
 func runAPIGit(t *testing.T, root string, args ...string) {

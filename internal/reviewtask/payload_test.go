@@ -7,9 +7,96 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
 )
+
+func TestRepositoryLabelUsesSafeBoundedBasename(t *testing.T) {
+	long := strings.Repeat("界", maxRepositoryLabelBytes)
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "normal", input: "/tmp/aibadger", want: "aibadger"},
+		{name: "empty", input: "", want: repositoryFallbackLabel},
+		{name: "root", input: string(filepath.Separator), want: repositoryFallbackLabel},
+		{name: "dot", input: ".", want: repositoryFallbackLabel},
+		{name: "spaces", input: "/tmp/my review", want: "my review"},
+		{name: "unicode", input: "/tmp/秘密", want: "秘密"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := repositoryLabel(tt.input); got != tt.want {
+				t.Fatalf("repositoryLabel(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+
+	sanitized := sanitizeRepositoryLabel("bad\nname[with]:\tcontrols\u2028")
+	if sanitized != "bad_name_with___controls_" {
+		t.Fatalf("sanitized framing characters = %q", sanitized)
+	}
+	if strings.ContainsAny(sanitized, "\r\n[]:") || !utf8.ValidString(sanitized) {
+		t.Fatalf("sanitized label = %q, want valid one-line framing-safe output", sanitized)
+	}
+	if got := sanitizeRepositoryLabel(long); len(got) != 126 || !utf8.ValidString(got) {
+		t.Fatalf("long label = %d bytes, valid UTF-8 = %v; want 126-byte UTF-8 boundary", len(got), utf8.ValidString(got))
+	}
+	if got := sanitizeRepositoryLabel(""); got != repositoryFallbackLabel {
+		t.Fatalf("empty sanitized label = %q, want fallback %q", got, repositoryFallbackLabel)
+	}
+}
+
+func TestBuildInitialReviewPayloadMarksBasenameAndCountsMarkerBytes(t *testing.T) {
+	set := ChangeSet{Mode: ModeDefault, Changes: []Change{{Path: "app.go", Kind: ChangeAdded, Patch: "diff --git a/app.go b/app.go\n+package main"}}}
+	root := filepath.Join(t.TempDir(), "privacy-safe-repo")
+	result := buildInitialReviewPayload(root, set, "", reviewPayloadLimits{maxPayloadBytes: 4096, maxFileBytes: 1024}, readStableReviewFile)
+	if result.Failure != PayloadFailureNone {
+		t.Fatalf("result failure = %q", result.Failure)
+	}
+	wantMarker := "[REPOSITORY: privacy-safe-repo]\n"
+	if !strings.HasPrefix(result.Payload.Prompt, wantMarker) {
+		t.Fatalf("prompt prefix = %q, want %q", result.Payload.Prompt[:min(len(result.Payload.Prompt), len(wantMarker))], wantMarker)
+	}
+	if strings.Contains(result.Payload.Prompt, root) || result.Payload.RepositoryLabel != "privacy-safe-repo" {
+		t.Fatalf("payload exposed root or wrong label: %#v", result.Payload)
+	}
+
+	files := []FileContext{{Path: "app.go", Status: ContextAddedPatch, suppressStatus: true}}
+	minimum := renderInitialReviewPromptForLabel("privacy-safe-repo", set, "", files, 1024)
+	markerBytes := len(repositoryMarker("privacy-safe-repo"))
+	withoutMarker := strings.TrimPrefix(minimum, repositoryMarker("privacy-safe-repo"))
+	if len(minimum) != len(withoutMarker)+markerBytes {
+		t.Fatalf("minimum payload = %d, body = %d, marker = %d; marker was not counted", len(minimum), len(withoutMarker), markerBytes)
+	}
+	if got := buildInitialReviewPayload(root, set, "", reviewPayloadLimits{maxPayloadBytes: len(minimum) - 1, maxFileBytes: 1024}, readStableReviewFile); got.Failure != PayloadFailureMandatoryOverflow {
+		t.Fatalf("one byte below marker-inclusive mandatory payload = %q, want overflow", got.Failure)
+	}
+}
+
+func TestBuildInitialReviewPayloadTopologyKeepsMarkerAndTaskOrder(t *testing.T) {
+	repo := newGitRepo(t)
+	writeTrackedFile(t, repo, "app.go", "package main\n// changed\n")
+	result, err := BuildInitialReviewPayload(repo, Options{Mode: ModeDefault, IncludeTopology: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Failure != PayloadFailureNone {
+		t.Fatalf("result failure = %q", result.Failure)
+	}
+	prompt := result.Payload.Prompt
+	if !strings.HasPrefix(prompt, "[REPOSITORY: "+repositoryLabel(repo)+"]\n") {
+		t.Fatalf("prompt does not begin with repository marker:\n%s", prompt)
+	}
+	marker := strings.Index(prompt, "[REPOSITORY:")
+	topology := strings.Index(prompt, "[PROJECT TOPOLOGY]")
+	task := strings.Index(prompt, "[TASK]")
+	if marker != 0 || topology < 0 || task < 0 || !(marker < topology && topology < task) {
+		t.Fatalf("section order marker=%d topology=%d task=%d:\n%s", marker, topology, task, prompt)
+	}
+}
 
 func TestBuildInitialReviewPayloadIncludesEligibleCurrentFilesAndStatuses(t *testing.T) {
 	repo := newGitRepo(t)
@@ -109,8 +196,17 @@ func TestBuildInteractiveContextIncludesTrackedDiffStats(t *testing.T) {
 		t.Fatalf("attachments = %d, want 1", len(ctx.Attachments))
 	}
 	attachment := ctx.Attachments[0]
+	if !strings.HasPrefix(attachment.Text, "[REPOSITORY: "+repositoryLabel(repo)+"]\n") {
+		t.Fatalf("interactive review attachment does not begin with basename marker:\n%s", attachment.Text)
+	}
+	if strings.Contains(attachment.Text, repo) {
+		t.Fatalf("interactive review attachment leaked absolute root %q", repo)
+	}
 	if attachment.FilesChanged != 1 || attachment.Additions != 2 || attachment.Deletions != 4 {
 		t.Fatalf("stats = files:%d +%d/-%d, want files:1 +2/-4", attachment.FilesChanged, attachment.Additions, attachment.Deletions)
+	}
+	if strings.Contains(ctx.Goal, "[REPOSITORY:") {
+		t.Fatalf("editable review guidance unexpectedly contains repository marker: %q", ctx.Goal)
 	}
 }
 
@@ -204,7 +300,7 @@ func TestPayloadUntrackedOmissionTextParticipatesInMandatoryBudget(t *testing.T)
 	if baseline.Failure != PayloadFailureNone || !strings.Contains(baseline.Payload.Prompt, "7 additional relevant Git-untracked paths omitted") {
 		t.Fatalf("baseline = %+v", baseline)
 	}
-	exact := len(renderInitialReviewPrompt(set, "", []FileContext{{Path: "new.go", Status: contextPending, Untracked: true}}, 100))
+	exact := len(renderInitialReviewPromptForLabel("unused", set, "", []FileContext{{Path: "new.go", Status: contextPending, Untracked: true}}, 100))
 	if got := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: exact, maxFileBytes: 100}, readStableReviewFile); got.Failure != PayloadFailureNone {
 		t.Fatalf("exact boundary = %+v", got)
 	}
@@ -220,7 +316,7 @@ func TestUntrackedOptionalBudgetStatusesCannotOverflowMandatoryPathOnlyPayload(t
 		{Path: "b.go", Status: contextPending, Untracked: true},
 		{Path: "c.go", Status: contextPending, Untracked: true},
 	}
-	mandatory := renderInitialReviewPrompt(set, "", provisional, 1024)
+	mandatory := renderInitialReviewPromptForLabel("unused", set, "", provisional, 1024)
 	reads := 0
 	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{
 		maxPayloadBytes: len(mandatory),
@@ -355,7 +451,7 @@ func TestPayloadExactTotalBoundaryAndFirstBudgetFailure(t *testing.T) {
 
 	oneOnly := cloneFileContexts(baseline.Payload.Files)
 	oneOnly[1] = FileContext{Path: "b.go", Status: ContextBudget}
-	limit := len(renderInitialReviewPrompt(set, "", oneOnly, 200))
+	limit := len(renderInitialReviewPromptForLabel("unused", set, "", oneOnly, 200))
 	result = buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: limit, maxFileBytes: 200}, reader)
 	if result.Payload.Files[0].Status != ContextIncluded || result.Payload.Files[1].Status != ContextBudget {
 		t.Fatalf("budget statuses = %+v", result.Payload.Files)
@@ -374,8 +470,8 @@ func TestPayloadPendingFilesDoNotCauseFalseMandatoryOverflow(t *testing.T) {
 		finalFiles[i] = FileContext{Path: change.Path, Status: ContextUnavailable}
 		oldProvisionalFiles[i] = FileContext{Path: change.Path, Status: ContextBudget}
 	}
-	finalSize := len(renderInitialReviewPrompt(set, "", finalFiles, 100))
-	oldProvisionalSize := len(renderInitialReviewPrompt(set, "", oldProvisionalFiles, 100))
+	finalSize := len(renderInitialReviewPromptForLabel("unused", set, "", finalFiles, 100))
+	oldProvisionalSize := len(renderInitialReviewPromptForLabel("unused", set, "", oldProvisionalFiles, 100))
 	if oldProvisionalSize <= finalSize {
 		t.Fatalf("old provisional size = %d, final size = %d; fixture does not prove regression", oldProvisionalSize, finalSize)
 	}
@@ -401,7 +497,7 @@ func TestPayloadStopsReadingAfterFirstBudgetFailure(t *testing.T) {
 		{Path: "b.go", Status: ContextBudget},
 		{Path: "c.go", Status: ContextBudget},
 	}
-	limit := len(renderInitialReviewPrompt(set, "", desired, 512))
+	limit := len(renderInitialReviewPromptForLabel("unused", set, "", desired, 512))
 	reads := 0
 	result := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: limit, maxFileBytes: 512}, func(string, int) ([]byte, stableFileOutcome) {
 		reads++

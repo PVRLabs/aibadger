@@ -1499,3 +1499,46 @@ func TestGenerateSchemaBFixedContentOverBudgetPreservesFraming(t *testing.T) {
 		t.Fatal("no file blocks should appear in context when all extractions are dropped")
 	}
 }
+
+func TestGenerateSchemaBWithPrefixCountsPrefixAgainstBudget(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.MaxContextFileBytes = 0
+	prefix := "[REPOSITORY: aibadger]\n"
+	extractions := []ExtractionResult{{Path: "app.go", Content: "package main\n"}}
+
+	formatter.MaxPromptTwoBytes = 0
+	withoutPrefix, baselineMetadata := formatter.GenerateSchemaB(&model.ProjectTopology{}, extractions, "query")
+	if baselineMetadata[0].Dropped {
+		t.Fatal("baseline extraction was unexpectedly dropped")
+	}
+
+	formatter.MaxPromptTwoBytes = len(withoutPrefix)
+	withPrefix, metadata := formatter.GenerateSchemaBWithPrefix(&model.ProjectTopology{}, extractions, "query", prefix)
+	if !strings.HasPrefix(withPrefix, prefix) {
+		t.Fatalf("prefixed schema = %q, want prefix %q", withPrefix, prefix)
+	}
+	if !metadata[0].Dropped {
+		t.Fatal("expected the extraction to be dropped after prefix bytes consumed the available budget")
+	}
+}
+
+func TestGenerateSchemaBWithPrefixDropsFilesWhenPrefixConsumesBudget(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.MaxContextFileBytes = 0
+	prefix := "[REPOSITORY: aibadger]\n"
+	extractions := []ExtractionResult{{Path: "app.go", Content: "package main\n"}}
+
+	for _, limit := range []int{len(prefix), len(prefix) - 1} {
+		formatter.MaxPromptTwoBytes = limit
+		output, metadata := formatter.GenerateSchemaBWithPrefix(&model.ProjectTopology{}, extractions, "query", prefix)
+		if !strings.HasPrefix(output, prefix) {
+			t.Fatalf("limit %d: output missing prefix %q", limit, prefix)
+		}
+		if !metadata[0].Dropped {
+			t.Fatalf("limit %d: expected extraction to be dropped when prefix consumes the budget", limit)
+		}
+		if strings.Contains(output, "--- File: app.go") {
+			t.Fatalf("limit %d: dropped extraction was emitted:\n%s", limit, output)
+		}
+	}
+}

@@ -142,16 +142,26 @@ func (e *Engine) GenerateReviewContinuation(commands []extractor.Command) (strin
 // failures and safety exclusions separately so callers can warn and continue
 // with the usable context.
 func (e *Engine) GenerateContextDetailed(goal string, commands []extractor.Command) (string, []protocol.ExtractionMetadata, int, []string, []string, error) {
+	return e.generateContextDetailed(goal, commands, "")
+}
+
+// GenerateContextDetailedWithPrefix extracts requested source and prepends an
+// additive framing prefix whose bytes count against the Prompt 2 target.
+func (e *Engine) GenerateContextDetailedWithPrefix(goal string, commands []extractor.Command, prefix string) (string, []protocol.ExtractionMetadata, int, []string, []string, error) {
+	return e.generateContextDetailed(goal, commands, prefix)
+}
+
+func (e *Engine) generateContextDetailed(goal string, commands []extractor.Command, prefix string) (string, []protocol.ExtractionMetadata, int, []string, []string, error) {
 	extractions, err := e.extractor.Extract(commands)
 	if err != nil {
 		var extractionErr *extractor.ExtractionError
 		if errors.As(err, &extractionErr) && extractionErr.CanProceed && len(extractions) > 0 {
-			schema, metadata := e.formatter.GenerateSchemaB(e.Topology, extractions, goal)
+			schema, metadata := e.formatter.GenerateSchemaBWithPrefix(e.Topology, extractions, goal, prefix)
 			return schema, metadata, len(extractions), append([]string(nil), extractionErr.Failures...), append([]string(nil), extractionErr.Excluded...), nil
 		}
 		return "", nil, 0, nil, nil, err
 	}
-	schema, metadata := e.formatter.GenerateSchemaB(e.Topology, extractions, goal)
+	schema, metadata := e.formatter.GenerateSchemaBWithPrefix(e.Topology, extractions, goal, prefix)
 	return schema, metadata, len(extractions), nil, nil, nil
 }
 

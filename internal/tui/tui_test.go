@@ -1810,6 +1810,13 @@ func TestImprovedReviewSubmissionUsesPromptOneThenAcceptsOptionalSelectors(t *te
 	if !ok || continuation.err != nil {
 		t.Fatalf("review continuation = %#v, want successful context", continuation)
 	}
+	wantMarker := reviewtask.RepositoryMarker(repo)
+	if !strings.HasPrefix(continuation.schema, wantMarker) {
+		t.Fatalf("Review Prompt 2 missing repository marker %q:\n%s", wantMarker, continuation.schema)
+	}
+	if strings.Contains(continuation.schema, repo) {
+		t.Fatalf("Review Prompt 2 exposed absolute repository root %q:\n%s", repo, continuation.schema)
+	}
 	for _, want := range []string{"[PROJECT TOPOLOGY]", "[TASK]", "Continue the existing review", "[OUTPUT CONSTRAINT]", "[CONTEXT]", "app.go"} {
 		if !strings.Contains(continuation.schema, want) {
 			t.Fatalf("Review Prompt 2 missing %q:\n%s", want, continuation.schema)

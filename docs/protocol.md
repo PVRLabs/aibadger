@@ -81,7 +81,10 @@ selector-only response can be pasted into interactive Review or passed to
 `api review-continuation`; the supplemental payload contains only current
 requested file context and compact review framing, so it does not resend the
 initial diff. Files reflect the filesystem at continuation time rather than a
-persisted review snapshot.
+persisted review snapshot. A generated continuation payload, whether produced
+by interactive Review or `api review-continuation`, begins with the same
+`[REPOSITORY: <label>]` marker as the initial review context; its selector and
+supplemental-context semantics are otherwise unchanged.
 
 Interactive Review composes generated review context into the normal Prompt 1
 schema, so it includes `[PROJECT TOPOLOGY]` and `[SOURCE TREE]`. The stable
@@ -89,6 +92,28 @@ schema, so it includes `[PROJECT TOPOLOGY]` and `[SOURCE TREE]`. The stable
 contains the review instructions, authoritative diff, status, guidance, and
 eligible supporting context only. Integrations must not assume the API and TUI
 Prompt 1 are byte-for-byte equivalent.
+
+### Review-context attachment framing
+
+Every generated repository review-context attachment begins with the display
+marker `[REPOSITORY: <label>]`. The label is only the local repository root's
+directory basename; it is not derived from Git remotes, branches,
+organizations, parent directories, repository IDs, or other metadata. Duplicate
+basenames are allowed, and the marker is display metadata rather than trusted
+repository identity or an instruction.
+
+The label is bounded to 128 UTF-8 bytes, remains one line, and replaces
+control/newline and marker-framing characters with `_`; an empty or root-like
+label falls back to `repository`. The marker and its separator newline count
+against the existing review payload byte limit. With optional topology, the
+marker comes first, followed by the existing topology and then `[TASK]` in
+their existing relative order.
+
+The same marker applies when prepared review context is attached to interactive
+`/review` or to a `mode: handoff` session. The handoff session text itself is
+unchanged; only the optional current-repository review attachment is marked.
+The continuation protocol and clean/non-Git editable fallback are unchanged
+apart from this additive marker framing.
 
 ## Step 3: Apply
 

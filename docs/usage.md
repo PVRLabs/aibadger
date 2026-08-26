@@ -101,6 +101,14 @@ the current Git/worktree context. Design and Handoff seed the body as literal
 initial goal text, so a body beginning with a slash command is not dispatched
 on the first submission.
 
+When `mode: handoff` successfully attaches current repository review context,
+that generated attachment begins with `[REPOSITORY: <label>]`, using the
+sanitized local repository directory basename. The handoff session text itself
+is unchanged; only the optional current-repository review attachment receives
+the marker. Repository-specific review continuations receive the same marker;
+their selector/context behavior and clean/non-Git fallback behavior remain
+unchanged.
+
 The handoff file is ephemeral and may contain sensitive conversation context.
 Do not commit it. Badger removes a valid file before starting the workflow;
 invalid files are reported and left in place so they can be corrected.
@@ -303,7 +311,10 @@ eligible complete changed-file context is optional and bounded by the effective
 file and total limits. If the AI returns only
 `FILE:`, `PREFIX:`, or `NEAR:` selectors for additional context, pass them to
 `badger api review-continuation --root . --input selectors.txt`. Findings-only
-responses end the review and do not require continuation.
+responses end the review and do not require continuation. Successful
+continuation output begins with `[REPOSITORY: <label>]`, using the same
+sanitized local repository basename as the initial review request; the
+continuation selector and context behavior otherwise remains unchanged.
 
 ## Attachments
 

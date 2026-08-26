@@ -69,6 +69,10 @@ project map and will manage its own repository access.
 Print a complete review request from current Git state. “Complete” means the
 output is directly usable without assembling another review-context envelope.
 Topology is omitted unless `--include-topology` is explicitly requested.
+On success, the first line is `[REPOSITORY: <label>]`, where `<label>` is the
+sanitized local repository directory basename. The marker is additive display
+metadata: consumers must treat stdout as opaque and must not require `[TASK]`
+at byte zero or treat the label as authoritative repository identity.
 
 ```bash
 badger api review-context --root <repository> \
@@ -115,6 +119,15 @@ open the TUI or a browser, contact providers, or access the network. Normal
 output uses repository-relative paths and does
 not expose the absolute repository root.
 
+The repository marker, its separator, and the sanitized label count toward the
+same payload byte limit as the existing review framing and context. With
+`--include-topology`, the marker precedes topology and topology retains its
+existing position before `[TASK]`. The basename sanitizer is bounded to 128
+UTF-8 bytes, replaces control/newline and marker-framing characters with `_`,
+and uses `repository` for an empty or root-like basename. No Git remote,
+branch, organization, parent directory, repository ID, or other metadata is
+used for the label.
+
 Editor integrations can capability-check this operation with `badger api
 --help` and `badger api review-context --help`; the latter advertises
 `--include-topology` when supported. On success, stdout is the complete
@@ -143,8 +156,12 @@ it does not repeat the initial diff, changed-file blocks, guidance, or
 topology. Files are read from the current filesystem when this command runs and
 may therefore be newer than the initial review context. Existing extraction
 safety, deduplication, partial-success, and deterministic ordering rules apply.
-Warnings go to stderr. Positive byte-limit options override the normal Prompt 2
-limits; the call fails without stdout if no usable supplemental context fits.
+The first line is `[REPOSITORY: <label>]`, using the same sanitized local
+repository basename as `review-context`. The marker bytes count against the
+same payload limit; the selector, supplemental-context, and budgeting behavior
+otherwise remain unchanged. Warnings go to stderr. Positive byte-limit options
+override the normal Prompt 2 limits; the call fails without stdout if no usable
+supplemental context fits.
 
 ### `api topology`
 

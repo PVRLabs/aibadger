@@ -120,6 +120,10 @@ func (s *Session) GenerateContextDetailed(goal string, commands []extractor.Comm
 	return s.Engine.GenerateContextDetailed(goal, commands)
 }
 
+func (s *Session) GenerateContextDetailedWithPrefix(goal string, commands []extractor.Command, prefix string) (string, []protocol.ExtractionMetadata, int, []string, []string, error) {
+	return s.Engine.GenerateContextDetailedWithPrefix(goal, commands, prefix)
+}
+
 func (s *Session) ParseWritePlan(input string) writer.ParseResult {
 	return s.Engine.ParseWritePlanDetailed(input)
 }

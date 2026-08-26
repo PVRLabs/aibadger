@@ -4,6 +4,15 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+### Review integrations
+
+- Added a basename-derived `[REPOSITORY: <label>]` marker to generated
+  standalone, interactive, and supplemental repository review-context
+  payloads, including optional attachments prepared for `mode: handoff`. The
+  marker is bounded, included in payload byte accounting, and does not change
+  handoff text, continuation selector/context semantics, or clean/non-Git
+  fallback behavior.
+
 ## [v0.5.0] - 2026-08-21
 
 ### Highlights

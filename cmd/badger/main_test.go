@@ -352,6 +352,12 @@ func TestApplyReviewStartupUsesReviewPrompt(t *testing.T) {
 	if cfg.Startup.Attachments[0].Text == "" {
 		t.Fatal("Startup.Attachments[0].Text is empty")
 	}
+	if !strings.HasPrefix(cfg.Startup.Attachments[0].Text, "[REPOSITORY: "+filepath.Base(repo)+"]\n") {
+		t.Fatalf("review attachment does not begin with repository marker:\n%s", cfg.Startup.Attachments[0].Text)
+	}
+	if strings.Contains(cfg.Startup.Attachments[0].Text, repo) {
+		t.Fatalf("review attachment leaked absolute repository root %q", repo)
+	}
 	if !strings.Contains(cfg.Startup.Attachments[0].Text, "Diff:\n```diff") {
 		t.Fatalf("review attachment missing diff:\n%s", cfg.Startup.Attachments[0].Text)
 	}
@@ -433,6 +439,32 @@ func TestApplyHandoffStartupUsesBodyAndReviewAttachment(t *testing.T) {
 	}
 	if len(cfg.Startup.Attachments) != 1 || cfg.Startup.Attachments[0].SensitivePaths[0] != ".env" {
 		t.Fatalf("Startup.Attachments = %+v, want review attachment with sensitive metadata", cfg.Startup.Attachments)
+	}
+}
+
+func TestApplyHandoffStartupAttachesMarkedReviewContext(t *testing.T) {
+	repo := newGitRepo(t)
+	writeFile(t, repo, "app.go", "package main\n\nfunc main() {\n\tprintln(\"changed\")\n}\n")
+	body := "resume this accepted handoff exactly\nwith literal guidance"
+	cfg := badger.DefaultConfig()
+	cfg.Root = repo
+
+	applyHandoffStartup(&cfg, body)
+	if cfg.Startup.Goal != body {
+		t.Fatalf("Startup.Goal = %q, want literal handoff body %q", cfg.Startup.Goal, body)
+	}
+	if !cfg.Startup.LiteralGoal {
+		t.Fatal("LiteralGoal = false, want true for Handoff startup")
+	}
+	if len(cfg.Startup.Attachments) != 1 {
+		t.Fatalf("Startup.Attachments length = %d, want 1", len(cfg.Startup.Attachments))
+	}
+	attachment := cfg.Startup.Attachments[0]
+	if !strings.HasPrefix(attachment.Text, "[REPOSITORY: "+filepath.Base(repo)+"]\n") {
+		t.Fatalf("handoff review attachment does not begin with repository marker:\n%s", attachment.Text)
+	}
+	if strings.Contains(attachment.Text, repo) {
+		t.Fatalf("handoff review attachment leaked absolute repository root %q", repo)
 	}
 }
 

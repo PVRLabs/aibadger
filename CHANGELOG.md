@@ -4,6 +4,14 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.5.2] - 2026-08-27
+
+### Fixes
+
+- Bound binary review context to Git's compact binary summary by avoiding
+  binary deltas and textconv output, preventing large binary changes from
+  exceeding the review payload limit.
+
 ## [v0.5.1] - 2026-08-26
 
 ### Review integrations

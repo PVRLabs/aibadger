@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -276,6 +278,56 @@ func TestChangePatchGitProcessCostIsBoundedByChangeKind(t *testing.T) {
 				t.Fatalf("Git process calls = %d, want %d", calls, tc.calls)
 			}
 		})
+	}
+}
+
+func TestBinaryChangePatchDoesNotRequestBinaryDelta(t *testing.T) {
+	var gotArgs []string
+	patch, binary, err := buildChangePatchWithRunner("/repo", []string{"diff", "--no-ext-diff", "--binary", "HEAD"}, changeMetadata{
+		path:   "lib/runtime.jar",
+		binary: true,
+	}, func(_ string, args ...string) (string, error) {
+		gotArgs = append([]string(nil), args...)
+		return "diff --git a/lib/runtime.jar b/lib/runtime.jar\nBinary files a/lib/runtime.jar and b/lib/runtime.jar differ\n", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !binary || !strings.Contains(patch, "Binary files") {
+		t.Fatalf("patch=%q binary=%t, want compact binary patch", patch, binary)
+	}
+	if slices.Contains(gotArgs, "--binary") || !slices.Contains(gotArgs, "--no-textconv") {
+		t.Fatalf("Git args did not force compact binary output: %v", gotArgs)
+	}
+}
+
+func TestBuildChangeSetBinaryTextconvUsesCompactPatch(t *testing.T) {
+	repo := newGitRepo(t)
+	writeTrackedFile(t, repo, ".gitattributes", "artifact.dat diff=badger-textconv\n")
+	if err := os.WriteFile(filepath.Join(repo, "artifact.dat"), []byte("old\x00binary\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitCmd(t, repo, "add", ".gitattributes", "artifact.dat")
+	runGitCmd(t, repo, "commit", "-m", "binary textconv fixture")
+	if err := os.WriteFile(filepath.Join(repo, "artifact.dat"), []byte("new\x00binary\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitCmd(t, repo, "config", "diff.badger-textconv.textconv", "od -An -tx1")
+	textconvDiff := runGitCmd(t, repo, "diff", "--no-ext-diff", "--unified=3", "HEAD", "--", "artifact.dat")
+	textconvBytes := regexp.MustCompile(`6e\s+65\s+77`)
+	if !textconvBytes.MatchString(textconvDiff) {
+		t.Fatalf("Git textconv fixture did not produce converted output:\n%s", textconvDiff)
+	}
+
+	set, err := BuildChangeSet(repo, Options{Mode: ModeDefault})
+	if err != nil {
+		t.Fatalf("BuildChangeSet() error = %v", err)
+	}
+	if len(set.Changes) != 1 || !set.Changes[0].Binary {
+		t.Fatalf("changes = %+v, want one binary change", set.Changes)
+	}
+	if !strings.Contains(set.Changes[0].Patch, "Binary files") || textconvBytes.MatchString(set.Changes[0].Patch) {
+		t.Fatalf("binary patch = %q, want compact Git binary summary without textconv output", set.Changes[0].Patch)
 	}
 }
 

@@ -326,6 +326,19 @@ func buildChangePatchWithRunner(root string, baseArgs []string, item changeMetad
 		return "", false, errors.New("untracked paths do not have authoritative Git patches")
 	}
 	args := append([]string{}, baseArgs...)
+	if item.binary {
+		// Binary changes are represented by Git's compact "Binary files
+		// differ" line. Asking Git for --binary or allowing textconv here
+		// could serialize a large binary delta or converted textual diff even
+		// though the review payload cannot use either representation.
+		for i, arg := range args {
+			if arg == "--binary" {
+				args = append(args[:i], args[i+1:]...)
+				break
+			}
+		}
+		args = append(args, "--no-textconv")
+	}
 	args = append(args, "--", item.path)
 	if item.previousPath != "" {
 		args = append(args, item.previousPath)

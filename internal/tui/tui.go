@@ -42,6 +42,7 @@ const (
 	stateWriting
 	stateManualCopy
 	stateHelp
+	statePromptFileSaving
 	statePromptFileReveal
 	stateBadgePermissionPrompt
 	stateBadgeFetching
@@ -104,8 +105,10 @@ type Model struct {
 	manualCopyKind string
 	manualCopyText string
 
-	promptFileKind string
-	promptFilePath string
+	promptFileKind        string
+	promptFilePath        string
+	promptFileDestination promptFileDestination
+	promptFileSavingKind  string
 
 	badgeLogins     []string
 	badgeTotal      int
@@ -135,19 +138,28 @@ type copyDoneMsg struct {
 	err  error
 }
 
+type promptFileDestination int
+
+const (
+	promptFileDestinationTemp promptFileDestination = iota
+	promptFileDestinationDownloads
+)
+
 type savePromptDoneMsg struct {
 	kind         string
 	text         string
 	path         string
+	destination  promptFileDestination
 	canReveal    bool
 	clipboardErr error
 	err          error
 }
 
 type openPromptFileDoneMsg struct {
-	kind string
-	path string
-	err  error
+	kind        string
+	path        string
+	destination promptFileDestination
+	err         error
 }
 
 type contextDoneMsg struct {
@@ -421,6 +433,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = successMessage(fmt.Sprintf("%s copied to clipboard.", msg.kind))
 		return m.advanceAfterCopy(msg.kind, false)
 	case savePromptDoneMsg:
+		if msg.destination == promptFileDestinationDownloads {
+			if m.state != statePromptFileSaving || m.promptFileSavingKind != msg.kind {
+				return m, nil
+			}
+			m.promptFileSavingKind = ""
+			if msg.err != nil {
+				m.state = promptDeliveryState(msg.kind)
+				m.status = errorMessage(fmt.Sprintf("Could not save %s to Downloads: %v", msg.kind, msg.err))
+				return m, nil
+			}
+			return m.handleSavedPrompt(msg)
+		}
 		if msg.clipboardErr != nil {
 			return m.handleClipboardFallbackSave(msg)
 		}
@@ -432,6 +456,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = statePromptFileReveal
 			m.promptFileKind = msg.kind
 			m.promptFilePath = msg.path
+			m.promptFileDestination = msg.destination
 			m.status = successMessage(fmt.Sprintf("Saved %s to temp file:\n\n%s", msg.kind, msg.path))
 			return m, nil
 		}
@@ -587,6 +612,7 @@ func (m Model) handleClipboardFallbackSave(msg savePromptDoneMsg) (tea.Model, te
 		m.state = statePromptFileReveal
 		m.promptFileKind = msg.kind
 		m.promptFilePath = msg.path
+		m.promptFileDestination = promptFileDestinationTemp
 		m.status = status
 		return m, nil
 	}
@@ -781,10 +807,45 @@ func (m Model) advanceAfterTempFile(kind, path string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) advanceAfterTempFileWithStatus(kind, path string, status tuiMessage) (tea.Model, tea.Cmd) {
+	return m.advanceAfterSavedFileWithStatus(kind, path, promptFileDestinationTemp, status)
+}
+
+func (m Model) handleSavedPrompt(msg savePromptDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.destination == promptFileDestinationDownloads {
+		return m.advanceAfterSavedFile(msg.kind, msg.path, msg.destination)
+	}
+	if msg.canReveal {
+		m.state = statePromptFileReveal
+		m.promptFileKind = msg.kind
+		m.promptFilePath = msg.path
+		m.promptFileDestination = msg.destination
+		m.status = savedPromptStatus(msg.kind, msg.path, msg.destination)
+		return m, nil
+	}
+	return m.advanceAfterSavedFile(msg.kind, msg.path, msg.destination)
+}
+
+func savedPromptStatus(kind, path string, destination promptFileDestination) tuiMessage {
+	if destination == promptFileDestinationDownloads {
+		return successMessage(fmt.Sprintf("Saved %s to Downloads:\n\n%s", kind, path))
+	}
+	return successMessage(fmt.Sprintf("Saved %s to temp file:\n\n%s", kind, path))
+}
+
+func (m Model) advanceAfterSavedFile(kind, path string, destination promptFileDestination) (tea.Model, tea.Cmd) {
+	if destination == promptFileDestinationDownloads {
+		return m.advanceAfterSavedFileWithStatus(kind, path, destination, successMessage(fmt.Sprintf("Saved %s to Downloads:\n\n%s\n\nUpload this file to your AI chat.", kind, path)))
+	}
+	return m.advanceAfterSavedFileWithStatus(kind, path, destination, successMessage(fmt.Sprintf("Saved %s to temp file:\n\n%s\n\nAttach this file to your AI chat, or open it and copy from it manually.", kind, path)))
+}
+
+func (m Model) advanceAfterSavedFileWithStatus(kind, path string, destination promptFileDestination, status tuiMessage) (tea.Model, tea.Cmd) {
 	m.manualCopyKind = ""
 	m.manualCopyText = ""
 	m.promptFileKind = ""
 	m.promptFilePath = ""
+	m.promptFileDestination = promptFileDestinationTemp
+	m.promptFileSavingKind = ""
 	m.status = status
 	promptTwoKind := codeContextPromptKind
 	switch {
@@ -803,6 +864,13 @@ func (m Model) advanceAfterTempFileWithStatus(kind, path string, status tuiMessa
 }
 
 const reviewPromptOneNextStep = "If the AI requests additional context, paste only its FILE:, PREFIX:, or NEAR: selectors here. Final findings require no continuation."
+
+func promptDeliveryState(kind string) state {
+	if kind == topologyPromptKind {
+		return stateScanComplete
+	}
+	return stateContextReady
+}
 
 func (m Model) cancelPromptDelivery(kind string) (tea.Model, tea.Cmd) {
 	promptTwoKind := codeContextPromptKind

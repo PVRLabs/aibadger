@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/PVRLabs/aibadger/internal/clipboard"
+	"github.com/PVRLabs/aibadger/internal/downloads"
 	"github.com/PVRLabs/aibadger/internal/engine"
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/github"
@@ -22,6 +23,9 @@ var fetchStargazersFunc = github.FetchStargazers
 // system clipboard. It is a package-level variable so that unit tests can
 // replace it with a stub that does not execute the real clipboard.
 var copyToClipboard = clipboard.Copy
+
+var resolveDownloadsDirectory = downloads.Resolve
+var savePromptToDownloads = downloads.SavePrompt
 
 func scanProjectCmd(root string, maxFilesPerDir int) tea.Cmd {
 	return func() tea.Msg {
@@ -49,6 +53,23 @@ func savePromptCmd(kind, text string) tea.Cmd {
 	}
 }
 
+func savePromptToDownloadsCmd(kind, text string) tea.Cmd {
+	return func() tea.Msg {
+		directory, err := resolveDownloadsDirectory()
+		if err != nil {
+			return savePromptDoneMsg{kind: kind, text: text, destination: promptFileDestinationDownloads, err: err}
+		}
+		path, err := savePromptToDownloads(directory, []byte(text))
+		return savePromptDoneMsg{
+			kind:        kind,
+			text:        text,
+			path:        path,
+			destination: promptFileDestinationDownloads,
+			err:         err,
+		}
+	}
+}
+
 func savePromptAfterClipboardFailureCmd(kind, text string, clipboardErr error) tea.Cmd {
 	return func() tea.Msg {
 		path, err := savePromptToTemp(kind, text)
@@ -56,9 +77,9 @@ func savePromptAfterClipboardFailureCmd(kind, text string, clipboardErr error) t
 	}
 }
 
-func openPromptFileCmd(kind, path string) tea.Cmd {
+func openPromptFileCmd(kind, path string, destination promptFileDestination) tea.Cmd {
 	return func() tea.Msg {
-		return openPromptFileDoneMsg{kind: kind, path: path, err: revealPromptFile(path)}
+		return openPromptFileDoneMsg{kind: kind, path: path, destination: destination, err: revealPromptFile(path)}
 	}
 }
 

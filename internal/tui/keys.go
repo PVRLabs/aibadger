@@ -96,6 +96,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return next, cmd
 		}
 
+	case "d", "D":
+		if next, cmd, handled := m.handleKeySaveToDownloads(); handled {
+			return next, cmd
+		}
+
 	case "f", "F":
 		if next, cmd, handled := m.handleKeySaveToFile(); handled {
 			return next, cmd
@@ -140,7 +145,7 @@ func (m Model) handleKeyEsc() (tea.Model, tea.Cmd) {
 		return m, textarea.Blink
 	}
 	switch m.state {
-	case stateHome, stateScanning, stateWriting, stateBadgeFetching:
+	case stateHome, stateScanning, stateWriting, statePromptFileSaving, stateBadgeFetching:
 		// These states are either already home or mid-operation; esc is a no-op.
 		return m, nil
 	default:
@@ -179,7 +184,7 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 
 	case statePromptFileReveal:
 		// User has seen the saved-file path; advance without opening a folder.
-		next, cmd := m.advanceAfterTempFile(m.promptFileKind, m.promptFilePath)
+		next, cmd := m.advanceAfterSavedFile(m.promptFileKind, m.promptFilePath, m.promptFileDestination)
 		return next, cmd, true
 
 	case stateHelp:
@@ -203,16 +208,10 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		if m.largeProjectPending {
 			return m, nil, true
 		}
-		if m.promptDeliveryIsLarge(topologyPromptKind) {
-			return m, copyCmd(topologyPromptKind, m.schemaA), true
-		}
-		return m, nil, false
+		return m, copyCmd(topologyPromptKind, m.schemaA), true
 
 	case stateContextReady:
-		if m.promptDeliveryIsLarge(codeContextPromptKind) {
-			return m, copyCmd(codeContextPromptKind, m.schemaB), true
-		}
-		return m, nil, false
+		return m, copyCmd(codeContextPromptKind, m.schemaB), true
 
 	case stateContextWarning:
 		next, cmd := m.rejectPartialExtractionWarning()
@@ -326,7 +325,7 @@ func (m Model) handleKeyConfirm() (tea.Model, tea.Cmd, bool) {
 		return m, writeCmd(m.workflowSession(), m.updates), true
 	}
 	if m.state == statePromptFileReveal {
-		return m, openPromptFileCmd(m.promptFileKind, m.promptFilePath), true
+		return m, openPromptFileCmd(m.promptFileKind, m.promptFilePath, m.promptFileDestination), true
 	}
 	return m, nil, false
 }
@@ -361,7 +360,7 @@ func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
 		return m, textarea.Blink, true
 	}
 	if m.state == statePromptFileReveal {
-		next, cmd := m.advanceAfterTempFile(m.promptFileKind, m.promptFilePath)
+		next, cmd := m.advanceAfterSavedFile(m.promptFileKind, m.promptFilePath, m.promptFileDestination)
 		return next, cmd, true
 	}
 	if m.state == stateBadgePermissionPrompt {
@@ -405,6 +404,22 @@ func (m Model) handleKeySaveToFile() (tea.Model, tea.Cmd, bool) {
 	}
 	if m.state == stateContextReady && m.promptDeliveryIsLarge(codeContextPromptKind) {
 		return m, savePromptCmd(codeContextPromptKind, m.schemaB), true
+	}
+	return m, nil, false
+}
+
+func (m Model) handleKeySaveToDownloads() (tea.Model, tea.Cmd, bool) {
+	if m.state == stateScanComplete && !m.largeProjectPending {
+		m.state = statePromptFileSaving
+		m.promptFileSavingKind = topologyPromptKind
+		m.status = neutralMessage("Saving Prompt 1: Topology to Downloads...")
+		return m, savePromptToDownloadsCmd(topologyPromptKind, m.schemaA), true
+	}
+	if m.state == stateContextReady {
+		m.state = statePromptFileSaving
+		m.promptFileSavingKind = codeContextPromptKind
+		m.status = neutralMessage("Saving Prompt 2: Code Context to Downloads...")
+		return m, savePromptToDownloadsCmd(codeContextPromptKind, m.schemaB), true
 	}
 	return m, nil, false
 }
@@ -634,6 +649,8 @@ func keyboardHintsForState(st state, badgeStarred bool) []string {
 	case stateBadgePermissionPrompt:
 		hints = []string{"Y fetch", "N cancel", "Ctrl+C quit"}
 	case stateBadgeFetching:
+		hints = []string{"Ctrl+C quit"}
+	case statePromptFileSaving:
 		hints = []string{"Ctrl+C quit"}
 	case stateBadgeResult:
 		if badgeStarred {

@@ -1951,21 +1951,25 @@ func preparedReviewPromptModel(t *testing.T, payload string) Model {
 func TestReviewPromptOneConsentMatrix(t *testing.T) {
 	const payload = "[PROJECT TOPOLOGY]\nPrimary Language: Go\n\n[SOURCE TREE]\n\n[TASK]\nreview context\n\n[CONSTRAINT]\nReview the supplied changes now.\n"
 
-	t.Run("view and default negative", func(t *testing.T) {
+	t.Run("view and default clipboard", func(t *testing.T) {
 		m := preparedReviewPromptModel(t, payload)
 		view := m.viewScanComplete()
 		for _, want := range []string{
 			"Privacy: Includes Git changes and may include eligible current working-tree file contents.",
-			fmt.Sprintf("Copy Prompt 1: Topology to clipboard (payload: %s)? (y/N)", protocol.FormatFileSize(int64(len(payload)))),
+			fmt.Sprintf("Deliver Prompt 1: Topology (payload: %s)?", protocol.FormatFileSize(int64(len(payload)))),
 		} {
 			if !strings.Contains(view, want) {
 				t.Fatalf("Review Prompt 1 view missing %q:\n%s", want, view)
 			}
 		}
+		copied := stubClipboard(t)
 		next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 		got := next.(Model)
-		if cmd != nil || got.state != stateScanComplete {
-			t.Fatalf("default Enter = state %v cmd %v, want no copy", got.state, cmd)
+		if cmd == nil || got.state != stateScanComplete {
+			t.Fatalf("default Enter = state %v cmd %v, want clipboard copy", got.state, cmd)
+		}
+		if msg := executeCmd(t, cmd).(copyDoneMsg); msg.text != payload || *copied != payload {
+			t.Fatalf("default Enter copy = %#v clipboard=%q", msg, *copied)
 		}
 	})
 
@@ -2013,7 +2017,7 @@ func TestReviewPromptOneConsentMatrix(t *testing.T) {
 		m := preparedReviewPromptModel(t, strings.Repeat("x", 64))
 		m.cfg.LargePromptByteThreshold = 8
 		view := m.viewScanComplete()
-		for _, want := range []string{"Privacy: Includes Git changes", "This prompt is large (64B).", "[c] Copy to clipboard", "[n] Cancel"} {
+		for _, want := range []string{"Privacy: Includes Git changes", "This prompt is large (64B).", "[c] Copy to clipboard", "[n] Skip"} {
 			if !strings.Contains(view, want) {
 				t.Fatalf("large Review Prompt 1 missing %q:\n%s", want, view)
 			}
@@ -2049,9 +2053,13 @@ func TestReviewPromptTwoConsentMatrix(t *testing.T) {
 		t.Fatal("Review Prompt 2 fixture replays initial diff context")
 	}
 
+	copiedByEnter := stubClipboard(t)
 	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil || next.(Model).state != stateContextReady {
-		t.Fatal("Review Prompt 2 Enter should preserve default-negative confirmation")
+	if cmd == nil || next.(Model).state != stateContextReady {
+		t.Fatal("Review Prompt 2 Enter should copy to clipboard")
+	}
+	if msg := executeCmd(t, cmd).(copyDoneMsg); msg.text != payload || *copiedByEnter != payload {
+		t.Fatalf("Review Prompt 2 Enter copy = %#v clipboard=%q", msg, *copiedByEnter)
 	}
 
 	copied := stubClipboard(t)
@@ -2091,7 +2099,7 @@ func TestReviewPromptTwoConsentMatrix(t *testing.T) {
 		m := newModel(t)
 		m.cfg.LargePromptByteThreshold = 8
 		view := m.viewContextReady()
-		for _, want := range []string{"actual source code from:", "  - app.go", "This prompt is large", "[c] Copy to clipboard", "[n] Cancel"} {
+		for _, want := range []string{"actual source code from:", "  - app.go", "This prompt is large", "[c] Copy to clipboard", "[n] Skip"} {
 			if !strings.Contains(view, want) {
 				t.Fatalf("large Review Prompt 2 missing %q:\n%s", want, view)
 			}
@@ -2901,7 +2909,7 @@ func TestDesignFocusPrompt2CodeContextInContextReadyDialog(t *testing.T) {
 
 	for _, want := range []string{
 		"Prompt 2: Code Context",
-		"Copy Prompt 2: Code Context to clipboard",
+		"Deliver Prompt 2: Code Context",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("context-ready view missing %q:\n%s", want, view)
@@ -4119,7 +4127,7 @@ func TestCopyTopologyDialogShowsPayloadSize(t *testing.T) {
 	if strings.Contains(view, symbols.warning) {
 		t.Fatalf("topology privacy note should not use warning severity:\n%s", view)
 	}
-	if !strings.Contains(view, "Copy Prompt 1: Topology to clipboard (payload: 19B)? (y/N)") {
+	if !strings.Contains(view, "Deliver Prompt 1: Topology (payload: 19B)?") {
 		t.Fatalf("topology copy prompt missing:\n%s", view)
 	}
 	if strings.Contains(view, "Clipboard payload:") {
@@ -4150,7 +4158,7 @@ func TestLargeTopologyPromptShowsDeliveryMenu(t *testing.T) {
 		"  [c] Copy to clipboard",
 		"  [f] Save to temp file",
 		"  [p] Print to terminal",
-		"  [n] Cancel",
+		"  [n] Skip",
 		"Choice (recommended: c):",
 	} {
 		if !strings.Contains(view, want) {
@@ -4190,7 +4198,7 @@ func TestReviewTopologyCopyWarnsAboutSensitivePaths(t *testing.T) {
 				"Review context includes changes from sensitive paths:",
 				"- config/credentials.json",
 				"- .env",
-				"Their diff contents may contain secrets and will be copied to the clipboard.",
+				"Their diff contents may contain secrets and will be included in the selected delivery.",
 			} {
 				if !strings.Contains(view, want) {
 					t.Fatalf("review disclosure missing %q:\n%s", want, view)
@@ -4319,7 +4327,7 @@ func TestCopyCodeContextDialogShowsPayloadSize(t *testing.T) {
 			t.Fatalf("code context view missing %q:\n%s", want, view)
 		}
 	}
-	if !strings.Contains(view, "Copy Prompt 2: Code Context to clipboard (payload: 15B)? (y/N)") {
+	if !strings.Contains(view, "Deliver Prompt 2: Code Context (payload: 15B)?") {
 		t.Fatalf("code context copy prompt missing:\n%s", view)
 	}
 	if strings.Contains(view, "Clipboard payload:") {
@@ -4551,16 +4559,18 @@ func TestLargePromptEnterStateScanCompleteCopiesTopology(t *testing.T) {
 	}
 }
 
-func TestNormalPromptEnterDoesNotCopyBelowThreshold(t *testing.T) {
+func TestNormalPromptEnterCopiesBelowThreshold(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.LargePromptByteThreshold = 128 * 1024
 	m := NewModel("/tmp/project", cfg)
 	m.state = stateContextReady
 	m.schemaB = "small payload"
 
+	copied := stubClipboard(t)
 	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil {
-		t.Fatal("normal prompt Enter returned unexpected command")
+	msg := executeCmd(t, cmd).(copyDoneMsg)
+	if msg.text != m.schemaB || *copied != m.schemaB {
+		t.Fatalf("normal prompt Enter copy = %#v clipboard=%q", msg, *copied)
 	}
 }
 

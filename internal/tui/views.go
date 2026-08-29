@@ -76,6 +76,8 @@ func (m Model) View() string {
 		b.WriteString("Writing confirmed files to disk...\n")
 	case stateManualCopy:
 		b.WriteString(m.viewManualCopy())
+	case statePromptFileSaving:
+		b.WriteString(fmt.Sprintf("Saving %s to Downloads...", m.promptFileSavingKind))
 	case stateHelp:
 		b.WriteString(m.viewHelp())
 	case statePromptFileReveal:
@@ -279,6 +281,10 @@ func (m Model) pipelineView() string {
 		active = 2
 	case stateWritePreview, stateWriting:
 		active = 2
+	case statePromptFileSaving:
+		if m.promptFileSavingKind == codeContextPromptKind {
+			active = 1
+		}
 	case stateManualCopy:
 		if m.manualCopyKind == codeContextPromptKind {
 			active = 1

@@ -44,10 +44,7 @@ const (
 	stateHelp
 	statePromptFileSaving
 	statePromptFileReveal
-	stateBadgePermissionPrompt
-	stateBadgeFetching
-	stateBadgeResult
-	stateBadgeError
+	stateBadge
 )
 
 const (
@@ -110,13 +107,6 @@ type Model struct {
 	promptFileDestination promptFileDestination
 	promptFileSavingKind  string
 
-	badgeLogins     []string
-	badgeTotal      int
-	badgeGazillion  bool
-	badgeErrorText  string
-	badgeStarred    bool
-	badgeRefreshing bool
-
 	externalRoots       []taggedfile.ExternalRoot
 	completion          completionState
 	largeProjectPending bool
@@ -174,20 +164,6 @@ type contextDoneMsg struct {
 type writeDoneMsg struct {
 	updates []writer.FileUpdate
 	errs    []error
-}
-
-type badgePermissionPromptMsg struct{}
-
-type badgeFetchingMsg struct{}
-
-type badgeResultMsg struct {
-	logins    []string
-	total     int
-	gazillion bool
-}
-
-type badgeErrorMsg struct {
-	text string
 }
 
 type goalPasteFlushMsg struct{}
@@ -256,7 +232,7 @@ func NewModel(root string, cfg Config) Model {
 
 func (m *Model) applyStartupGoal() {
 	if !m.cfg.Startup.LiteralGoal && strings.TrimSpace(m.cfg.Startup.Goal) == badgeCommand {
-		m.state = stateBadgePermissionPrompt
+		m.state = stateBadge
 		m.status = tuiMessage{}
 		m.err = nil
 		m.setGoalInputValue("")
@@ -524,39 +500,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, textarea.Blink
-	case badgePermissionPromptMsg:
-		return m, nil
-	case badgeFetchingMsg:
-		return m, nil
-	case badgeResultMsg:
-		m.state = stateBadgeResult
-		m.badgeLogins = append([]string(nil), msg.logins...)
-		m.badgeTotal = msg.total
-		m.badgeGazillion = msg.gazillion
-		m.badgeErrorText = ""
-		if m.badgeRefreshing {
-			m.badgeRefreshing = false
-			m.status = successMessage("Supporter list refreshed.")
-		} else {
-			m.status = tuiMessage{}
-		}
-		m.err = nil
-		return m, nil
-	case badgeErrorMsg:
-		if m.badgeRefreshing {
-			m.badgeRefreshing = false
-			m.status = warningMessage(fmt.Sprintf("Could not refresh: %s", msg.text))
-			m.err = nil
-			return m, nil
-		}
-		m.state = stateBadgeError
-		m.badgeErrorText = msg.text
-		m.badgeLogins = nil
-		m.badgeTotal = 0
-		m.badgeGazillion = false
-		m.status = tuiMessage{}
-		m.err = nil
-		return m, nil
 	case goalPasteFlushMsg:
 		if !m.goalPasteCapture {
 			return m, nil
@@ -708,18 +651,15 @@ func (m Model) handleFollowupCommand() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleBadgeCommand() (tea.Model, tea.Cmd) {
-	m.state = stateBadgePermissionPrompt
-	m.badgeLogins = nil
-	m.badgeTotal = 0
-	m.badgeGazillion = false
-	m.badgeErrorText = ""
-	m.badgeStarred = false
-	m.badgeRefreshing = false
+	m.state = stateBadge
 	m.status = tuiMessage{}
 	m.err = nil
+	m.setGoalInputValue("")
 	m.setGoalAttachments(nil)
+	m.resizeGoalEditor()
+	m.completion.suppressedKey = ""
 	m.goalInput.Blur()
-	return m, func() tea.Msg { return badgePermissionPromptMsg{} }
+	return m, nil
 }
 
 func parseReviewCommand(goal string) (string, bool) {
@@ -1000,12 +940,6 @@ func (m Model) returnHome(status tuiMessage) (tea.Model, tea.Cmd) {
 	m.pendingSafetyExclusions = nil
 	m.updates = nil
 	m.response = ""
-	m.badgeLogins = nil
-	m.badgeTotal = 0
-	m.badgeGazillion = false
-	m.badgeErrorText = ""
-	m.badgeStarred = false
-	m.badgeRefreshing = false
 	m.setGoalInputValue("")
 	m.resizeGoalEditor()
 	m.completion.suppressedKey = ""

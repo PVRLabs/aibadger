@@ -82,14 +82,8 @@ func (m Model) View() string {
 		b.WriteString(m.viewHelp())
 	case statePromptFileReveal:
 		b.WriteString(m.viewPromptFileReveal())
-	case stateBadgePermissionPrompt:
-		b.WriteString(m.viewBadgePermissionPrompt())
-	case stateBadgeFetching:
-		b.WriteString(m.viewBadgeFetching())
-	case stateBadgeResult:
-		b.WriteString(m.viewBadgeResult())
-	case stateBadgeError:
-		b.WriteString(m.viewBadgeError())
+	case stateBadge:
+		b.WriteString(m.viewBadge())
 	}
 
 	b.WriteString("\n\n")
@@ -196,7 +190,7 @@ func (m Model) slashCommandSuggestions() []slashCommandSuggestion {
 		{command: reviewCommand, description: "Seed an editable review prompt from the current Git working tree."},
 		{command: designCommand, description: "Switch the active focus to Design."},
 		{command: followupCommand, description: "Switch the active focus to Follow-up."},
-		{command: badgeCommand, description: "Show GitHub stargazer scoreboard"},
+		{command: badgeCommand, description: "Support AI Badger on GitHub."},
 	}
 	if m.cfg.ExitCommand != "" {
 		suggestions = append(suggestions, slashCommandSuggestion{
@@ -368,23 +362,16 @@ func (m Model) viewManualCopy() string {
 	return m.renderBox(body)
 }
 
-func (m Model) viewBadgePermissionPrompt() string {
-	return "   Show support for Badger and help others discover it.\n\n   📡 Fetch supporter scoreboard from GitHub? (y/N)"
-}
-
-func (m Model) viewBadgeFetching() string {
-	return "   📡 Fetching..."
-}
-
-func (m Model) viewBadgeResult() string {
-	return renderBadgeScoreboard(m.badgeLogins, m.badgeTotal, m.badgeGazillion, m.badgeStarred)
-}
-
-func (m Model) viewBadgeError() string {
-	if m.badgeErrorText == "" {
-		return "   ❌ Could not fetch the supporter scoreboard."
-	}
-	return "   " + m.badgeErrorText
+func (m Model) viewBadge() string {
+	return strings.Join([]string{
+		"   ⭐ Please star AI Badger on GitHub",
+		"",
+		"   https://github.com/PVRLabs/aibadger",
+		"",
+		"   We could make this automatic, but our security team doesn't allow networking.",
+		"",
+		"   Press Enter to continue.",
+	}, "\n")
 }
 
 func (m Model) viewHelp() string {
@@ -396,7 +383,7 @@ func (m Model) viewHelp() string {
 		"/review   - Start review mode",
 		"/design   - Start design mode",
 		"/followup - Start follow-up mode",
-		"/badge    - Show GitHub stargazer scoreboard",
+		"/badge    - Support AI Badger on GitHub.",
 		"/exit     - Exit the application",
 		"",
 		"Keys",
@@ -422,42 +409,6 @@ func (m Model) viewHelp() string {
 		body = fmt.Sprintf("%s\n\n%s", m.cfg.BuildInfo, body)
 	}
 	return m.renderBox(body)
-}
-
-func renderBadgeScoreboard(logins []string, total int, gazillion bool, starred bool) string {
-	var actionLine string
-	if starred {
-		actionLine = "   [S]tar the repo in browser     [R]efresh the list     [Enter] continue"
-	} else {
-		actionLine = "   [S]tar the repo in browser     [Enter] continue"
-	}
-
-	var lines []string
-	if gazillion {
-		lines = append(lines, "   🦡🦡🦡 A GAZILLION BADGERS have starred this repo!")
-		lines = append(lines, "   (Results may be cached — the true number is probably even higher)")
-		lines = append(lines, "")
-		lines = append(lines, "   🌟 Recent supporters (last 10):")
-		for _, login := range logins {
-			lines = append(lines, "     @"+login)
-		}
-		lines = append(lines, "")
-		lines = append(lines, actionLine)
-		return strings.Join(lines, "\n")
-	}
-
-	lines = append(lines, "   ─────────────────────────────────────────────────")
-	lines = append(lines, fmt.Sprintf("   ⭐ TOTAL STARS: %d", total))
-	lines = append(lines, "   🌟 Recent supporters (last 10):")
-	for _, login := range logins {
-		lines = append(lines, "     @"+login)
-	}
-	lines = append(lines, "   ─────────────────────────────────────────────────")
-	lines = append(lines, "")
-	lines = append(lines, "   ✨ Your name not here yet?")
-	lines = append(lines, "")
-	lines = append(lines, actionLine)
-	return strings.Join(lines, "\n")
 }
 
 func (m Model) renderBox(body string) string {

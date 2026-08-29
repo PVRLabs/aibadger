@@ -59,7 +59,7 @@ func TestPromptDownloadsSavingFeedbackMatchesBlockedState(t *testing.T) {
 	if !strings.Contains(m.pipelineView(), "[Extract]") || strings.Contains(m.pipelineView(), "[Map]") {
 		t.Fatalf("Prompt 2 saving pipeline = %q, want Extract active", m.pipelineView())
 	}
-	hints := keyboardHintsForState(statePromptFileSaving, false)
+	hints := keyboardHintsForState(statePromptFileSaving)
 	if strings.Contains(strings.Join(hints, " "), "Esc") || !strings.Contains(strings.Join(hints, " "), "Ctrl+C quit") {
 		t.Fatalf("Prompt saving keyboard hints = %#v, want no Esc cancel", hints)
 	}

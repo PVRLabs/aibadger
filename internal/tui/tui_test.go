@@ -13,7 +13,6 @@ import (
 
 	"github.com/PVRLabs/aibadger/internal/clipboard"
 	"github.com/PVRLabs/aibadger/internal/engine"
-	"github.com/PVRLabs/aibadger/internal/github"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
@@ -365,7 +364,7 @@ func TestNewModelAppliesEmptyDesignStartupStatus(t *testing.T) {
 	}
 }
 
-func TestNewModelAppliesBadgeStartupPrompt(t *testing.T) {
+func TestNewModelAppliesBadgeStartup(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SettingsPath = filepath.Join(t.TempDir(), ".badger", "settings.json")
 	cfg.Startup.Goal = "/badge"
@@ -373,8 +372,8 @@ func TestNewModelAppliesBadgeStartupPrompt(t *testing.T) {
 
 	m := NewModel("/tmp/project", cfg)
 
-	if m.state != stateBadgePermissionPrompt {
-		t.Fatalf("state = %v, want %v", m.state, stateBadgePermissionPrompt)
+	if m.state != stateBadge {
+		t.Fatalf("state = %v, want %v", m.state, stateBadge)
 	}
 	if m.status != (tuiMessage{}) {
 		t.Fatalf("status = %#v, want empty", m.status)
@@ -383,7 +382,7 @@ func TestNewModelAppliesBadgeStartupPrompt(t *testing.T) {
 		t.Fatalf("goal input = %q, want empty", got)
 	}
 	if m.goalInput.Focused() {
-		t.Fatal("goal input should be blurred for badge prompt")
+		t.Fatal("goal input should be blurred for badge screen")
 	}
 }
 
@@ -1419,7 +1418,7 @@ func TestSubmitGoalHelpCommandShowsHelp(t *testing.T) {
 		"/code     - Start code mode",
 		"/review   - Start review mode",
 		"/followup - Start follow-up mode",
-		"/badge    - Show GitHub stargazer scoreboard",
+		"/badge    - Support AI Badger on GitHub.",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("help view missing %q:\n%s", want, view)
@@ -1427,7 +1426,7 @@ func TestSubmitGoalHelpCommandShowsHelp(t *testing.T) {
 	}
 }
 
-func TestSubmitGoalBadgeCommandShowsFlow(t *testing.T) {
+func TestSubmitGoalBadgeCommandShowsStaticScreen(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.goalInput.SetValue("/badge")
 
@@ -1436,69 +1435,27 @@ func TestSubmitGoalBadgeCommandShowsFlow(t *testing.T) {
 	if !ok {
 		t.Fatalf("submitGoal returned %T, want tui.Model", next)
 	}
-	if got.state != stateBadgePermissionPrompt {
-		t.Fatalf("state = %v, want %v", got.state, stateBadgePermissionPrompt)
-	}
-	if cmd == nil {
-		t.Fatal("badge permission prompt returned nil command")
-	}
-	view := got.View()
-	if !strings.Contains(view, "Show support for Badger and help others discover it.") {
-		t.Fatalf("badge permission view missing motivation line:\n%s", view)
-	}
-	if !strings.Contains(view, "Fetch supporter scoreboard from GitHub? (y/N)") {
-		t.Fatalf("badge permission view missing prompt:\n%s", view)
-	}
-
-	next, cmd, handled := got.handleKeyConfirm()
-	if !handled {
-		t.Fatal("handleKeyConfirm did not handle badge permission prompt")
-	}
-	got, ok = next.(Model)
-	if !ok {
-		t.Fatalf("handleKeyConfirm returned %T, want tui.Model", next)
-	}
-	if got.state != stateBadgeFetching {
-		t.Fatalf("state = %v, want %v", got.state, stateBadgeFetching)
-	}
-	if cmd == nil {
-		t.Fatal("badge fetch returned unexpected nil command")
-	}
-	if !strings.Contains(got.View(), "📡 Fetching...") {
-		t.Fatalf("badge fetching view missing progress text:\n%s", got.View())
-	}
-
-	next, cmd = got.Update(badgeResultMsg{
-		logins:    []string{"ada", "bob"},
-		total:     2,
-		gazillion: false,
-	})
-	got, ok = next.(Model)
-	if !ok {
-		t.Fatalf("Update returned %T, want tui.Model", next)
-	}
-	if got.state != stateBadgeResult {
-		t.Fatalf("state = %v, want %v", got.state, stateBadgeResult)
+	if got.state != stateBadge {
+		t.Fatalf("state = %v, want %v", got.state, stateBadge)
 	}
 	if cmd != nil {
-		t.Fatal("badge result returned unexpected command")
+		t.Fatal("badge command returned unexpected command")
 	}
-	view = got.View()
+	view := got.View()
 	for _, want := range []string{
-		"⭐ TOTAL STARS: 2",
-		"🌟 Recent supporters (last 10):",
-		"@ada",
-		"@bob",
-		"[S]tar the repo in browser     [Enter] continue",
+		"⭐ Please star AI Badger on GitHub",
+		"https://github.com/PVRLabs/aibadger",
+		"We could make this automatic, but our security team doesn't allow networking.",
+		"Press Enter to continue.",
 	} {
 		if !strings.Contains(view, want) {
-			t.Fatalf("badge result view missing %q:\n%s", want, view)
+			t.Fatalf("badge view missing %q:\n%s", want, view)
 		}
 	}
 
-	next, cmd, handled = got.handleKeyEnter()
+	next, cmd, handled := got.handleKeyEnter()
 	if !handled {
-		t.Fatal("handleKeyEnter did not handle badge result dismissal")
+		t.Fatal("handleKeyEnter did not handle badge dismissal")
 	}
 	got, ok = next.(Model)
 	if !ok {
@@ -1509,182 +1466,6 @@ func TestSubmitGoalBadgeCommandShowsFlow(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("badge return-home command returned unexpected nil command")
-	}
-}
-
-func TestSubmitGoalBadgeCommandDeclineReturnsHome(t *testing.T) {
-	m := NewModel("/tmp/project", DefaultConfig())
-	m.goalInput.SetValue("/badge")
-
-	next, _ := m.submitGoal()
-	got, ok := next.(Model)
-	if !ok {
-		t.Fatalf("submitGoal returned %T, want tui.Model", next)
-	}
-
-	next, cmd, handled := got.handleKeyCancel()
-	if !handled {
-		t.Fatal("handleKeyCancel did not handle badge permission prompt")
-	}
-	got, ok = next.(Model)
-	if !ok {
-		t.Fatalf("handleKeyCancel returned %T, want tui.Model", next)
-	}
-	if got.state != stateHome {
-		t.Fatalf("state = %v, want %v", got.state, stateHome)
-	}
-	if cmd == nil {
-		t.Fatal("badge decline returned unexpected nil command")
-	}
-	if view := got.View(); !strings.Contains(view, "👍 No problem!") {
-		t.Fatalf("badge decline view missing confirmation:\n%s", view)
-	}
-}
-
-func TestBadgeFetchCmdUsesStubbedFetcherForResult(t *testing.T) {
-	originalFetch := fetchStargazersFunc
-	fetchStargazersFunc = func() ([]string, int, error) {
-		return []string{"ada", "bob"}, 2, nil
-	}
-	defer func() { fetchStargazersFunc = originalFetch }()
-
-	msg, ok := badgeFetchCmd()().(badgeResultMsg)
-	if !ok {
-		t.Fatalf("badgeFetchCmd() returned %T, want badgeResultMsg", msg)
-	}
-	if msg.total != 2 || msg.gazillion {
-		t.Fatalf("badgeResultMsg = %#v, want total 2 and gazillion false", msg)
-	}
-
-	m := NewModel("/tmp/project", DefaultConfig())
-	next, cmd := m.Update(msg)
-	got, ok := next.(Model)
-	if !ok {
-		t.Fatalf("Update returned %T, want tui.Model", next)
-	}
-	if got.state != stateBadgeResult {
-		t.Fatalf("state = %v, want %v", got.state, stateBadgeResult)
-	}
-	if cmd != nil {
-		t.Fatal("badge result returned unexpected command")
-	}
-	view := got.View()
-	for _, want := range []string{
-		"⭐ TOTAL STARS: 2",
-		"@ada",
-		"@bob",
-	} {
-		if !strings.Contains(view, want) {
-			t.Fatalf("badge result view missing %q:\n%s", want, view)
-		}
-	}
-}
-
-func TestBadgeFetchCmdUsesStubbedFetcherForGazillionResult(t *testing.T) {
-	originalFetch := fetchStargazersFunc
-	fetchStargazersFunc = func() ([]string, int, error) {
-		logins := make([]string, 100)
-		for i := 0; i < 100; i++ {
-			logins[i] = fmt.Sprintf("user%d", i)
-		}
-		return logins, 100, nil
-	}
-	defer func() { fetchStargazersFunc = originalFetch }()
-
-	msg, ok := badgeFetchCmd()().(badgeResultMsg)
-	if !ok {
-		t.Fatalf("badgeFetchCmd() returned %T, want badgeResultMsg", msg)
-	}
-	if msg.total != 100 || !msg.gazillion {
-		t.Fatalf("badgeResultMsg = %#v, want total 100 and gazillion true", msg)
-	}
-
-	m := NewModel("/tmp/project", DefaultConfig())
-	next, cmd := m.Update(msg)
-	got, ok := next.(Model)
-	if !ok {
-		t.Fatalf("Update returned %T, want tui.Model", next)
-	}
-	if got.state != stateBadgeResult {
-		t.Fatalf("state = %v, want %v", got.state, stateBadgeResult)
-	}
-	if cmd != nil {
-		t.Fatal("badge result returned unexpected command")
-	}
-	view := got.View()
-	for _, want := range []string{
-		"🦡🦡🦡 A GAZILLION BADGERS have starred this repo!",
-		"🌟 Recent supporters (last 10):",
-		"@user99",
-		"[S]tar the repo in browser     [Enter] continue",
-	} {
-		if !strings.Contains(view, want) {
-			t.Fatalf("gazillion result view missing %q:\n%s", want, view)
-		}
-	}
-}
-
-func TestBadgeFetchCmdUsesStubbedFetcherForNetworkError(t *testing.T) {
-	originalFetch := fetchStargazersFunc
-	fetchStargazersFunc = func() ([]string, int, error) {
-		return nil, 0, errors.New("Could not fetch data: timeout")
-	}
-	defer func() { fetchStargazersFunc = originalFetch }()
-
-	msg, ok := badgeFetchCmd()().(badgeErrorMsg)
-	if !ok {
-		t.Fatalf("badgeFetchCmd() returned %T, want badgeErrorMsg", msg)
-	}
-	if msg.text != "❌ Could not fetch data: timeout" {
-		t.Fatalf("badgeErrorMsg.text = %q, want network error text", msg.text)
-	}
-
-	m := NewModel("/tmp/project", DefaultConfig())
-	next, cmd := m.Update(msg)
-	got, ok := next.(Model)
-	if !ok {
-		t.Fatalf("Update returned %T, want tui.Model", next)
-	}
-	if got.state != stateBadgeError {
-		t.Fatalf("state = %v, want %v", got.state, stateBadgeError)
-	}
-	if cmd != nil {
-		t.Fatal("badge error returned unexpected command")
-	}
-	if view := got.View(); !strings.Contains(view, "❌ Could not fetch data: timeout") {
-		t.Fatalf("badge error view missing network error:\n%s", view)
-	}
-}
-
-func TestBadgeFetchCmdUsesStubbedFetcherForRateLimitError(t *testing.T) {
-	originalFetch := fetchStargazersFunc
-	fetchStargazersFunc = func() ([]string, int, error) {
-		return nil, 0, github.ErrRateLimit
-	}
-	defer func() { fetchStargazersFunc = originalFetch }()
-
-	msg, ok := badgeFetchCmd()().(badgeErrorMsg)
-	if !ok {
-		t.Fatalf("badgeFetchCmd() returned %T, want badgeErrorMsg", msg)
-	}
-	if msg.text != "⚠️ GitHub API rate limit hit. Try again in an hour." {
-		t.Fatalf("badgeErrorMsg.text = %q, want rate-limit text", msg.text)
-	}
-
-	m := NewModel("/tmp/project", DefaultConfig())
-	next, cmd := m.Update(msg)
-	got, ok := next.(Model)
-	if !ok {
-		t.Fatalf("Update returned %T, want tui.Model", next)
-	}
-	if got.state != stateBadgeError {
-		t.Fatalf("state = %v, want %v", got.state, stateBadgeError)
-	}
-	if cmd != nil {
-		t.Fatal("badge rate-limit error returned unexpected command")
-	}
-	if view := got.View(); !strings.Contains(view, "⚠️ GitHub API rate limit hit. Try again in an hour.") {
-		t.Fatalf("badge error view missing rate-limit error:\n%s", view)
 	}
 }
 
@@ -2532,7 +2313,7 @@ func TestHomeViewShowsSlashCommandSuggestions(t *testing.T) {
 		"/followup",
 		"Switch the active focus to Follow-up.",
 		"/badge",
-		"Show GitHub stargazer scoreboard",
+		"Support AI Badger on GitHub.",
 		"/exit",
 		"Quit Badger.",
 	} {
@@ -2733,14 +2514,14 @@ func TestBadgeCompletionEnterSwitchesToBadgeFlow(t *testing.T) {
 	if !ok {
 		t.Fatalf("handleKey returned %T, want tui.Model", next)
 	}
-	if got.state != stateBadgePermissionPrompt {
-		t.Fatalf("state = %v, want %v", got.state, stateBadgePermissionPrompt)
+	if got.state != stateBadge {
+		t.Fatalf("state = %v, want %v", got.state, stateBadge)
 	}
-	if got.goalInput.Value() != "/badge" {
-		t.Fatalf("goal input = %q, want /badge", got.goalInput.Value())
+	if got.goalInput.Value() != "" {
+		t.Fatalf("goal input = %q, want empty", got.goalInput.Value())
 	}
-	if cmd == nil {
-		t.Fatal("badge action returned unexpected nil command")
+	if cmd != nil {
+		t.Fatal("badge action returned unexpected command")
 	}
 }
 

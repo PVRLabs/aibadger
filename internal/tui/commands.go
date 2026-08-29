@@ -3,21 +3,16 @@ package tui
 // This file owns Bubble Tea command constructors used by the TUI workflow.
 
 import (
-	"errors"
-	"fmt"
 	"time"
 
 	"github.com/PVRLabs/aibadger/internal/clipboard"
 	"github.com/PVRLabs/aibadger/internal/downloads"
 	"github.com/PVRLabs/aibadger/internal/engine"
 	"github.com/PVRLabs/aibadger/internal/extractor"
-	"github.com/PVRLabs/aibadger/internal/github"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 	tea "github.com/charmbracelet/bubbletea"
 )
-
-var fetchStargazersFunc = github.FetchStargazers
 
 // copyToClipboard is the function used by copyCmd to copy text to the
 // system clipboard. It is a package-level variable so that unit tests can
@@ -116,36 +111,6 @@ func writeCmd(session *workflow.Session, updates []writer.FileUpdate) tea.Cmd {
 		applied, errs := session.ApplyWrites(updates)
 		return writeDoneMsg{updates: applied, errs: errs}
 	}
-}
-
-func badgeFetchingCmd() tea.Cmd {
-	return func() tea.Msg {
-		return badgeFetchingMsg{}
-	}
-}
-
-func badgeFetchCmd() tea.Cmd {
-	return func() tea.Msg {
-		logins, total, err := fetchStargazersFunc()
-		if err != nil {
-			return badgeErrorMsg{text: badgeErrorText(err)}
-		}
-		return badgeResultMsg{
-			logins:    logins,
-			total:     total,
-			gazillion: total >= 100,
-		}
-	}
-}
-
-func badgeErrorText(err error) string {
-	if err == nil {
-		return ""
-	}
-	if errors.Is(err, github.ErrRateLimit) {
-		return "⚠️ " + err.Error()
-	}
-	return fmt.Sprintf("❌ %v", err)
 }
 
 func countAppliedKinds(updates []writer.FileUpdate) (writes, deletes int) {

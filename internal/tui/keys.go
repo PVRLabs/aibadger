@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PVRLabs/aibadger/internal/browser"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -121,15 +120,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return next, cmd
 		}
 
-	case "s", "S":
-		if next, cmd, handled := m.handleKeyBadgeBrowser(); handled {
-			return next, cmd
-		}
-
-	case "r", "R":
-		if next, cmd, handled := m.handleKeyBadgeRefresh(); handled {
-			return next, cmd
-		}
 	}
 
 	// Forward unhandled keys to the active input widget.
@@ -145,7 +135,7 @@ func (m Model) handleKeyEsc() (tea.Model, tea.Cmd) {
 		return m, textarea.Blink
 	}
 	switch m.state {
-	case stateHome, stateScanning, stateWriting, statePromptFileSaving, stateBadgeFetching:
+	case stateHome, stateScanning, stateWriting, statePromptFileSaving:
 		// These states are either already home or mid-operation; esc is a no-op.
 		return m, nil
 	default:
@@ -191,10 +181,7 @@ func (m Model) handleKeyEnter() (tea.Model, tea.Cmd, bool) {
 		next, cmd := m.returnHome(neutralMessage("Ready for a goal."))
 		return next, cmd, true
 
-	case stateBadgePermissionPrompt:
-		return m, nil, false
-
-	case stateBadgeResult, stateBadgeError:
+	case stateBadge:
 		next, cmd := m.returnHome(neutralMessage("Ready for a goal."))
 		return next, cmd, true
 
@@ -314,12 +301,6 @@ func (m Model) handleKeyConfirm() (tea.Model, tea.Cmd, bool) {
 		next, cmd := m.acceptPartialExtractionWarning()
 		return next, cmd, true
 	}
-	if m.state == stateBadgePermissionPrompt {
-		next, cmd, handled := m.handleBadgePermissionConfirm()
-		if handled {
-			return next, cmd, true
-		}
-	}
 	if m.state == stateWritePreview {
 		m.state = stateWriting
 		return m, writeCmd(m.workflowSession(), m.updates), true
@@ -362,12 +343,6 @@ func (m Model) handleKeyCancel() (tea.Model, tea.Cmd, bool) {
 	if m.state == statePromptFileReveal {
 		next, cmd := m.advanceAfterSavedFile(m.promptFileKind, m.promptFilePath, m.promptFileDestination)
 		return next, cmd, true
-	}
-	if m.state == stateBadgePermissionPrompt {
-		next, cmd, handled := m.handleBadgePermissionDecline()
-		if handled {
-			return next, cmd, true
-		}
 	}
 	return m, nil, false
 }
@@ -476,40 +451,6 @@ func (m Model) handleKeyExitToHome() (tea.Model, tea.Cmd, bool) {
 		return m, textarea.Blink, true
 	}
 	return m, nil, false
-}
-
-func (m Model) handleBadgePermissionConfirm() (tea.Model, tea.Cmd, bool) {
-	m.state = stateBadgeFetching
-	m.status = tuiMessage{}
-	m.badgeErrorText = ""
-	return m, tea.Batch(badgeFetchingCmd(), badgeFetchCmd()), true
-}
-
-func (m Model) handleBadgePermissionDecline() (tea.Model, tea.Cmd, bool) {
-	next, cmd := m.returnHome(neutralMessage("👍 No problem!"))
-	return next, cmd, true
-}
-
-func (m Model) handleKeyBadgeBrowser() (tea.Model, tea.Cmd, bool) {
-	if m.state != stateBadgeResult {
-		return m, nil, false
-	}
-	if err := browser.Open(browser.AIBadgerRepoURL); err != nil {
-		m.status = warningMessage(fmt.Sprintf("Could not open the browser automatically.\n%s", browser.AIBadgerRepoURL))
-		return m, nil, true
-	}
-	m.badgeStarred = true
-	m.status = successMessage("Opened the repository in your browser.")
-	return m, nil, true
-}
-
-func (m Model) handleKeyBadgeRefresh() (tea.Model, tea.Cmd, bool) {
-	if m.state != stateBadgeResult || !m.badgeStarred || m.badgeRefreshing {
-		return m, nil, false
-	}
-	m.badgeRefreshing = true
-	m.status = neutralMessage("Refreshing supporter list...")
-	return m, badgeFetchCmd(), true
 }
 
 // forwardKeyToInput passes an unhandled key to whichever input widget is
@@ -630,14 +571,14 @@ func (m Model) statusLine() string {
 	mode := statusLineKeyboardHints
 	switch mode {
 	case statusLineKeyboardHints:
-		hints := keyboardHintsForState(m.state, m.badgeStarred)
+		hints := keyboardHintsForState(m.state)
 		return strings.Join(append([]string{"Focus: " + workflow.FocusDisplayName(m.cfg.Focus)}, hints...), " · ")
 	default:
 		return ""
 	}
 }
 
-func keyboardHintsForState(st state, badgeStarred bool) []string {
+func keyboardHintsForState(st state) []string {
 	hints := []string{"Ctrl+C quit"}
 	switch st {
 	case stateHome:
@@ -646,19 +587,9 @@ func keyboardHintsForState(st state, badgeStarred bool) []string {
 		hints = []string{"Enter submit", "Esc cancel", "Ctrl+C quit"}
 	case stateContextWarning:
 		hints = []string{"Enter return", "Y proceed", "N return", "Esc cancel", "Ctrl+C quit"}
-	case stateBadgePermissionPrompt:
-		hints = []string{"Y fetch", "N cancel", "Ctrl+C quit"}
-	case stateBadgeFetching:
-		hints = []string{"Ctrl+C quit"}
 	case statePromptFileSaving:
 		hints = []string{"Ctrl+C quit"}
-	case stateBadgeResult:
-		if badgeStarred {
-			hints = []string{"S open browser", "R refresh", "Enter continue", "Ctrl+C quit"}
-		} else {
-			hints = []string{"S open browser", "Enter continue", "Ctrl+C quit"}
-		}
-	case stateBadgeError:
+	case stateBadge:
 		hints = []string{"Enter continue", "Ctrl+C quit"}
 	case stateScanning, stateWriting:
 		// Ctrl+C only.

@@ -8,7 +8,7 @@ const (
 	// LargeProjectFileThreshold triggers the TUI continue/truncate/exit prompt.
 	LargeProjectFileThreshold = 1000
 	// LargePromptBytes is the threshold at which the expanded TUI
-	// prompt-delivery menu is shown instead of the normal y/N prompt.
+	// prompt-delivery menu is shown instead of the normal delivery choices.
 	LargePromptBytes = 128 * 1024
 	// TruncatedMaxPackages caps Prompt 1 packages in large-project mode.
 	TruncatedMaxPackages = 50

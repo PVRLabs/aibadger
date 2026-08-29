@@ -66,7 +66,12 @@ read at continuation time and may be newer than the initial review context.
 The AI then reports findings, risks, or a clear no-issues result.
 
 > [!NOTE]
-> Most prompts can be copied directly. When Prompt 2 is unusually large (≈128 KB or more), Badger shows a delivery menu with clipboard, temp-file, and manual-copy options. Clipboard is recommended. Saving to a temp file is available when you prefer to attach the file rather than paste it.
+> Clipboard is the recommended delivery method and pressing Enter selects it.
+> For either prompt, choose **Downloads** to save the exact payload as the
+> stable `badger-prompt.txt` browser-upload file in your existing Downloads
+> directory. Large prompts (≈128 KB or more) use an expanded menu that keeps
+> Downloads distinct from the timestamped temp-file and terminal-print choices.
+> If clipboard copying fails, Badger still falls back only to a temp file.
 
 ## Continue from another AI coding session
 

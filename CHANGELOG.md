@@ -4,6 +4,18 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+### Prompt delivery
+
+- Added **Save to Downloads** for both normal and large Prompt 1 and Prompt 2
+  delivery screens. It safely replaces a stable `badger-prompt.txt` and shows
+  the path for direct upload while clipboard remains the Enter/default choice
+  and clipboard failures continue to use the separate temp-file fallback.
+- This is especially useful for Gemini users who encounter its approximately
+  30 KB pasted-content ceiling: Gemini Apps accepts supported file uploads up
+  to 100 MB, so the Downloads artifact provides a direct upload path for
+  prompts that are too large to paste. See [Google's Gemini Apps file upload
+  guidance](https://support.google.com/gemini/answer/14903178).
+
 ## [v0.5.2] - 2026-08-27
 
 ### Fixes

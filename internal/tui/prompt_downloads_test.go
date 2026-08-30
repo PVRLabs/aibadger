@@ -34,19 +34,19 @@ func TestNormalPromptViewsOfferDownloads(t *testing.T) {
 	m.state = stateScanComplete
 	m.schemaA = "topology payload"
 	m.eng = engine.FromTopology("/tmp/project", &model.ProjectTopology{})
-	if view := m.viewScanComplete(); !strings.Contains(view, "Copy Prompt 1: Topology to clipboard (payload: 16B)? [Enter/Y]\n\n[D] Save to Downloads   [N] Skip") {
+	if view := m.viewScanComplete(); !strings.Contains(view, "Copy Prompt 1: Topology to clipboard (payload: 16B)? (Y/n)\n\n[D] Save to Downloads") {
 		t.Fatalf("Prompt 1 view missing Downloads choices:\n%s", view)
 	}
-	if strings.Contains(m.viewScanComplete(), "(y/N)") || strings.Contains(m.viewScanComplete(), "Deliver Prompt") {
+	if strings.Contains(m.viewScanComplete(), "[Enter/Y]") || strings.Contains(m.viewScanComplete(), "[N] Skip") || strings.Contains(m.viewScanComplete(), "Deliver Prompt") {
 		t.Fatalf("Prompt 1 view has contradictory default guidance:\n%s", m.viewScanComplete())
 	}
 
 	m.state = stateContextReady
 	m.schemaB = "context payload"
-	if view := m.viewContextReady(); !strings.Contains(view, "Copy Prompt 2: Code Context to clipboard (payload: 15B)? [Enter/Y]\n\n[D] Save to Downloads   [N] Skip") {
+	if view := m.viewContextReady(); !strings.Contains(view, "Copy Prompt 2: Code Context to clipboard (payload: 15B)? (Y/n)\n\n[D] Save to Downloads") {
 		t.Fatalf("Prompt 2 view missing Downloads choices:\n%s", view)
 	}
-	if strings.Contains(m.viewContextReady(), "(y/N)") || strings.Contains(m.viewContextReady(), "Deliver Prompt") {
+	if strings.Contains(m.viewContextReady(), "[Enter/Y]") || strings.Contains(m.viewContextReady(), "[N] Skip") || strings.Contains(m.viewContextReady(), "Deliver Prompt") {
 		t.Fatalf("Prompt 2 view has contradictory default guidance:\n%s", m.viewContextReady())
 	}
 }

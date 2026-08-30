@@ -1737,7 +1737,7 @@ func TestReviewPromptOneConsentMatrix(t *testing.T) {
 		view := m.viewScanComplete()
 		for _, want := range []string{
 			"Privacy: Includes Git changes and may include eligible current working-tree file contents.",
-			fmt.Sprintf("Copy Prompt 1: Topology to clipboard (payload: %s)? [Enter/Y]", protocol.FormatFileSize(int64(len(payload)))),
+			fmt.Sprintf("Copy Prompt 1: Topology to clipboard (payload: %s)? (Y/n)", protocol.FormatFileSize(int64(len(payload)))),
 		} {
 			if !strings.Contains(view, want) {
 				t.Fatalf("Review Prompt 1 view missing %q:\n%s", want, view)
@@ -3908,7 +3908,7 @@ func TestCopyTopologyDialogShowsPayloadSize(t *testing.T) {
 	if strings.Contains(view, symbols.warning) {
 		t.Fatalf("topology privacy note should not use warning severity:\n%s", view)
 	}
-	if !strings.Contains(view, "Copy Prompt 1: Topology to clipboard (payload: 19B)? [Enter/Y]") {
+	if !strings.Contains(view, "Copy Prompt 1: Topology to clipboard (payload: 19B)? (Y/n)") {
 		t.Fatalf("topology copy prompt missing:\n%s", view)
 	}
 	if strings.Contains(view, "Clipboard payload:") {
@@ -4108,7 +4108,7 @@ func TestCopyCodeContextDialogShowsPayloadSize(t *testing.T) {
 			t.Fatalf("code context view missing %q:\n%s", want, view)
 		}
 	}
-	if !strings.Contains(view, "Copy Prompt 2: Code Context to clipboard (payload: 15B)? [Enter/Y]") {
+	if !strings.Contains(view, "Copy Prompt 2: Code Context to clipboard (payload: 15B)? (Y/n)") {
 		t.Fatalf("code context copy prompt missing:\n%s", view)
 	}
 	if strings.Contains(view, "Clipboard payload:") {

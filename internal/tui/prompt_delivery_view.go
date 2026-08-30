@@ -29,7 +29,7 @@ func (m Model) viewScanComplete() string {
 		"Ready to copy %s to your clipboard.\n\n%s\nYou will pass this prompt to an AI chat.\n\n%s",
 		renderBold("Prompt 1: Topology"),
 		promptOnePrivacyTextWithAttachment(m.cfg.Focus, m.reviewSensitivePaths(), m.hasReviewAttachment()),
-		renderBold(fmt.Sprintf("Deliver Prompt 1: Topology (payload: %s)?", protocol.FormatFileSize(int64(len(m.schemaA)))))+"\n\n[Enter/Y] Clipboard  [D] Downloads  [N] Skip",
+		renderBold(fmt.Sprintf("Copy Prompt 1: Topology to clipboard (payload: %s)? [Enter/Y]", protocol.FormatFileSize(int64(len(m.schemaA)))))+"\n\n[D] Save to Downloads   [N] Skip",
 	)
 	return fmt.Sprintf("%s\n\n%s", renderSummary(m.eng.Topology), note)
 }
@@ -114,7 +114,7 @@ func (m Model) viewContextReady() string {
 		renderWarningLine("This WILL include the actual source code from:"),
 		strings.Join(lines, "\n"),
 		warning,
-		renderBold(fmt.Sprintf("Deliver %s (payload: %s)?", promptTwoKind, protocol.FormatFileSize(int64(len(m.schemaB)))))+"\n\n[Enter/Y] Clipboard  [D] Downloads  [N] Skip",
+		renderBold(fmt.Sprintf("Copy %s to clipboard (payload: %s)? [Enter/Y]", promptTwoKind, protocol.FormatFileSize(int64(len(m.schemaB)))))+"\n\n[D] Save to Downloads   [N] Skip",
 	)
 	return note
 }

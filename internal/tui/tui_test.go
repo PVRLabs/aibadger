@@ -3528,6 +3528,48 @@ func TestTextResponseKeepsInfoLineOutsideBox(t *testing.T) {
 	}
 }
 
+func TestTextResponseGitHubStarPromptByFocus(t *testing.T) {
+	tests := []struct {
+		focus protocol.Focus
+		want  bool
+	}{
+		{focus: protocol.FocusReview, want: true},
+		{focus: protocol.FocusDesign, want: true},
+		{focus: protocol.FocusCode, want: false},
+		{focus: protocol.FocusFollowup, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.focus.String(), func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Focus = tt.focus
+			m := NewModel("/tmp/project", cfg)
+			m.state = stateTextResponse
+			m.response = "Analysis"
+
+			view := m.viewTextResponse()
+			got := strings.Contains(view, "Finding AI Badger useful? Star on GitHub · "+gitHubRepositoryURL)
+			if got != tt.want {
+				t.Fatalf("star prompt present = %v, want %v:\n%s", got, tt.want, view)
+			}
+			if tt.want && strings.Contains(view, "│ Finding AI Badger useful?") {
+				t.Fatalf("star prompt was rendered inside the response box:\n%s", view)
+			}
+		})
+	}
+}
+
+func TestTextResponseEnterStillReturnsHome(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel("/tmp/project", cfg)
+	m.state = stateTextResponse
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := next.(Model).state; got != stateHome {
+		t.Fatalf("state = %v, want %v", got, stateHome)
+	}
+}
+
 func TestTextResponseWrapsLongLinesToTerminalWidth(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
 	m.state = stateTextResponse

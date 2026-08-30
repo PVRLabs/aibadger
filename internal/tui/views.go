@@ -16,6 +16,8 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+const gitHubRepositoryURL = "https://github.com/PVRLabs/aibadger"
+
 const minTextResponsePreviewLines = 12
 const maxTextResponsePreviewLines = 50
 const compactPasteRenderBytes = 4 * 1024
@@ -339,8 +341,16 @@ func (m Model) viewTextResponse() string {
 	if hiddenLines > 0 {
 		body += "\n\n" + helpStyle.Render(fmt.Sprintf("... [%d more lines hidden] ...", hiddenLines))
 	}
-	body += "\n\nPress Enter to continue."
-	return helpStyle.Render("Info: No file updates found. AI provided a textual response.") + "\n\n" + renderBold("AI Analysis / Explanation:") + "\n\n" + m.renderBox(body)
+	view := helpStyle.Render("Info: No file updates found. AI provided a textual response.") + "\n\n" + renderBold("AI Analysis / Explanation:") + "\n\n" + m.renderBox(body)
+	if m.showsGitHubStarPrompt() {
+		view += "\n\n" + helpStyle.Render("Finding AI Badger useful? Star on GitHub · "+gitHubRepositoryURL)
+	}
+	return view + "\n\nPress Enter to continue."
+}
+
+func (m Model) showsGitHubStarPrompt() bool {
+	focus := protocol.NormalizeFocus(m.cfg.Focus)
+	return focus == protocol.FocusReview || focus == protocol.FocusDesign
 }
 
 func (m Model) viewManualCopy() string {
@@ -366,7 +376,7 @@ func (m Model) viewBadge() string {
 	return strings.Join([]string{
 		"   ⭐ Please star AI Badger on GitHub",
 		"",
-		"   https://github.com/PVRLabs/aibadger",
+		"   " + gitHubRepositoryURL,
 		"",
 		"   We could make this automatic, but our security team doesn't allow networking.",
 		"",

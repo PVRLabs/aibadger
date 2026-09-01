@@ -8,10 +8,19 @@ description: Transfer the current coding, debugging, planning, or architecture s
 Create `.badger-handoff` in the current working directory, or another workspace
 directory explicitly selected by the user. Do not discover a Git root.
 
-Summarize the useful conversation aggressively, giving later decisions and
-corrections precedence. Preserve the current goal, progress, decisions and
-rationale, constraints and non-goals, completed work, verification, blockers,
-and immediate next steps.
+Summarize the session concisely and with high information density. Preserve
+enough context to continue without repeating investigation or misunderstanding
+a decision. Give later decisions and corrections precedence.
+
+Remove conversational noise, repetition, obsolete details, and information
+Badger can recover from the repository. Preserve the current goal, material
+progress, decisions and rationale, constraints and non-goals, completed work,
+verification results, significant failed approaches, blockers, and immediate
+next steps. Include exact details only when they are necessary for continuity.
+
+Aim for no more than 2,000 output tokens under normal circumstances. Use less
+for simple sessions. Exceed this target only when further compression would
+discard continuation-critical information.
 
 Use `mode: handoff` when repository work is part of the session. Use
 `mode: design` only for reasoning where current worktree state is irrelevant.

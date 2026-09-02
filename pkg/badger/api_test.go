@@ -67,7 +67,7 @@ func assertInitialReviewSelectorContract(t *testing.T, output string) {
 	t.Helper()
 	for _, want := range []string{
 		"If the supplied diff, changed-file context, project topology, source tree, and external context are sufficient, output the final review findings.",
-		"If there are no actionable findings, state that clearly.",
+		"Report concise findings, or explicitly state that no issues were found.",
 		"If additional unchanged context is genuinely necessary",
 		"output ONLY a machine-readable list",
 		"FILE:<path>",

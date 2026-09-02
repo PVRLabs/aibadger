@@ -152,15 +152,20 @@ func TestGenerateSchemaAUsesFocusSpecificConstraints(t *testing.T) {
 			name:  "review",
 			focus: FocusReview,
 			wantA: []string{
-				"Review the supplied changes now.",
+				"Review the supplied changes now for concrete bugs, edge cases, regressions, maintainability problems, and unintended behavior changes.",
 				"output the final review findings",
+				"Report concise findings, or explicitly state that no issues were found.",
+				"Where useful, include a brief, directional recommendation for addressing each finding.",
+				"Avoid detailed patches or implementation code unless the user explicitly requests them",
 				"Never mix selectors with review findings.",
 				"Do not request files already supplied in the review context",
 			},
 			wantB: []string{
 				"This is the final-answer step for a code review.",
-				"report findings, risks, or a clear no-issues result",
-				"Do not invent patches unless the user explicitly asks for a fix.",
+				"review for concrete bugs, edge cases, regressions, maintainability problems, and unintended behavior changes",
+				"Report concise findings, or explicitly state that no issues were found.",
+				"where useful, add a brief, directional recommendation for addressing each finding",
+				"Avoid detailed patches or implementation code unless the user explicitly requests them.",
 			},
 			unwantedB: []string{
 				"full updated file contents",
@@ -1446,7 +1451,7 @@ func TestGenerateSchemaAReviewBudgetRetainsReservedTopology(t *testing.T) {
 	if len(output) > formatter.MaxTopologyPromptBytes {
 		t.Fatalf("Review Prompt 1 size = %d, want <= %d", len(output), formatter.MaxTopologyPromptBytes)
 	}
-	if !strings.Contains(output, "Review the supplied changes now.") {
+	if !strings.Contains(output, "Review the supplied changes now for concrete bugs") {
 		t.Fatal("Review Prompt 1 missing the real Review constraint")
 	}
 	start := strings.Index(output, "[SOURCE TREE]\n") + len("[SOURCE TREE]\n")

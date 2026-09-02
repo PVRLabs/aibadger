@@ -44,8 +44,8 @@ const codeSchemaAConstraint = "[TASK]\n%s\n\n[CONSTRAINT]\n" +
 	"NEAR:<path>#<literal string from a nearby unique line or comment>\n"
 
 const reviewSchemaAConstraint = "[TASK]\n%s\n\n[CONSTRAINT]\n" +
-	"Review the supplied changes now.\n\n" +
-	"If the supplied diff, changed-file context, project topology, source tree, and external context are sufficient, output the final review findings. Order findings by severity and include the affected file and line when available, the concrete risk, and why it matters. If there are no actionable findings, state that clearly. Do not invent patches or unrelated improvements.\n\n" +
+	"Review the supplied changes now for concrete bugs, edge cases, regressions, maintainability problems, and unintended behavior changes.\n\n" +
+	"If the supplied diff, changed-file context, project topology, source tree, and external context are sufficient, output the final review findings. Report concise findings, or explicitly state that no issues were found. Order findings by severity and include the affected file and line when available, the concrete risk, and why it matters. Where useful, include a brief, directional recommendation for addressing each finding. Avoid detailed patches or implementation code unless the user explicitly requests them, and do not invent unrelated improvements.\n\n" +
 	"If additional unchanged context is genuinely necessary to confirm or refute a potential finding, output ONLY a machine-readable list using the exact operators below. Output zero other text, explanations, findings, or markdown formatting. Never mix selectors with review findings.\n\n" +
 	"Request the smallest additional context set needed. Prefer directly related implementation files, entrypoints, tests, and core orchestrators. Do not request files already supplied in the review context, and do not request one file from every package merely because the change is large.\n\n" +
 	"FILE:<path>\n" +
@@ -83,13 +83,12 @@ const codeSchemaBConstraint = "\n[TASK]\n%s\n\n[OUTPUT CONSTRAINT]\n" +
 
 const reviewSchemaBConstraint = "\n[TASK]\n%s\n\n[OUTPUT CONSTRAINT]\n" +
 	"This is the final-answer step for a code review.\n" +
-	"Based ONLY on the provided [CONTEXT] and [PROJECT TOPOLOGY], report findings, risks, or a clear no-issues result.\n" +
+	"Based ONLY on the provided [CONTEXT] and [PROJECT TOPOLOGY], review for concrete bugs, edge cases, regressions, maintainability problems, and unintended behavior changes. Report concise findings, or explicitly state that no issues were found.\n" +
 	"Do NOT respond with FILE:, PREFIX:, or NEAR: lines; those selector operators are only for Prompt 1 responses.\n" +
 	"\n" +
 	"Output format rules:\n" +
-	"1. For findings, use concise bullets that include severity, file, and rationale.\n" +
-	"2. If no issues are found, state that clearly.\n" +
-	"3. Do not invent patches unless the user explicitly asks for a fix.\n"
+	"1. For findings, use concise bullets that include severity, file, and rationale, and, where useful, add a brief, directional recommendation for addressing each finding.\n" +
+	"2. Avoid detailed patches or implementation code unless the user explicitly requests them.\n"
 
 const DefaultExplorationTask = "Explore this project with an open mind. Explain what stands out, how its main parts fit together, and surface any interesting opportunities, risks, or improvements worth investigating."
 

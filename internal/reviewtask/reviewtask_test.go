@@ -565,6 +565,23 @@ func TestBuildExtraFocusTextInInstructionPromptAndFallback(t *testing.T) {
 	}
 }
 
+func TestDefaultReviewGoalContract(t *testing.T) {
+	instruction := buildReviewInstruction("")
+	if instruction != defaultReviewGoal {
+		t.Fatalf("buildReviewInstruction(\"\") = %q, want defaultReviewGoal %q", instruction, defaultReviewGoal)
+	}
+	for _, want := range []string{
+		"concrete bugs, edge cases, regressions, maintainability problems, and unintended behavior changes",
+		"Report concise findings, or clearly state that no issues were found.",
+		"Include a brief, directional recommendation for addressing each finding when useful.",
+		"Do not provide detailed patches or implementation code unless explicitly requested.",
+	} {
+		if !strings.Contains(instruction, want) {
+			t.Fatalf("prepared review instruction missing %q:\n%s", want, instruction)
+		}
+	}
+}
+
 func TestBuildNoReviewableChangesReasonOnlyInFailurePrompt(t *testing.T) {
 	repo := newGitRepo(t)
 

@@ -626,7 +626,7 @@ func TestLargeGoalInsertWithoutPasteFlagStillBecomesAttachment(t *testing.T) {
 
 func TestLargeGoalPastePreservesExistingInstruction(t *testing.T) {
 	m := NewModel("/tmp/project", DefaultConfig())
-	instruction := "Review the following change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing."
+	instruction := "Review the following change for concrete bugs, edge cases, regressions, maintainability problems, and unintended behavior changes. Report concise findings, or clearly state that no issues were found. Include a brief, directional recommendation for addressing each finding when useful. Do not provide detailed patches or implementation code unless explicitly requested."
 	paste := strings.Repeat(strings.Join([]string{
 		"[PROJECT TOPOLOGY]",
 		"Languages: Go",
@@ -1566,7 +1566,7 @@ func TestImprovedReviewSubmissionUsesPromptOneThenAcceptsOptionalSelectors(t *te
 	if ready.state != stateScanComplete {
 		t.Fatalf("state after scan = %v, want scan complete", ready.state)
 	}
-	for _, want := range []string{"[PROJECT TOPOLOGY]", "[SOURCE TREE]", "[TASK]", "Diff:", "[REVIEW CONTEXT: CURRENT WORKING-TREE FILE]", "Path: app.go", "[CONSTRAINT]", "Review the supplied changes now."} {
+	for _, want := range []string{"[PROJECT TOPOLOGY]", "[SOURCE TREE]", "[TASK]", "Diff:", "[REVIEW CONTEXT: CURRENT WORKING-TREE FILE]", "Path: app.go", "[CONSTRAINT]", "Review the supplied changes now for concrete bugs"} {
 		if !strings.Contains(ready.schemaA, want) {
 			t.Fatalf("Prompt 1 missing %q:\n%s", want, ready.schemaA)
 		}
@@ -1730,7 +1730,7 @@ func preparedReviewPromptModel(t *testing.T, payload string) Model {
 }
 
 func TestReviewPromptOneConsentMatrix(t *testing.T) {
-	const payload = "[PROJECT TOPOLOGY]\nPrimary Language: Go\n\n[SOURCE TREE]\n\n[TASK]\nreview context\n\n[CONSTRAINT]\nReview the supplied changes now.\n"
+	const payload = "[PROJECT TOPOLOGY]\nPrimary Language: Go\n\n[SOURCE TREE]\n\n[TASK]\nreview context\n\n[CONSTRAINT]\nReview the supplied changes now for concrete bugs, edge cases, regressions, maintainability problems, and unintended behavior changes.\n"
 
 	t.Run("view and default clipboard", func(t *testing.T) {
 		m := preparedReviewPromptModel(t, payload)
@@ -2178,7 +2178,9 @@ func TestInitialReviewPromptContractMatchesCLIStartupAndReviewCommand(t *testing
 
 	for _, want := range []string{
 		"If the supplied diff, changed-file context, project topology, source tree, and external context are sufficient, output the final review findings.",
-		"If there are no actionable findings, state that clearly.",
+		"Report concise findings, or explicitly state that no issues were found.",
+		"Where useful, include a brief, directional recommendation for addressing each finding.",
+		"Avoid detailed patches or implementation code unless the user explicitly requests them",
 		"If additional unchanged context is genuinely necessary",
 		"output ONLY a machine-readable list",
 		"FILE:<path>",

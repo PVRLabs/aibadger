@@ -580,4 +580,4 @@ func buildFallbackPromptWithReason(extraFocus, reason string) string {
 	return strings.Join(lines, "\n")
 }
 
-var defaultReviewGoal = "Review the following change for concrete bugs, edge cases, maintainability issues, and unintended behavior changes. Focus on issues I should fix before committing."
+var defaultReviewGoal = "Review the following change for concrete bugs, edge cases, regressions, maintainability problems, and unintended behavior changes. Report concise findings, or clearly state that no issues were found. Include a brief, directional recommendation for addressing each finding when useful. Do not provide detailed patches or implementation code unless explicitly requested."

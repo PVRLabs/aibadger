@@ -4,17 +4,38 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.5.3] - 2026-09-03
+
 ### Prompt delivery
 
 - Added **Save to Downloads** for both normal and large Prompt 1 and Prompt 2
   delivery screens. It safely replaces a stable `badger-prompt.txt` and shows
   the path for direct upload while clipboard remains the Enter/default choice
   and clipboard failures continue to use the separate temp-file fallback.
+- Clarified prompt-delivery choices with conventional `(Y/n)` wording and a
+  subordinate `d` shortcut for Downloads, while retaining clipboard as the
+  default handoff.
 - This is especially useful for Gemini users who encounter its approximately
   30 KB pasted-content ceiling: Gemini Apps accepts supported file uploads up
   to 100 MB, so the Downloads artifact provides a direct upload path for
   prompts that are too large to paste. See [Google's Gemini Apps file upload
   guidance](https://support.google.com/gemini/answer/14903178).
+
+### Review experience
+
+- Refined review prompts and the default review task to focus on concrete
+  bugs, edge cases, regressions, maintainability problems, and unintended
+  behavior changes. Reviews now request concise findings or an explicit
+  no-issues result, with brief directional recommendations where useful,
+  instead of detailed patches unless requested.
+- Improved handoff summaries to preserve continuation-critical context while
+  removing conversational noise and repository-recoverable details.
+
+### Offline behavior
+
+- Removed automatic GitHub API requests and browser launching from the
+  terminal UI. GitHub prompts are now static, offline-safe calls to action,
+  including a star reminder after review and design responses.
 
 ## [v0.5.2] - 2026-08-27
 

@@ -37,13 +37,11 @@ Badger fetches those files, builds a second prompt.
 ✓ Fully local — nothing leaves your machine until you copy it  
 ✓ You control every paste and every write
 
-Perfect for **Claude token saving**, local LLM workflows, code reviews, design sessions, and debugging.
-
 ## Why AI Badger?
 
 - **Universal compatibility** — Works with any AI chat interface or local model
 - **Local-first codebase context tool** — Complete privacy, no uploads
-- **Token efficient** — Stop burning agent tokens on reviews, explanations, or brainstorming
+- **Token & cost efficient** — Send only relevant context instead of repeatedly feeding the whole repository to cloud models
 - **Precise & lightweight** — Built in Go, fast, minimal overhead
 - **Specialized modes** — `review` and `design` for common workflows
 
@@ -61,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | 
 
 See [docs/install.md](docs/install.md) for Windows, source builds, and more.
 
-Also available with an official [VS Code companion](https://marketplace.visualstudio.com/items?itemName=pvrlabs.ai-badger).
+Also available as an official [VS Code companion](https://marketplace.visualstudio.com/items?itemName=pvrlabs.ai-badger) ([GitHub](https://github.com/PVRLabs/aibadger-vscode)).
 
 ## Agent Skills
 
@@ -91,16 +89,10 @@ Full usage: [docs/usage.md](docs/usage.md)
 - [Browser Handoff Guide](docs/handoff.md)
 - [API Reference](docs/api.md) — Non-interactive commands for editors and scripts
 - [Agent Integrations](docs/agents.md) — Compact repository orientation for coding agents
-- [Articles](docs/articles/)
-- [Protocol Reference](docs/protocol.md)
 - [Limitations & Supported Projects](docs/limitations.md)
 - [Privacy & Safety](docs/privacy.md)
 - [Contributing](docs/development.md)
 
 ---
 
-**Star if this local AI coding context tool solves a real pain for you ⭐**
-
-Built in San Diego by [PVR Labs](https://pvrlabs.xyz). 🌊
-
-[Website](https://pvrlabs.xyz/aibadger) • [X @kupolov](https://x.com/kupolov)
+**If AI Badger makes your coding workflow simpler, consider starring the repo ⭐**

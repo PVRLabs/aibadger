@@ -85,6 +85,7 @@ type Model struct {
 
 	eng                     *engine.Engine
 	session                 *workflow.Session
+	reviewOptions           reviewtask.Options
 	schemaA                 string
 	schemaB                 string
 	commands                []extractor.Command
@@ -209,6 +210,7 @@ func NewModel(root string, cfg Config) Model {
 		goalFocus:              goalFocusEditor,
 		goalAttachmentSelected: -1,
 		session:                workflow.NewSession(nil, cfg.WhitespaceMode),
+		reviewOptions:          reviewtask.Options{Mode: reviewtask.ModeDefault},
 		externalRoots:          loadExternalRoots(root),
 		prepareReviewContext:   reviewtask.BuildInteractiveContext,
 	}
@@ -246,6 +248,10 @@ func (m *Model) applyStartupGoal() {
 	m.state = stateHome
 	m.status = startupMessage(m.cfg.Startup.Status.Severity, m.cfg.Startup.Status.Text)
 	m.err = nil
+	if protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview {
+		m.reviewOptions = reviewOptionsFromStartup(m.cfg.Startup)
+		m.reviewOptions.MaxPromptBytes = m.cfg.MaxTopologyPromptBytes
+	}
 	m.startupGoalLiteral = m.cfg.Startup.LiteralGoal
 	m.setGoalInputValue(m.cfg.Startup.Goal)
 	m.setGoalAttachments(startupGoalAttachments(m.cfg.Startup.Attachments))
@@ -286,15 +292,16 @@ func startupGoalAttachments(attachmentsIn []startup.Attachment) []goalAttachment
 		}
 		kind := goalAttachmentType(strings.TrimSpace(attachment.Type))
 		source := strings.TrimSpace(attachment.Source)
+		var converted goalAttachment
 		if kind == goalAttachmentReview {
-			attachments = append(attachments, newGoalReviewAttachment(source, attachment.Text, attachment.FilesChanged, attachment.Additions, attachment.Deletions, attachment.SensitivePaths))
-			continue
+			converted = newGoalReviewAttachment(source, attachment.Text, attachment.FilesChanged, attachment.Additions, attachment.Deletions, attachment.SensitivePaths)
+		} else if kind == goalAttachmentText {
+			converted = newGoalTextAttachment(source, attachment.Text)
+		} else {
+			converted = newGoalGitDiffAttachmentWithStats(source, attachment.Text, attachment.FilesChanged, attachment.Additions, attachment.Deletions)
 		}
-		if kind == goalAttachmentText {
-			attachments = append(attachments, newGoalTextAttachment(source, attachment.Text))
-			continue
-		}
-		attachments = append(attachments, newGoalGitDiffAttachmentWithStats(source, attachment.Text, attachment.FilesChanged, attachment.Additions, attachment.Deletions))
+		converted.reviewGenerated = attachment.ReviewGenerated
+		attachments = append(attachments, converted)
 	}
 	return attachments
 }
@@ -678,11 +685,12 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 	if prepare == nil {
 		prepare = reviewtask.BuildInteractiveContext
 	}
-	ctx, err := prepare(m.root, reviewtask.Options{
+	opts := reviewtask.Options{
 		Mode:           reviewtask.ModeDefault,
 		ExtraFocus:     extraFocus,
 		MaxPromptBytes: m.cfg.MaxTopologyPromptBytes,
-	})
+	}
+	ctx, err := prepare(m.root, opts)
 	if err != nil {
 		m.status = errorMessage(fmt.Sprintf("Unable to prepare review prompt: %v", err))
 		m.err = nil
@@ -691,18 +699,69 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 	}
 
 	m.cfg.Focus = protocol.FocusReview
+	m.reviewOptions = opts
 	m.state = stateHome
 	m.goal = ""
 	m.err = nil
 	m.completion.suppressedKey = ""
 	m.setGoalInputValue(ctx.Goal)
 	m.setGoalAttachments(startupGoalAttachments(ctx.Attachments))
+	markReviewGeneratedAttachments(m.goalAttachments)
 	m.resizeGoalEditor()
 	m.focusGoalEditor()
 	m.paste.Blur()
 
 	m.status = startupMessage(ctx.Status.Severity, ctx.Status.Text)
 
+	return m, textarea.Blink
+}
+
+func reviewOptionsFromStartup(ctx startup.Context) reviewtask.Options {
+	mode := reviewtask.ModeDefault
+	switch strings.ToLower(strings.TrimSpace(ctx.ReviewMode)) {
+	case reviewtask.ModeStaged.String():
+		mode = reviewtask.ModeStaged
+	case reviewtask.ModeBranch.String():
+		mode = reviewtask.ModeBranch
+	case reviewtask.ModeCommit.String():
+		mode = reviewtask.ModeCommit
+	}
+	return reviewtask.Options{
+		Mode:          mode,
+		Ref:           strings.TrimSpace(ctx.ReviewRef),
+		ExtraFocus:    ctx.ReviewExtraFocus,
+		SelectedPaths: append([]string(nil), ctx.ReviewSelectedPaths...),
+	}
+}
+
+func (m Model) handleReviewRefresh() (tea.Model, tea.Cmd) {
+	prepare := m.prepareReviewContext
+	if prepare == nil {
+		prepare = reviewtask.BuildInteractiveContext
+	}
+	opts := m.reviewOptions
+	opts.MaxPromptBytes = m.cfg.MaxTopologyPromptBytes
+	ctx, err := prepare(m.root, opts)
+	if err != nil {
+		m.status = errorMessage(fmt.Sprintf("Unable to refresh review context: %v", err))
+		m.err = nil
+		return m, textarea.Blink
+	}
+
+	refreshed := startupGoalAttachments(ctx.Attachments)
+	markReviewGeneratedAttachments(refreshed)
+	m.goalAttachments = replaceReviewGeneratedAttachments(m.goalAttachments, refreshed)
+	if len(m.goalAttachments) == 0 && m.goalFocus == goalFocusAttachments {
+		m.focusGoalEditor()
+	}
+	if m.goalAttachmentSelected >= len(m.goalAttachments) {
+		m.goalAttachmentSelected = len(m.goalAttachments) - 1
+	}
+	m.status = successMessage("Review context refreshed from the current Git state. Existing review instructions were preserved.")
+	if strings.EqualFold(strings.TrimSpace(ctx.Status.Severity), "warning") {
+		m.status = warningMessage("Review context refreshed. " + strings.TrimSpace(ctx.Status.Text))
+	}
+	m.err = nil
 	return m, textarea.Blink
 }
 

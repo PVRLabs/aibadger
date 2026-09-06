@@ -402,6 +402,7 @@ func (m Model) viewHelp() string {
 		"Enter          Submit or continue.",
 		"Tab            Complete / commands and @ files.",
 		"Ctrl+U         Clear line.",
+		"Ctrl+R         Refresh the Git review context in Review mode.",
 		"Ctrl+C         Quit Badger.",
 		"",
 		"BYOL loop",

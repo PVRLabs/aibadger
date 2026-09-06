@@ -138,7 +138,10 @@ func (t Task) StartupStatus() (text, severity string) {
 func (t Task) StartupContext() startup.Context {
 	text, severity := t.StartupStatus()
 	ctx := startup.Context{
-		Goal: t.StartupPrompt(),
+		ReviewMode:       t.Mode.String(),
+		ReviewRef:        t.Ref,
+		ReviewExtraFocus: t.ExtraFocus,
+		Goal:             t.StartupPrompt(),
 		Status: startup.Status{
 			Text:     text,
 			Severity: severity,
@@ -150,23 +153,25 @@ func (t Task) StartupContext() startup.Context {
 	ctx.Goal = t.Instruction
 	if t.Diff != "" {
 		ctx.Attachments = append(ctx.Attachments, startup.Attachment{
-			Type:         "git diff",
-			Source:       "git diff",
-			Text:         t.Diff,
-			SizeBytes:    int64(len(t.Diff)),
-			Lines:        countReviewTextLines(t.Diff),
-			FilesChanged: t.FilesChanged,
-			Additions:    t.Additions,
-			Deletions:    t.Deletions,
+			Type:            "git diff",
+			Source:          "git diff",
+			Text:            t.Diff,
+			SizeBytes:       int64(len(t.Diff)),
+			Lines:           countReviewTextLines(t.Diff),
+			FilesChanged:    t.FilesChanged,
+			Additions:       t.Additions,
+			Deletions:       t.Deletions,
+			ReviewGenerated: true,
 		})
 	}
 	if untrackedSection := formatUntrackedSection(t.UntrackedFiles, t.UntrackedOmitted); untrackedSection != "" {
 		ctx.Attachments = append(ctx.Attachments, startup.Attachment{
-			Type:      "text",
-			Source:    "Git-untracked files",
-			Text:      untrackedSection,
-			SizeBytes: int64(len(untrackedSection)),
-			Lines:     countReviewTextLines(untrackedSection),
+			Type:            "text",
+			Source:          "Git-untracked files",
+			Text:            untrackedSection,
+			SizeBytes:       int64(len(untrackedSection)),
+			Lines:           countReviewTextLines(untrackedSection),
+			ReviewGenerated: true,
 		})
 	}
 	return ctx

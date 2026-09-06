@@ -35,6 +35,7 @@ type Change struct {
 type ChangeSet struct {
 	Mode             Mode
 	Ref              string
+	SelectedPaths    []string
 	Changes          []Change
 	UntrackedPaths   []string
 	UntrackedOmitted int
@@ -138,6 +139,7 @@ func assembleChangeSet(repoRoot string, opts Options, baseArgs []string, metadat
 	return ChangeSet{
 		Mode:             opts.Mode,
 		Ref:              strings.TrimSpace(opts.Ref),
+		SelectedPaths:    append([]string(nil), selected...),
 		Changes:          changes,
 		UntrackedPaths:   untrackedPaths,
 		UntrackedOmitted: untrackedOmitted,

@@ -9,6 +9,13 @@ type Context struct {
 	LiteralGoal bool
 	Attachments []Attachment
 	Status      Status
+	// ReviewMode, ReviewRef, and ReviewExtraFocus preserve the review scope
+	// used to prepare this context so an interactive session can refresh it.
+	// They are optional metadata and do not affect non-review startup flows.
+	ReviewMode          string
+	ReviewRef           string
+	ReviewExtraFocus    string
+	ReviewSelectedPaths []string
 }
 
 // Attachment is a goal attachment prepared before the TUI starts.
@@ -21,6 +28,9 @@ type Attachment struct {
 	FilesChanged int
 	Additions    int
 	Deletions    int
+	// ReviewGenerated identifies context owned by the review builder. The TUI
+	// may replace these attachments when the user refreshes a review.
+	ReviewGenerated bool
 	// SensitivePaths lists tracked repository-relative paths whose diffs may
 	// contain secrets. It is metadata for interactive delivery only; the
 	// attachment text remains complete and authoritative.

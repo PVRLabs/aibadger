@@ -247,6 +247,13 @@ func TestBuildInitialReviewPayloadSelectedUntrackedUsesSameFilePolicy(t *testing
 	if !strings.Contains(result.Payload.Prompt, "const selected = true") || !result.Payload.Files[0].Untracked || len(result.Payload.ChangeSet.Changes) != 0 {
 		t.Fatalf("selected untracked contents did not use untracked supporting context: %+v", result.Payload)
 	}
+	if !reflect.DeepEqual(result.Payload.ChangeSet.SelectedPaths, []string{"scratch/new.go"}) {
+		t.Fatalf("selected paths = %v, want original selection", result.Payload.ChangeSet.SelectedPaths)
+	}
+	ctx := initialPayloadStartupContext(result.Payload)
+	if !reflect.DeepEqual(ctx.ReviewSelectedPaths, []string{"scratch/new.go"}) {
+		t.Fatalf("startup selected paths = %v, want original selection", ctx.ReviewSelectedPaths)
+	}
 }
 
 func TestUntrackedFilePolicyExactOversizedBinaryAndUnstable(t *testing.T) {

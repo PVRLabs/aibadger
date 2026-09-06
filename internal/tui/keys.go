@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -49,6 +50,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "esc":
 		return m.handleKeyEsc()
+
+	case "ctrl+r":
+		if m.state == stateHome && protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview {
+			return m.handleReviewRefresh()
+		}
 
 	case "enter":
 		if next, cmd, handled := m.handleKeyEnter(); handled {
@@ -572,6 +578,9 @@ func (m Model) statusLine() string {
 	switch mode {
 	case statusLineKeyboardHints:
 		hints := keyboardHintsForState(m.state)
+		if m.state == stateHome && protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview {
+			hints = append([]string{"Ctrl+R refresh review"}, hints...)
+		}
 		return strings.Join(append([]string{"Focus: " + workflow.FocusDisplayName(m.cfg.Focus)}, hints...), " · ")
 	default:
 		return ""

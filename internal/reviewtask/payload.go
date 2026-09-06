@@ -257,17 +257,22 @@ func initialPayloadStartupContext(payload InitialReviewPayload) startup.Context 
 	contextPrompt := repositoryMarker(payload.RepositoryLabel) + renderReviewContext(payload.ChangeSet, payload.Files, payload.MaxFileBytes)
 	additions, deletions := reviewPatchStats(payload.ChangeSet.Changes)
 	return startup.Context{
-		Goal: buildReviewInstruction(payload.Guidance),
+		ReviewMode:          payload.ChangeSet.Mode.String(),
+		ReviewRef:           payload.ChangeSet.Ref,
+		ReviewExtraFocus:    payload.Guidance,
+		ReviewSelectedPaths: append([]string(nil), payload.ChangeSet.SelectedPaths...),
+		Goal:                buildReviewInstruction(payload.Guidance),
 		Attachments: []startup.Attachment{{
-			Type:           "review context",
-			Source:         "review context",
-			Text:           contextPrompt,
-			SizeBytes:      int64(len(contextPrompt)),
-			Lines:          countReviewTextLines(contextPrompt),
-			FilesChanged:   len(payload.ChangeSet.Changes) + len(payload.ChangeSet.UntrackedPaths),
-			Additions:      additions,
-			Deletions:      deletions,
-			SensitivePaths: sensitiveReviewPaths(payload.ChangeSet),
+			Type:            "review context",
+			Source:          "review context",
+			Text:            contextPrompt,
+			SizeBytes:       int64(len(contextPrompt)),
+			Lines:           countReviewTextLines(contextPrompt),
+			FilesChanged:    len(payload.ChangeSet.Changes) + len(payload.ChangeSet.UntrackedPaths),
+			Additions:       additions,
+			Deletions:       deletions,
+			ReviewGenerated: true,
+			SensitivePaths:  sensitiveReviewPaths(payload.ChangeSet),
 		}},
 		Status: startup.Status{
 			Text:     "Loaded Git changes and supporting review context. Add optional guidance before submitting.",

@@ -74,7 +74,7 @@ func TestAssembleChangeSetAppliesLiteralSelectionAndRejectsMissing(t *testing.T)
 	if err != nil {
 		t.Fatalf("selected assembleChangeSet() error = %v", err)
 	}
-	if len(set.Changes) != 1 || set.Changes[0].Path != "two.go" || !reflect.DeepEqual(set.UntrackedPaths, []string{"new.txt"}) {
+	if len(set.Changes) != 1 || set.Changes[0].Path != "two.go" || !reflect.DeepEqual(set.SelectedPaths, []string{"new.txt", "two.go"}) || !reflect.DeepEqual(set.UntrackedPaths, []string{"new.txt"}) {
 		t.Fatalf("selected set = %#v", set)
 	}
 	if _, err := assembleChangeSet(root, Options{Mode: ModeDefault, SelectedPaths: []string{"missing.go"}}, nil, metadata, nil, 0, buildPatch); err == nil || !strings.Contains(err.Error(), "not a current change") {

@@ -5322,3 +5322,175 @@ func TestRenderTruncationNotesMultipleDropped(t *testing.T) {
 		t.Fatalf("unexpected truncated message, got: %q", got)
 	}
 }
+
+func TestReviewRefreshPreservesInstructionsAndUserAttachments(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel(t.TempDir(), cfg)
+	m.goalInput.SetValue("My edited review instructions")
+	old := newGoalReviewAttachment("review context", "old diff", 1, 1, 0, nil)
+	old.reviewGenerated = true
+	userAttachment := newGoalTextAttachment("user", "keep this attachment")
+	m.goalAttachments = []goalAttachment{old, userAttachment}
+	m.reviewOptions = reviewtask.Options{
+		Mode:          reviewtask.ModeDefault,
+		ExtraFocus:    "Check concurrency",
+		SelectedPaths: []string{"src/a.go", "src/b.go"},
+	}
+	var gotOptions reviewtask.Options
+	m.prepareReviewContext = func(_ string, opts reviewtask.Options) (startup.Context, error) {
+		gotOptions = opts
+		return startup.Context{
+			Attachments: []startup.Attachment{{
+				Type: "review context",
+				Text: "new diff",
+			}},
+			Status: startup.Status{Text: "refreshed", Severity: "success"},
+		}, nil
+	}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlR})
+	got := next.(Model)
+	if cmd == nil {
+		t.Fatal("refresh did not return an editor blink command")
+	}
+	if got.goalInput.Value() != "My edited review instructions" {
+		t.Fatalf("refresh changed review instructions: %q", got.goalInput.Value())
+	}
+	if len(got.goalAttachments) != 2 || got.goalAttachments[0].Text != "new diff" || got.goalAttachments[1].Text != "keep this attachment" {
+		t.Fatalf("refresh attachments = %#v, want refreshed context followed by user attachment", got.goalAttachments)
+	}
+	if !got.goalAttachments[0].reviewGenerated || got.goalAttachments[1].reviewGenerated {
+		t.Fatalf("refresh attachment markers = %#v", got.goalAttachments)
+	}
+	if gotOptions.Mode != reviewtask.ModeDefault || gotOptions.Ref != "" || gotOptions.ExtraFocus != "Check concurrency" || len(gotOptions.SelectedPaths) != 2 || gotOptions.SelectedPaths[0] != "src/a.go" || gotOptions.SelectedPaths[1] != "src/b.go" {
+		t.Fatalf("refresh options = %+v, want original review scope", gotOptions)
+	}
+	if !strings.Contains(got.status.text, "Review context refreshed") {
+		t.Fatalf("refresh status = %q", got.status.text)
+	}
+}
+
+func TestReviewRefreshFailurePreservesExistingContext(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel(t.TempDir(), cfg)
+	old := newGoalReviewAttachment("review context", "old diff", 1, 1, 0, nil)
+	old.reviewGenerated = true
+	m.goalAttachments = []goalAttachment{old}
+	m.prepareReviewContext = func(string, reviewtask.Options) (startup.Context, error) {
+		return startup.Context{}, errors.New("git diff failed")
+	}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlR})
+	got := next.(Model)
+	if cmd == nil {
+		t.Fatal("failed refresh did not return an editor blink command")
+	}
+	if len(got.goalAttachments) != 1 || got.goalAttachments[0].Text != "old diff" {
+		t.Fatalf("failed refresh changed existing context: %#v", got.goalAttachments)
+	}
+	if !strings.Contains(got.status.text, "Unable to refresh review context: git diff failed") {
+		t.Fatalf("failed refresh status = %q", got.status.text)
+	}
+}
+
+func TestReviewStartupReconstructsSelectedPaths(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	cfg.Startup = startup.Context{
+		Goal:                "Review selected files",
+		ReviewMode:          reviewtask.ModeDefault.String(),
+		ReviewSelectedPaths: []string{"app.go", "pkg/api.go"},
+		Attachments:         []startup.Attachment{{Type: "review context", Text: "initial context"}},
+	}
+
+	m := NewModel(t.TempDir(), cfg)
+	if len(m.reviewOptions.SelectedPaths) != 2 || m.reviewOptions.SelectedPaths[0] != "app.go" || m.reviewOptions.SelectedPaths[1] != "pkg/api.go" {
+		t.Fatalf("startup review options = %+v, want selected paths preserved", m.reviewOptions)
+	}
+}
+
+func TestReviewRefreshPreservesBranchScope(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	cfg.Startup = startup.Context{
+		Goal:       "Review branch changes",
+		ReviewMode: reviewtask.ModeBranch.String(),
+		ReviewRef:  "main",
+		Attachments: []startup.Attachment{{
+			Type: "review context", Text: "initial context", ReviewGenerated: true,
+		}},
+	}
+	m := NewModel(t.TempDir(), cfg)
+	var gotOptions reviewtask.Options
+	m.prepareReviewContext = func(_ string, opts reviewtask.Options) (startup.Context, error) {
+		gotOptions = opts
+		return startup.Context{
+			Attachments: []startup.Attachment{{Type: "review context", Text: "refreshed context", ReviewGenerated: true}},
+			Status:      startup.Status{Severity: "success"},
+		}, nil
+	}
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlR})
+	got := next.(Model)
+	if gotOptions.Mode != reviewtask.ModeBranch || gotOptions.Ref != "main" || len(gotOptions.SelectedPaths) != 0 {
+		t.Fatalf("refresh options = %+v, want branch main without selected paths", gotOptions)
+	}
+	if len(got.goalAttachments) != 1 || got.goalAttachments[0].Text != "refreshed context" {
+		t.Fatalf("refresh attachments = %#v", got.goalAttachments)
+	}
+}
+
+func TestReviewRefreshPreservesStartupUserAttachments(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	cfg.Startup = startup.Context{
+		Goal:       "Review changes",
+		ReviewMode: reviewtask.ModeDefault.String(),
+		Attachments: []startup.Attachment{
+			{Type: "review context", Text: "initial context", ReviewGenerated: true},
+			{Type: "text", Source: "user", Text: "keep this note"},
+		},
+	}
+	m := NewModel(t.TempDir(), cfg)
+	m.prepareReviewContext = func(string, reviewtask.Options) (startup.Context, error) {
+		return startup.Context{
+			Attachments: []startup.Attachment{{Type: "review context", Text: "refreshed context", ReviewGenerated: true}},
+			Status:      startup.Status{Severity: "success"},
+		}, nil
+	}
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlR})
+	got := next.(Model)
+	if len(got.goalAttachments) != 2 || got.goalAttachments[0].Text != "refreshed context" || got.goalAttachments[1].Text != "keep this note" {
+		t.Fatalf("refresh attachments = %#v, want refreshed context and preserved user note", got.goalAttachments)
+	}
+}
+
+func TestReviewRefreshEmptyContextReturnsFocusToEditor(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel(t.TempDir(), cfg)
+	old := newGoalReviewAttachment("review context", "initial context", 1, 1, 0, nil)
+	old.reviewGenerated = true
+	m.goalAttachments = []goalAttachment{old}
+	if !m.focusGoalAttachments() {
+		t.Fatal("failed to focus review attachment")
+	}
+	m.prepareReviewContext = func(string, reviewtask.Options) (startup.Context, error) {
+		return startup.Context{Status: startup.Status{Text: "No reviewable changes were detected.", Severity: "warning"}}, nil
+	}
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlR})
+	got := next.(Model)
+	if len(got.goalAttachments) != 0 {
+		t.Fatalf("empty refresh attachments = %#v, want none", got.goalAttachments)
+	}
+	if got.goalFocus != goalFocusEditor || !got.goalInput.Focused() {
+		t.Fatalf("empty refresh focus = %v editor-focused=%v, want focused editor", got.goalFocus, got.goalInput.Focused())
+	}
+	if got.goalAttachmentSelected != -1 {
+		t.Fatalf("empty refresh selection = %d, want -1", got.goalAttachmentSelected)
+	}
+}

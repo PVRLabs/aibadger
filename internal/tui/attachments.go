@@ -45,16 +45,45 @@ const (
 )
 
 type goalAttachment struct {
-	Type           goalAttachmentType
-	Source         string
-	Summary        string
-	Text           string
-	SizeBytes      int64
-	Lines          int
-	FilesChanged   int
-	Additions      int
-	Deletions      int
-	SensitivePaths []string
+	Type            goalAttachmentType
+	Source          string
+	Summary         string
+	Text            string
+	SizeBytes       int64
+	Lines           int
+	FilesChanged    int
+	Additions       int
+	Deletions       int
+	SensitivePaths  []string
+	reviewGenerated bool
+}
+
+func markReviewGeneratedAttachments(attachments []goalAttachment) {
+	for i := range attachments {
+		attachments[i].reviewGenerated = true
+	}
+}
+
+func replaceReviewGeneratedAttachments(existing, refreshed []goalAttachment) []goalAttachment {
+	firstGenerated := -1
+	kept := make([]goalAttachment, 0, len(existing)+len(refreshed))
+	for _, attachment := range existing {
+		if attachment.reviewGenerated {
+			if firstGenerated < 0 {
+				firstGenerated = len(kept)
+			}
+			continue
+		}
+		kept = append(kept, attachment)
+	}
+	if firstGenerated < 0 {
+		return append(kept, refreshed...)
+	}
+	result := make([]goalAttachment, 0, len(kept)+len(refreshed))
+	result = append(result, kept[:firstGenerated]...)
+	result = append(result, refreshed...)
+	result = append(result, kept[firstGenerated:]...)
+	return result
 }
 
 func newGoalTextAttachment(source, text string) goalAttachment {

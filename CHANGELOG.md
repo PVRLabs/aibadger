@@ -4,6 +4,13 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+### Review experience
+
+- Added `Ctrl+R` in the interactive Review editor to refresh generated review
+  context from the current Git state while preserving edited instructions,
+  user-added attachments, review mode/ref, and default-mode selected paths.
+  Failed refreshes leave the existing review context unchanged.
+
 ## [v0.5.3] - 2026-09-03
 
 ### Prompt delivery

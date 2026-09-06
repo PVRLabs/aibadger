@@ -21,7 +21,11 @@ badger review
 
 Badger loads the generated review context as a removable attachment and leaves
 the editor available for optional guidance. Add any focus you want, or submit
-the review as-is.
+the review as-is. If you move into the attachment list, press **Esc** to return
+to the editor; while in Review focus, press **Ctrl+R** to refresh the generated
+review context from the current Git state. Refresh preserves your edited review
+instructions and user-added attachments, replaces only the generated review
+context, and keeps the existing context if refresh fails.
 
 > [!NOTE]
 > Default review includes the complete staged and unstaged tracked diff,
@@ -265,7 +269,9 @@ Keep the change small and include any tests that should change.
 - `/code`: switch the active focus to Code and clear the current goal and attachments.
 - `/review`: load current Git review context as a removable attachment and keep
   the editor available for optional guidance. It reuses the same flow as
-  `badger review`.
+  `badger review`. In Review focus, press **Ctrl+R** to refresh the generated
+  context from the current Git state while preserving edited instructions and
+  user-added attachments.
 - `/design`: switch the active focus to Design and clear the current goal and attachments. Press Enter with the empty editor to start the zero-input exploration.
 - `/followup`: switch the active focus to Follow-up. The active focus appears in the status bar as `Focus: Follow-up` and the prompt seeds a short follow-up framing.
 - `/exit`: quit Badger.
@@ -339,6 +345,12 @@ Press **Tab** to switch focus between the goal editor and the attachment
 list, then use the **arrow keys** to cycle through attachments — the focused
 attachment's details are shown inline, and you can remove it with
 **Backspace** or **Delete** before submitting.
+
+While in Review focus on the home screen, press **Ctrl+R** to refresh the
+generated review attachment; it also works while the attachment list has focus.
+If the refresh leaves no attachments, focus returns to the editor. The selected
+review mode/ref is retained; default-mode selected-path reviews also retain
+their selected repository-relative paths.
 
 ## External Context
 

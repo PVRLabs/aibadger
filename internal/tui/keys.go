@@ -134,7 +134,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleKeyEsc cancels the current operation and returns to the home screen,
-// except during states where interruption is not safe (scanning, writing).
+// refreshing Review context on the way back from a later cancelable Review
+// state, except during states where interruption is not safe.
 func (m Model) handleKeyEsc() (tea.Model, tea.Cmd) {
 	if m.state == stateHome && m.goalFocus == goalFocusAttachments {
 		m.focusGoalEditor()
@@ -145,12 +146,29 @@ func (m Model) handleKeyEsc() (tea.Model, tea.Cmd) {
 		// These states are either already home or mid-operation; esc is a no-op.
 		return m, nil
 	default:
+		if protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview && reviewEscRefreshState(m.state) {
+			m.state = stateHome
+			m.focusGoalEditor()
+			m.paste.Blur()
+			return m.handleReviewRefresh()
+		}
 		m.state = stateHome
 		m.status = neutralMessage("Cancelled. Ready for a new goal.")
 		m.err = nil
 		m.focusGoalEditor()
 		m.paste.Blur()
 		return m, textarea.Blink
+	}
+}
+
+func reviewEscRefreshState(st state) bool {
+	switch st {
+	case stateScanComplete, stateWaitingForExtractions, stateContextWarning,
+		stateContextReady, stateWaitingForCode, stateTextResponse, stateWritePreview,
+		stateManualCopy, statePromptFileReveal:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -5494,3 +5494,140 @@ func TestReviewRefreshEmptyContextReturnsFocusToEditor(t *testing.T) {
 		t.Fatalf("empty refresh selection = %d, want -1", got.goalAttachmentSelected)
 	}
 }
+
+func TestReviewEscRefreshesFromCancelableWorkflowState(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel(t.TempDir(), cfg)
+	m.state = stateWaitingForCode
+	m.goalInput.SetValue("Keep this edited guidance")
+	old := newGoalReviewAttachment("review context", "old context", 1, 1, 0, nil)
+	old.reviewGenerated = true
+	userAttachment := newGoalTextAttachment("user", "keep this attachment")
+	m.goalAttachments = []goalAttachment{old, userAttachment}
+	m.reviewOptions = reviewtask.Options{
+		Mode:          reviewtask.ModeDefault,
+		ExtraFocus:    "Check concurrency",
+		SelectedPaths: []string{"src/a.go", "src/b.go"},
+	}
+	var gotOptions reviewtask.Options
+	called := false
+	m.prepareReviewContext = func(_ string, opts reviewtask.Options) (startup.Context, error) {
+		called = true
+		gotOptions = opts
+		return startup.Context{
+			Attachments: []startup.Attachment{{Type: "review context", Text: "new context"}},
+			Status:      startup.Status{Severity: "success"},
+		}, nil
+	}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	got := next.(Model)
+	if !called {
+		t.Fatal("Review Esc did not refresh the review context")
+	}
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if gotOptions.Mode != reviewtask.ModeDefault || gotOptions.Ref != "" || gotOptions.ExtraFocus != "Check concurrency" || len(gotOptions.SelectedPaths) != 2 || gotOptions.SelectedPaths[0] != "src/a.go" || gotOptions.SelectedPaths[1] != "src/b.go" {
+		t.Fatalf("Esc refresh options = %+v, want retained review scope", gotOptions)
+	}
+	if got.goalInput.Value() != "Keep this edited guidance" {
+		t.Fatalf("Esc refresh changed guidance: %q", got.goalInput.Value())
+	}
+	if len(got.goalAttachments) != 2 || got.goalAttachments[0].Text != "new context" || got.goalAttachments[1].Text != "keep this attachment" {
+		t.Fatalf("Esc refresh attachments = %#v, want refreshed context and user attachment", got.goalAttachments)
+	}
+	if got.goalFocus != goalFocusEditor || !got.goalInput.Focused() || cmd == nil {
+		t.Fatalf("Esc refresh focus/cmd = %v/%v/%v, want editor and blink command", got.goalFocus, got.goalInput.Focused(), cmd)
+	}
+}
+
+func TestReviewEscRefreshFailureReturnsHomeAndPreservesUserState(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel(t.TempDir(), cfg)
+	m.state = stateWaitingForExtractions
+	m.goalInput.SetValue("Edited review guidance")
+	old := newGoalReviewAttachment("review context", "old context", 1, 1, 0, nil)
+	old.reviewGenerated = true
+	m.goalAttachments = []goalAttachment{old, newGoalTextAttachment("user", "user note")}
+	m.prepareReviewContext = func(string, reviewtask.Options) (startup.Context, error) {
+		return startup.Context{}, errors.New("git state unavailable")
+	}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	got := next.(Model)
+	if got.state != stateHome {
+		t.Fatalf("state = %v, want %v", got.state, stateHome)
+	}
+	if got.goalInput.Value() != "Edited review guidance" || len(got.goalAttachments) != 2 || got.goalAttachments[0].Text != "old context" || got.goalAttachments[1].Text != "user note" {
+		t.Fatalf("failed Esc refresh changed user state: guidance=%q attachments=%#v", got.goalInput.Value(), got.goalAttachments)
+	}
+	if !strings.Contains(got.status.text, "Unable to refresh review context: git state unavailable") || strings.Contains(got.status.text, "Cancelled") {
+		t.Fatalf("failed Esc refresh status = %q, want refresh error", got.status.text)
+	}
+	if cmd == nil {
+		t.Fatal("failed Esc refresh did not return an editor blink command")
+	}
+}
+
+func TestReviewHomeAttachmentEscOnlyFocusesEditor(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel(t.TempDir(), cfg)
+	m.goalAttachments = []goalAttachment{newGoalReviewAttachment("review context", "existing", 1, 1, 0, nil)}
+	m.goalAttachments[0].reviewGenerated = true
+	if !m.focusGoalAttachments() {
+		t.Fatal("failed to focus attachment list")
+	}
+	called := false
+	m.prepareReviewContext = func(string, reviewtask.Options) (startup.Context, error) {
+		called = true
+		return startup.Context{}, nil
+	}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	got := next.(Model)
+	if called || got.state != stateHome || got.goalFocus != goalFocusEditor || !got.goalInput.Focused() {
+		t.Fatalf("attachment-focus Esc = called %v state %v focus %v editor-focused %v", called, got.state, got.goalFocus, got.goalInput.Focused())
+	}
+	if cmd == nil {
+		t.Fatal("attachment-focus Esc did not return an editor blink command")
+	}
+}
+
+func TestReviewEscEmptyRefreshRestoresEditorFocus(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	m := NewModel(t.TempDir(), cfg)
+	m.state = stateContextReady
+	old := newGoalReviewAttachment("review context", "old context", 1, 1, 0, nil)
+	old.reviewGenerated = true
+	m.goalAttachments = []goalAttachment{old}
+	m.prepareReviewContext = func(string, reviewtask.Options) (startup.Context, error) {
+		return startup.Context{Status: startup.Status{Severity: "warning", Text: "No reviewable changes"}}, nil
+	}
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	got := next.(Model)
+	if got.state != stateHome || len(got.goalAttachments) != 0 || got.goalFocus != goalFocusEditor || !got.goalInput.Focused() {
+		t.Fatalf("empty Esc refresh = state %v attachments %d focus %v editor-focused %v", got.state, len(got.goalAttachments), got.goalFocus, got.goalInput.Focused())
+	}
+}
+
+func TestNonReviewEscBehaviorIsUnchanged(t *testing.T) {
+	m := NewModel(t.TempDir(), DefaultConfig())
+	m.state = stateWaitingForCode
+	called := false
+	m.prepareReviewContext = func(string, reviewtask.Options) (startup.Context, error) {
+		called = true
+		return startup.Context{}, nil
+	}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	got := next.(Model)
+	if called || got.state != stateHome || !strings.Contains(got.status.text, "Cancelled. Ready for a new goal.") || cmd == nil {
+		t.Fatalf("non-Review Esc = called %v state %v status %q cmd %v", called, got.state, got.status.text, cmd)
+	}
+}

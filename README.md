@@ -87,6 +87,7 @@ Full usage: [docs/usage.md](docs/usage.md)
 
 - [Usage Examples & Walkthrough](docs/usage.md)
 - [Browser Handoff Guide](docs/handoff.md)
+- [Configuration: User limits and external context](docs/settings.md)
 - [API Reference](docs/api.md) — Non-interactive commands for editors and scripts
 - [Agent Integrations](docs/agents.md) — Compact repository orientation for coding agents
 - [Limitations & Supported Projects](docs/limitations.md)

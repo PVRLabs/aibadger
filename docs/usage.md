@@ -6,6 +6,50 @@ Badger runs from the root of the project you want to inspect:
 badger
 ```
 
+## Configuring interactive limits
+
+Users with unusually large repositories or source files can raise selected
+interactive limits in `~/.badger/settings.json`:
+
+```json
+{
+  "first_run_onboarding_completed": true,
+  "whitespace_mode": "smart",
+  "limits": {
+    "max_files_per_directory": 1000,
+    "max_context_file_bytes": 131072,
+    "max_topology_prompt_bytes": 1048576,
+    "max_prompt_two_bytes": 524288
+  }
+}
+```
+
+The optional limits are increase-only. Omit a key or set it to `0` to retain
+the effective value supplied by Badger. Accepted inclusive ranges are:
+
+| Setting | Default | Accepted range |
+|---|---:|---:|
+| `max_files_per_directory` | 250 | 250–5,000 |
+| `max_context_file_bytes` | 50 KiB | 50–512 KiB |
+| `max_prompt_two_bytes` | 192 KiB | 192 KiB–1 MiB |
+| `max_topology_prompt_bytes` | 512 KiB | 512 KiB–2 MiB |
+
+An out-of-range number is ignored independently with a non-blocking startup
+warning. A malformed value type or malformed `limits` container ignores the
+complete limits object while retaining valid top-level settings. An unreadable
+or malformed settings file is ignored in full and also produces a non-blocking
+warning; only a missing file starts the normal first-run onboarding flow.
+Badger does not automatically rewrite a settings file that failed to load, so
+its original contents remain available for correction.
+
+These settings apply only to interactive sessions, not `badger api` commands.
+The directory limit currently affects Node and generic fallback scanning; Go,
+Java, and Python detectors retain their existing behavior. The two prompt byte
+values are best-effort targets: Badger reduces droppable topology or extracted
+context, but retains required framing, task, and instruction sections even
+when those sections alone exceed the target. The context-file setting trims
+retained extracted content; it does not change extraction I/O behavior.
+
 ## Walkthrough
 
 This example traces a full session end-to-end using `badger review`.

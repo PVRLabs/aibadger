@@ -86,6 +86,7 @@ type Model struct {
 	eng                     *engine.Engine
 	session                 *workflow.Session
 	reviewOptions           reviewtask.Options
+	reviewMaxPromptBytes    int
 	schemaA                 string
 	schemaB                 string
 	commands                []extractor.Command
@@ -99,6 +100,9 @@ type Model struct {
 	response                string
 
 	onboardingCompletionSaved bool
+	settingsWriteAllowed      bool
+	settings                  Settings
+	startupWarnings           []string
 
 	manualCopyKind string
 	manualCopyText string
@@ -211,11 +215,17 @@ func NewModel(root string, cfg Config) Model {
 		goalAttachmentSelected: -1,
 		session:                workflow.NewSession(nil, cfg.WhitespaceMode),
 		reviewOptions:          reviewtask.Options{Mode: reviewtask.ModeDefault},
+		reviewMaxPromptBytes:   cfg.MaxTopologyPromptBytes,
 		externalRoots:          loadExternalRoots(root),
 		prepareReviewContext:   reviewtask.BuildInteractiveContext,
 	}
 
-	settings, showOnboarding, onboardingCompleted := loadSettingsState(cfg.SettingsPath)
+	settings, resolvedCfg, showOnboarding, onboardingCompleted, settingsWriteAllowed, settingsWarnings := loadSettingsState(cfg.SettingsPath, cfg)
+	cfg = resolvedCfg
+	m.cfg = cfg
+	m.settings = settings
+	m.settingsWriteAllowed = settingsWriteAllowed
+	m.startupWarnings = settingsWarnings
 	if settings.WhitespaceMode != "" {
 		cfg.WhitespaceMode = writer.WhitespaceMode(settings.WhitespaceMode)
 		m.cfg = cfg
@@ -250,7 +260,7 @@ func (m *Model) applyStartupGoal() {
 	m.err = nil
 	if protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview {
 		m.reviewOptions = reviewOptionsFromStartup(m.cfg.Startup)
-		m.reviewOptions.MaxPromptBytes = m.cfg.MaxTopologyPromptBytes
+		m.reviewOptions.MaxPromptBytes = m.reviewMaxPromptBytes
 	}
 	m.startupGoalLiteral = m.cfg.Startup.LiteralGoal
 	m.setGoalInputValue(m.cfg.Startup.Goal)
@@ -338,15 +348,23 @@ func loadExternalRoots(root string) []taggedfile.ExternalRoot {
 	return roots
 }
 
-func loadSettingsState(settingsPath string) (Settings, bool, bool) {
+func loadSettingsState(settingsPath string, cfg Config) (Settings, Config, bool, bool, bool, []string) {
 	if settingsPath == "" {
-		return Settings{}, false, true
+		return Settings{}, cfg, false, true, false, nil
 	}
 	settings, err := LoadSettings(settingsPath)
 	if err != nil {
-		return Settings{}, true, false
+		if os.IsNotExist(err) {
+			return Settings{}, cfg, true, false, true, nil
+		}
+		var limitsErr limitsDecodeError
+		if errors.As(err, &limitsErr) {
+			return settings, cfg, !settings.FirstRunOnboardingCompleted, settings.FirstRunOnboardingCompleted, false, []string{settingsLoadWarning(settingsPath, err)}
+		}
+		return Settings{}, cfg, false, false, false, []string{settingsLoadWarning(settingsPath, err)}
 	}
-	return settings, !settings.FirstRunOnboardingCompleted, settings.FirstRunOnboardingCompleted
+	resolved, warnings := resolveSettingsLimits(cfg, settings.Limits)
+	return settings, resolved, !settings.FirstRunOnboardingCompleted, settings.FirstRunOnboardingCompleted, true, warnings
 }
 
 func (m Model) refreshTopologyPrompt() (Model, []string) {
@@ -688,7 +706,7 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 	opts := reviewtask.Options{
 		Mode:           reviewtask.ModeDefault,
 		ExtraFocus:     extraFocus,
-		MaxPromptBytes: m.cfg.MaxTopologyPromptBytes,
+		MaxPromptBytes: m.reviewMaxPromptBytes,
 	}
 	ctx, err := prepare(m.root, opts)
 	if err != nil {
@@ -740,7 +758,7 @@ func (m Model) handleReviewRefresh() (tea.Model, tea.Cmd) {
 		prepare = reviewtask.BuildInteractiveContext
 	}
 	opts := m.reviewOptions
-	opts.MaxPromptBytes = m.cfg.MaxTopologyPromptBytes
+	opts.MaxPromptBytes = m.reviewMaxPromptBytes
 	ctx, err := prepare(m.root, opts)
 	if err != nil {
 		m.status = errorMessage(fmt.Sprintf("Unable to refresh review context: %v", err))
@@ -1030,9 +1048,10 @@ func (m *Model) resetPaste(placeholder string) {
 }
 
 func (m *Model) markOnboardingCompleted() {
-	if m.cfg.SettingsPath == "" || m.onboardingCompletionSaved {
+	if m.cfg.SettingsPath == "" || m.onboardingCompletionSaved || !m.settingsWriteAllowed {
 		return
 	}
-	_ = SaveSettings(m.cfg.SettingsPath, Settings{FirstRunOnboardingCompleted: true})
+	m.settings.FirstRunOnboardingCompleted = true
+	_ = SaveSettings(m.cfg.SettingsPath, m.settings)
 	m.onboardingCompletionSaved = true
 }

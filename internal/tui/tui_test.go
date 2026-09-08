@@ -426,7 +426,7 @@ func TestNewModelShowsOnboardingWhenSettingsFalse(t *testing.T) {
 	}
 }
 
-func TestNewModelShowsOnboardingWhenSettingsUnreadable(t *testing.T) {
+func TestNewModelWarnsWithoutOnboardingWhenSettingsMalformed(t *testing.T) {
 	settingsPath := filepath.Join(t.TempDir(), ".badger", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
@@ -439,8 +439,11 @@ func TestNewModelShowsOnboardingWhenSettingsUnreadable(t *testing.T) {
 
 	m := NewModel("/tmp/project", cfg)
 
-	if m.state != stateOnboarding {
-		t.Fatalf("state = %v, want %v", m.state, stateOnboarding)
+	if m.state != stateHome {
+		t.Fatalf("state = %v, want %v", m.state, stateHome)
+	}
+	if len(m.startupWarnings) != 1 || !strings.Contains(m.View(), settingsPath) {
+		t.Fatalf("startup warnings = %v, view = %q", m.startupWarnings, m.View())
 	}
 }
 

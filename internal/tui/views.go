@@ -48,6 +48,10 @@ func (m Model) View() string {
 		b.WriteString(m.renderMessage(m.status))
 		b.WriteString("\n\n")
 	}
+	for _, warning := range m.startupWarnings {
+		b.WriteString(m.renderMessage(warningMessage(warning)))
+		b.WriteString("\n\n")
+	}
 	if m.err != nil {
 		b.WriteString(m.renderMessage(errorMessage(m.err.Error())))
 		b.WriteString("\n\n")

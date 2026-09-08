@@ -11,6 +11,15 @@ Notable user-facing changes to Badger are documented here.
   user-added attachments, review mode/ref, and default-mode selected paths.
   Failed refreshes leave the existing review context unchanged.
 
+### Interactive settings
+
+- Added optional `~/.badger/settings.json` limits for larger interactive
+  repositories and source files: directory scan count, per-file context,
+  Prompt 1 topology, and Prompt 2 size targets.
+- Invalid values produce visible non-blocking startup warnings. Malformed
+  settings are not automatically overwritten during the same session, and
+  settings writes preserve existing known fields.
+
 ## [v0.5.3] - 2026-09-03
 
 ### Prompt delivery

@@ -24,6 +24,14 @@ and under your control.
 - **The boundary is easy to inspect.** Each clipboard payload is visible before
   you move it between Badger and the browser.
 
+Manual handoff is also useful in corporate or restricted development
+environments where coding agents should not have direct repository access, but
+an approved browser AI is available. Badger scans the repository locally and
+lets you inspect the exact context before sharing it. This makes explicit
+context sharing part of the workflow rather than granting an agent broad
+repository access. What may be shared, and with which AI service, remains
+subject to your organization's policy.
+
 > [!NOTE]
 > Badger needs no network access. It can scan and extract context in offline,
 > air-gapped, or network-restricted development environments. Any transfer to

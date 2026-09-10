@@ -4,6 +4,8 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.5.4] - 2026-09-09
+
 ### Review experience
 
 - Added `Ctrl+R` in the interactive Review editor to refresh generated review

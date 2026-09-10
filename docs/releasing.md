@@ -122,6 +122,27 @@ gh release view "${RELEASE_VERSION}"
    registered, use that checkout; otherwise clone
    `https://github.com/PVRLabs/homebrew-tap`.
 
+6. Post a structured announcement in the repository's [Announcements
+   discussion category](https://github.com/PVRLabs/aibadger/discussions/categories/announcements)
+   after the release is public and the main distribution paths are updated.
+   Use the changelog and release assets as the source of truth. Keep the post
+   focused on user-visible changes and write it in this order:
+
+   - Title: `AI Badger ${RELEASE_VERSION}: <two concise release themes>`
+   - Short opening paragraph announcing the release and its overall benefit.
+   - One `##` section per major feature area, with a short explanation and
+     concrete behavior or configuration details.
+   - `## Install or update` with links to the GitHub Release, relevant docs,
+     Homebrew commands, and the tagged curl installer when applicable.
+   - A brief closing invitation for feedback, discussions, or bug reports.
+
+   For example, the v0.5.4 announcement used the themes **refreshable
+   reviews** and **configurable limits**, then included the four supported
+   settings and their accepted ranges, followed by GitHub Release, Homebrew,
+   and curl installation instructions. Do not announce unreleased or
+   speculative work, and link to the exact `${RELEASE_VERSION}` tag rather
+   than a moving `latest` URL when documenting release-specific behavior.
+
 The release workflow is triggered only by pushing tags that match `v*`. It is
 not triggered by publishing a GitHub Release.
 

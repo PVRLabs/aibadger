@@ -12,6 +12,9 @@ brew install pvrlabs/tap/badger
 
 The tap pulls release tarballs from GitHub Releases.
 
+The macOS release requires macOS 13 Ventura or newer. Linux and Windows
+requirements are unchanged.
+
 ## Curl Installer (Linux and macOS)
 
 Install the latest release:
@@ -74,6 +77,8 @@ go install github.com/PVRLabs/aibadger/cmd/badger@latest
 ```
 
 ## Build From Source
+
+Building from source requires Go 1.27.1 or newer.
 
 Development build:
 

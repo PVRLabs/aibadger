@@ -11,8 +11,8 @@ clearly distinguishable from published release binaries.
 
 Current release artifacts are built for:
 
-- macOS `amd64`
-- macOS `arm64`
+- macOS 13 Ventura or newer, `amd64`
+- macOS 13 Ventura or newer, `arm64`
 - Linux `amd64`
 - Linux `arm64`
 - Windows `amd64`

@@ -81,36 +81,58 @@ go build -tags aibadger_release -ldflags="-s -w" -o badger ./cmd/badger
 ## Release Steps
 
 1. Commit the version bump and changelog on `main`.
-2. Push that commit, then tag that exact commit and push the tag:
+2. Push that commit and confirm the ordinary `main` CI run for the release
+   commit succeeds:
 
 ```bash
 git push origin main
-git tag "${RELEASE_VERSION}"
-git push origin "${RELEASE_VERSION}"
-```
-
-   Pushing the `v*` tag is what starts `.github/workflows/release.yml`. That
-   workflow builds the archives and **creates** the GitHub Release, including
-   notes from `CHANGELOG.md`. Do not run `gh release create` or publish a
-   release by hand first; that races the workflow and can produce an empty
-   release.
-
-3. Wait until **this tag's** workflow succeeds and the GitHub Release has all
-   assets. Select the run by tag name (`headBranch` is the `v*` tag), not by
-   "latest release.yml run":
-
-```bash
-release_sha="$(git rev-parse "${RELEASE_VERSION}^{commit}")"
-run_id=""
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  run_id="$(gh run list \
-    --workflow=release.yml \
-    --branch "${RELEASE_VERSION}" \
+release_sha="$(git rev-parse HEAD)"
+ci_run_id=""
+for _ in {1..30}; do
+  ci_run_id="$(gh run list \
+    --workflow=ci.yml \
+    --branch main \
     --commit "${release_sha}" \
+    --event push \
     --limit 1 \
     --json databaseId \
     --jq '.[0].databaseId')"
-  [ -n "${run_id}" ] && break
+  [ -n "${ci_run_id}" ] && break
+  sleep 2
+done
+[ -n "${ci_run_id}" ] || { echo "no ci.yml run for ${release_sha}" >&2; exit 1; }
+gh run watch "${ci_run_id}" --exit-status
+```
+
+3. Record the previous release-workflow run, dispatch the workflow from `main`,
+   then wait for the newly created run and the GitHub Release:
+
+```bash
+previous_run_id="$(gh run list \
+  --workflow=release.yml \
+  --branch main \
+  --event workflow_dispatch \
+  --limit 1 \
+  --json databaseId \
+  --jq '.[0].databaseId')"
+gh workflow run release.yml \
+  --repo PVRLabs/aibadger \
+  --ref main \
+  -f version="${RELEASE_VERSION}"
+
+run_id=""
+for _ in {1..30}; do
+  candidate_run_id="$(gh run list \
+    --workflow=release.yml \
+    --branch main \
+    --event workflow_dispatch \
+    --limit 1 \
+    --json databaseId \
+    --jq '.[0].databaseId')"
+  if [ -n "${candidate_run_id}" ] && [ "${candidate_run_id}" != "${previous_run_id}" ]; then
+    run_id="${candidate_run_id}"
+    break
+  fi
   sleep 2
 done
 [ -n "${run_id}" ] || { echo "no release.yml run for ${RELEASE_VERSION}" >&2; exit 1; }
@@ -118,21 +140,81 @@ gh run watch "${run_id}" --exit-status
 gh release view "${RELEASE_VERSION}"
 ```
 
+   The workflow validates the prepared commit, creates the exact `v*` tag,
+   builds the archives, and **creates** the GitHub Release, including notes
+   from `CHANGELOG.md`. Do not run `git tag`, `gh release create`, or publish a
+   release by hand first.
+
    Confirm five archives and five `.sha256` files are attached, and that each
    checksum file names the archive (for example
    `badger_X.Y.Z_linux_amd64.tar.gz`), not `dist/...`.
 4. After the release is public, bump `internal/version/version.go` on `main` to
    the next development version (for example `v0.4.2-dev` after releasing
-   `v0.4.1`), commit, and push. Do not move the release tag to this commit.
-5. Update the published Homebrew formula in
-   [`homebrew-tap`](https://github.com/PVRLabs/homebrew-tap)
-   (`Formula/badger.rb` **in that repository**), then push. Copy the hash field
-   from the GitHub Release `.sha256` files. The tap ships macOS and Linux
-   only; Windows is GitHub Releases and the PowerShell installer.
+   `v0.4.1`), commit it, then push and confirm ordinary `main` CI. Do not move
+   the release tag to this commit:
 
-   This repository has no Homebrew formula. If `repo-map get homebrew-tap` is
-   registered, use that checkout; otherwise clone
-   `https://github.com/PVRLabs/homebrew-tap`.
+```bash
+git push origin main
+dev_sha="$(git rev-parse HEAD)"
+dev_ci_run_id=""
+for _ in {1..30}; do
+  dev_ci_run_id="$(gh run list \
+    --workflow=ci.yml \
+    --branch main \
+    --commit "${dev_sha}" \
+    --event push \
+    --limit 1 \
+    --json databaseId \
+    --jq '.[0].databaseId')"
+  [ -n "${dev_ci_run_id}" ] && break
+  sleep 2
+done
+[ -n "${dev_ci_run_id}" ] || { echo "no ci.yml run for ${dev_sha}" >&2; exit 1; }
+gh run watch "${dev_ci_run_id}" --exit-status
+```
+
+5. Dispatch the Homebrew tap workflow for Badger after the GitHub Release is
+   public:
+
+```bash
+previous_tap_run_id="$(gh run list \
+  --repo PVRLabs/homebrew-tap \
+  --workflow=update-formula.yml \
+  --branch main \
+  --event workflow_dispatch \
+  --limit 1 \
+  --json databaseId \
+  --jq '.[0].databaseId')"
+gh workflow run update-formula.yml \
+  --repo PVRLabs/homebrew-tap \
+  --ref main \
+  -f formula=badger \
+  -f version="${RELEASE_VERSION}"
+
+tap_run_id=""
+for _ in {1..30}; do
+  candidate_tap_run_id="$(gh run list \
+    --repo PVRLabs/homebrew-tap \
+    --workflow=update-formula.yml \
+    --branch main \
+    --event workflow_dispatch \
+    --limit 1 \
+    --json databaseId \
+    --jq '.[0].databaseId')"
+  if [ -n "${candidate_tap_run_id}" ] && [ "${candidate_tap_run_id}" != "${previous_tap_run_id}" ]; then
+    tap_run_id="${candidate_tap_run_id}"
+    break
+  fi
+  sleep 2
+done
+[ -n "${tap_run_id}" ] || { echo "no update-formula.yml run found" >&2; exit 1; }
+gh run watch --repo PVRLabs/homebrew-tap "${tap_run_id}" --exit-status
+```
+
+   The tap workflow downloads and validates the four macOS/Linux checksums,
+   updates `Formula/badger.rb`, and commits directly to the tap. It also
+   supports `formula=statlite` for Statlite releases. The tap ships macOS and
+   Linux only; Windows is GitHub Releases and the PowerShell installer.
 
 6. Post a structured announcement in the repository's [Announcements
    discussion category](https://github.com/PVRLabs/aibadger/discussions/categories/announcements)
@@ -155,8 +237,9 @@ gh release view "${RELEASE_VERSION}"
    speculative work, and link to the exact `${RELEASE_VERSION}` tag rather
    than a moving `latest` URL when documenting release-specific behavior.
 
-The release workflow is triggered only by pushing tags that match `v*`. It is
-not triggered by publishing a GitHub Release.
+The release workflow is manually dispatched from `main`; it is not triggered
+by pushing a tag or publishing a GitHub Release. The Homebrew updater is a
+separate manually dispatched workflow in `homebrew-tap`.
 
 ## Public Availability
 
@@ -211,3 +294,7 @@ portable `.sha256` files:
 ```bash
 (cd dist && sha256sum "${archive_name}" > "${archive_name}.sha256")
 ```
+
+If the Homebrew workflow is unavailable, update the selected formula manually
+in `homebrew-tap` using the published `.sha256` files, then commit and push the
+narrow formula change. The normal workflow remains the preferred path.

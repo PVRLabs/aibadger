@@ -4,6 +4,18 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.5.5] - 2026-09-11
+
+### Documentation
+
+- Expanded manual handoff guidance for corporate and restricted development
+  environments where repository access must remain local and context sharing
+  with an approved browser AI is explicit.
+- Upgraded the project toolchain to Go 1.27.1; source builds now require that
+  version or newer.
+- Documented the macOS 13 minimum for release binaries in the installation
+  guide.
+
 ## [v0.5.4] - 2026-09-09
 
 ### Review experience

@@ -7,6 +7,18 @@ the later development bump. After the release is public, `main` should carry
 the next development version, such as `vX.Y.Z-dev`, so source builds are
 clearly distinguishable from published release binaries.
 
+## Process Design
+
+Keep this document as the high-level orchestrator for the complete release. It
+should preserve the operator-visible sequence, decision points, verification,
+and recovery guidance without becoming a second automation system.
+
+Move self-contained, deterministic groups of release work into repository-local
+GitHub Actions workflows when doing so makes the process shorter and more
+reliable. Keep human judgment and coordination here, and avoid adding a central
+workflow, cross-repository credentials, or other orchestration machinery solely
+to eliminate a few clear steps from this runbook.
+
 ## What Gets Released
 
 Current release artifacts are built for:

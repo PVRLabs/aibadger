@@ -1,16 +1,94 @@
 name: release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact release version (for example, v0.5.5)
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  validate:
+    name: validate release preparation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release inputs and repository state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          set -eu
+
+          if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
+            echo "release must be dispatched from main (got $DISPATCH_REF)" >&2
+            exit 1
+          fi
+
+          if ! printf '%s\n' "$RELEASE_VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "version must match vX.Y.Z: $RELEASE_VERSION" >&2
+            exit 1
+          fi
+
+          source_version="$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)"
+          if [ "$source_version" != "$RELEASE_VERSION" ]; then
+            echo "internal/version/version.go is $source_version, expected $RELEASE_VERSION" >&2
+            exit 1
+          fi
+
+          if ! awk -v tag="$RELEASE_VERSION" '
+            $0 == "## [" tag "]" || index($0, "## [" tag "] - ") == 1 { found = 1 }
+            END { exit !found }
+          ' CHANGELOG.md; then
+            echo "CHANGELOG.md has no heading for $RELEASE_VERSION" >&2
+            exit 1
+          fi
+
+          if git show-ref --tags --verify --quiet "refs/tags/$RELEASE_VERSION" || \
+             git ls-remote --exit-code origin "refs/tags/$RELEASE_VERSION" >/dev/null 2>&1; then
+            echo "tag already exists: $RELEASE_VERSION" >&2
+            exit 1
+          fi
+
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION" >/dev/null 2>&1; then
+            echo "GitHub Release already exists: $RELEASE_VERSION" >&2
+            exit 1
+          fi
+
+          echo "validated $RELEASE_VERSION at $(git rev-parse HEAD)"
+
+  tag:
+    name: tag release
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout dispatched commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create and push release tag
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          git tag "$RELEASE_VERSION" "$GITHUB_SHA"
+          git push origin "refs/tags/$RELEASE_VERSION"
+
   build:
     name: build ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: tag
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -27,10 +105,11 @@ jobs:
           - goos: windows
             goarch: amd64
     steps:
-      - name: Checkout
+      - name: Checkout tagged release
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.version }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -43,7 +122,7 @@ jobs:
           CGO_ENABLED: 0
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.version }}
         run: |
           set -eu
 
@@ -84,10 +163,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout
+      - name: Checkout tagged release
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.version }}
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -97,14 +177,17 @@ jobs:
 
       - name: Generate release notes
         id: notes
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          bash scripts/generate-release-notes.sh "${{ github.ref_name }}" > release-notes.md
+          set -eu
+          bash scripts/generate-release-notes.sh "$RELEASE_VERSION" > release-notes.md
           echo "notes_file=release-notes.md" >> "$GITHUB_OUTPUT"
 
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.version }}
           body_path: ${{ steps.notes.outputs.notes_file }}
           files: |
             release-assets/*.tar.gz
@@ -113,3 +196,40 @@ jobs:
             release-assets/*.zip.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify published release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+
+          assets="$(gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          expected="$(printf '%s\n' \
+            "badger_${RELEASE_VERSION#v}_darwin_amd64.tar.gz" \
+            "badger_${RELEASE_VERSION#v}_darwin_amd64.tar.gz.sha256" \
+            "badger_${RELEASE_VERSION#v}_darwin_arm64.tar.gz" \
+            "badger_${RELEASE_VERSION#v}_darwin_arm64.tar.gz.sha256" \
+            "badger_${RELEASE_VERSION#v}_linux_amd64.tar.gz" \
+            "badger_${RELEASE_VERSION#v}_linux_amd64.tar.gz.sha256" \
+            "badger_${RELEASE_VERSION#v}_linux_arm64.tar.gz" \
+            "badger_${RELEASE_VERSION#v}_linux_arm64.tar.gz.sha256" \
+            "badger_${RELEASE_VERSION#v}_windows_amd64.zip" \
+            "badger_${RELEASE_VERSION#v}_windows_amd64.zip.sha256")"
+
+          if [ "$(printf '%s\n' "$assets" | sed '/^$/d' | wc -l | tr -d ' ')" -ne 10 ]; then
+            echo "expected 10 release assets, got:" >&2
+            printf '%s\n' "$assets" >&2
+            exit 1
+          fi
+
+          while IFS= read -r asset; do
+            if ! printf '%s\n' "$assets" | grep -Fqx "$asset"; then
+              echo "missing release asset: $asset" >&2
+              exit 1
+            fi
+          done <<EOF
+          $expected
+          EOF
+
+          echo "verified release $RELEASE_VERSION with ten expected assets"

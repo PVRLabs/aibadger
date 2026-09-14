@@ -166,6 +166,9 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 }
 
 func addTopologyTopFile(files []model.FileSummary, file model.FileSummary, module *model.Module, limit int) []model.FileSummary {
+	if isFirstClassCSharpModule(module) {
+		return addCSharpTopFile(files, file, maxRootPackageTopFiles)
+	}
 	if module != nil && module.Language == "Generic" {
 		return addGenericTopFile(files, file, maxGenericPackageFiles)
 	}
@@ -173,6 +176,12 @@ func addTopologyTopFile(files []model.FileSummary, file model.FileSummary, modul
 }
 
 func addTopologyPackageTopFile(files []model.FileSummary, file model.FileSummary, module *model.Module, limit int) []model.FileSummary {
+	if isFirstClassCSharpModule(module) {
+		if normalizeRelativeDir(filepath.Dir(file.Path)) == module.Path {
+			limit = maxRootPackageTopFiles
+		}
+		return addCSharpTopFile(files, file, limit)
+	}
 	if module != nil && module.Language == "Generic" {
 		return addGenericTopFile(files, file, maxGenericPackageFiles)
 	}

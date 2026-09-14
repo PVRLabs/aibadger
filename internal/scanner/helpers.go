@@ -71,7 +71,7 @@ func discoverProjectMarkers(root string, markerNames ...string) ([]string, error
 			return nil
 		}
 
-		if !markers[d.Name()] {
+		if !markers[d.Name()] && !markers[strings.ToLower(filepath.Ext(d.Name()))] {
 			return nil
 		}
 		depth, ok := discoveryDepth(root, filepath.Dir(path))

@@ -44,6 +44,10 @@ func packageSortKey(pkg model.Package) string {
 }
 
 func sortModuleFileSummaries(module *model.Module) {
+	if isFirstClassCSharpModule(module) {
+		sortCSharpFileSummaries(module.TopFiles)
+		return
+	}
 	if module.Language == "Python" {
 		sortPythonFileSummaries(module.TopFiles)
 		return
@@ -52,6 +56,10 @@ func sortModuleFileSummaries(module *model.Module) {
 }
 
 func sortPackageFileSummaries(module *model.Module, pkg *model.Package) {
+	if isFirstClassCSharpModule(module) {
+		sortCSharpFileSummaries(pkg.TopFiles)
+		return
+	}
 	if module.Language == "Python" {
 		sortPythonFileSummaries(pkg.TopFiles)
 		return
@@ -61,6 +69,31 @@ func sortPackageFileSummaries(module *model.Module, pkg *model.Package) {
 		return
 	}
 	sortFileSummaries(pkg.TopFiles)
+}
+
+func isFirstClassCSharpModule(module *model.Module) bool {
+	if module == nil || module.Language != "C#" {
+		return false
+	}
+	for _, sourceRoot := range module.SourceRoots {
+		if sourceRoot.Role == "Main Source" {
+			return true
+		}
+	}
+	return false
+}
+
+func sortCSharpFileSummaries(files []model.FileSummary) {
+	sort.SliceStable(files, func(i, j int) bool {
+		ri, rj := csharpFileRank(files[i].Name), csharpFileRank(files[j].Name)
+		if ri != rj {
+			return ri < rj
+		}
+		if files[i].Size != files[j].Size {
+			return files[i].Size > files[j].Size
+		}
+		return files[i].Path < files[j].Path
+	})
 }
 
 func sortFileSummaries(files []model.FileSummary) {

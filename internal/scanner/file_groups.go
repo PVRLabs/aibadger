@@ -37,6 +37,9 @@ func isCriticalGuidanceDoc(base string) bool {
 }
 
 func isIdentityManifest(base string) bool {
+	if strings.EqualFold(filepath.Ext(base), ".csproj") {
+		return true
+	}
 	return filegroups.IsIdentityManifest(base)
 }
 

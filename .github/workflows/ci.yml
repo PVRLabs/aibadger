@@ -38,3 +38,6 @@ jobs:
 
       - name: go build
         run: go build ./...
+
+      - name: CLI smoke tests
+        run: BADGER_CLI_SMOKE=1 go test ./tests/cli -run '^TestCLISmoke$' -count=1

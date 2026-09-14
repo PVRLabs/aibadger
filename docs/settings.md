@@ -48,8 +48,8 @@ A missing settings file is normal and does not produce a warning; first-run
 onboarding is still controlled by the onboarding-completion setting.
 
 These settings apply only to interactive sessions, not `badger api` commands.
-The directory limit currently affects Node and generic fallback scanning; Go,
-Java, and Python detectors keep their existing behavior. Prompt size limits are
+The directory limit currently affects Node, C#, and generic fallback scanning;
+Go, Java, and Python detectors keep their existing behavior. Prompt size limits are
 targets rather than strict output-size guarantees. Required framing, task, and
 instruction text is never removed just to meet the limit. The context-file
 setting limits how much extracted content is retained; it does not change

@@ -365,14 +365,19 @@ For read-only external directories, see [Settings and External
 Context](settings.md#external-context). See [privacy.md](privacy.md) for the
 read-only and safety rules around external context.
 
-## Supported Projects
+## How Badger Maps Projects
 
-Badger includes first-class scanning for:
+Badger uses lightweight project markers and filesystem evidence to build a
+useful, representative topology for the AI. It does not attempt to reconstruct
+every build graph or semantic relationship.
 
-- Go
-- Java
-- JavaScript
-- TypeScript
-- Python
+| Language | How Badger maps the project |
+| --- | --- |
+| Go | Detects Go modules and summarizes conventional packages and source areas, focusing on representative files rather than the complete package graph. |
+| Java | Recognizes Maven and Gradle projects and summarizes conventional main/test source trees and package structure without evaluating the build system. |
+| JavaScript / TypeScript | Recognizes `package.json` projects and conservative workspace layouts using metadata and filesystem evidence; it does not build dependency or framework graphs. |
+| Python | Provides first-class filesystem/project detection with representative source grouping rather than import analysis. |
+| C# | Uses `.csproj` files as project boundaries and groups `.cs` files by their actual directories. Nested projects are recognized separately and generated outputs such as `bin/` and `obj/` are skipped; Badger does not evaluate MSBuild, solutions, namespaces, or target frameworks. |
 
-It also includes generic project scanning for common source and configuration files when a first-class detector does not apply.
+When a first-class detector does not apply, Badger falls back to generic
+scanning for common source and configuration files.

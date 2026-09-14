@@ -4,6 +4,13 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+### Project topology
+
+- Added first-class C# topology detection from `.csproj` project boundaries,
+  with literal directory grouping, nested-project detection, and generated
+  output exclusions. C# support remains intentionally lightweight: Badger does
+  not evaluate MSBuild, solutions, namespaces, or target frameworks.
+
 ## [v0.5.5] - 2026-09-11
 
 ### Documentation

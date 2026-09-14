@@ -10,6 +10,93 @@ import (
 	"github.com/PVRLabs/aibadger/internal/protocol"
 )
 
+func TestGenericDetectorGuessLanguageDeterministicTie(t *testing.T) {
+	detector := NewGenericDetector()
+	counts := map[string]int{
+		".rs":  20,
+		".php": 20,
+	}
+
+	if got := detector.guessLanguage(counts); got != "PHP" {
+		t.Fatalf("guessLanguage() = %q, want PHP for an alphabetical tie break", got)
+	}
+}
+
+func TestGenericDetectorGuessLanguageAliases(t *testing.T) {
+	detector := NewGenericDetector()
+	tests := []struct {
+		ext  string
+		want string
+	}{
+		{ext: ".cc", want: "C++"},
+		{ext: ".cxx", want: "C++"},
+		{ext: ".CPP", want: "C++"},
+		{ext: ".jsx", want: "JavaScript"},
+		{ext: ".mjs", want: "JavaScript"},
+		{ext: ".cjs", want: "JavaScript"},
+		{ext: ".tsx", want: "TypeScript"},
+		{ext: ".mts", want: "TypeScript"},
+		{ext: ".cts", want: "TypeScript"},
+		{ext: ".kts", want: "Kotlin"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.ext, func(t *testing.T) {
+			if got := detector.guessLanguage(map[string]int{tt.ext: 1}); got != tt.want {
+				t.Fatalf("guessLanguage(%q) = %q, want %q", tt.ext, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGenericDetectorGuessLanguageAggregatesAliases(t *testing.T) {
+	detector := NewGenericDetector()
+	counts := map[string]int{
+		".js":  5,
+		".JSX": 5,
+		".mjs": 5,
+		".rs":  10,
+	}
+
+	if got := detector.guessLanguage(counts); got != "JavaScript" {
+		t.Fatalf("guessLanguage() = %q, want JavaScript after aggregating aliases", got)
+	}
+}
+
+func TestGenericDetectorDetectsAliasFiles(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string
+		want  string
+	}{
+		{name: "C++", files: []string{"main.cc", "util.cxx"}, want: "C++"},
+		{name: "TypeScript", files: []string{"entry.mts", "config.cts"}, want: "TypeScript"},
+		{name: "Kotlin", files: []string{"build.kts"}, want: "Kotlin"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			for _, name := range tt.files {
+				if err := os.WriteFile(filepath.Join(root, name), []byte("source\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			modules, err := NewGenericDetector().Detect(root)
+			if err != nil {
+				t.Fatalf("Detect() error = %v", err)
+			}
+			if len(modules) != 1 {
+				t.Fatalf("len(modules) = %d, want 1", len(modules))
+			}
+			if modules[0].Language != tt.want {
+				t.Fatalf("module language = %q, want %q", modules[0].Language, tt.want)
+			}
+		})
+	}
+}
+
 func TestGenericDetector(t *testing.T) {
 	// Create a temp directory structure
 	tmpDir, err := os.MkdirTemp("", "badger-generic-test")

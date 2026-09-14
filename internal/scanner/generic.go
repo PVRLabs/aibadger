@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/defaults"
 	"github.com/PVRLabs/aibadger/internal/filekind"
@@ -11,6 +12,31 @@ import (
 )
 
 const maxGenericPackageFiles = 10
+
+var genericExtensionLanguages = map[string]string{
+	".go":    "Go",
+	".java":  "Java",
+	".py":    "Python",
+	".js":    "JavaScript",
+	".jsx":   "JavaScript",
+	".mjs":   "JavaScript",
+	".cjs":   "JavaScript",
+	".ts":    "TypeScript",
+	".tsx":   "TypeScript",
+	".mts":   "TypeScript",
+	".cts":   "TypeScript",
+	".cpp":   "C++",
+	".cc":    "C++",
+	".cxx":   "C++",
+	".c":     "C",
+	".rs":    "Rust",
+	".rb":    "Ruby",
+	".php":   "PHP",
+	".cs":    "C#",
+	".kt":    "Kotlin",
+	".kts":   "Kotlin",
+	".swift": "Swift",
+}
 
 // GenericDetector handles projects with no specific structure (e.g., Python, simple Go, etc.)
 type GenericDetector struct {
@@ -135,7 +161,7 @@ func recordGenericFile(root, path, name string, size int64, packages map[string]
 	pkg := getOrCreateGenericPackage(packages, dir)
 	kind := filekind.Classify(path)
 
-	ext := filepath.Ext(path)
+	ext := strings.ToLower(filepath.Ext(path))
 	if ext != "" && kind == model.FileKindSource {
 		extCounts[ext]++
 	}
@@ -200,30 +226,25 @@ func getOrCreateGenericPackage(packages map[string]*model.Package, dir string) *
 
 // guessLanguage determines the primary language based on a frequency map of file extensions.
 func (d *GenericDetector) guessLanguage(counts map[string]int) string {
-	extToLang := map[string]string{
-		".go":    "Go",
-		".java":  "Java",
-		".py":    "Python",
-		".js":    "JavaScript",
-		".ts":    "TypeScript",
-		".cpp":   "C++",
-		".c":     "C",
-		".rs":    "Rust",
-		".rb":    "Ruby",
-		".php":   "PHP",
-		".cs":    "C#",
-		".kt":    "Kotlin",
-		".swift": "Swift",
+	languageCounts := make(map[string]int)
+	for ext, count := range counts {
+		if language, ok := genericExtensionLanguages[strings.ToLower(ext)]; ok {
+			languageCounts[language] += count
+		}
 	}
+
+	languages := make([]string, 0, len(languageCounts))
+	for language := range languageCounts {
+		languages = append(languages, language)
+	}
+	sort.Strings(languages)
 
 	maxCount := 0
 	lang := "Generic"
-	for ext, count := range counts {
-		if l, ok := extToLang[ext]; ok {
-			if count > maxCount {
-				maxCount = count
-				lang = l
-			}
+	for _, language := range languages {
+		if languageCounts[language] > maxCount {
+			maxCount = languageCounts[language]
+			lang = language
 		}
 	}
 	return lang

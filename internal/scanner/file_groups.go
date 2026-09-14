@@ -47,6 +47,18 @@ func isOperationalConfigFile(base string) bool {
 	return filegroups.IsOperationalConfigFile(base)
 }
 
+func isAppSettingsFileName(base string) bool {
+	lower := strings.ToLower(base)
+	if lower == "appsettings.json" {
+		return true
+	}
+	if !strings.HasPrefix(lower, "appsettings.") || !strings.HasSuffix(lower, ".json") {
+		return false
+	}
+	variant := strings.TrimSuffix(strings.TrimPrefix(lower, "appsettings."), ".json")
+	return variant != "" && !strings.Contains(variant, ".")
+}
+
 func isArchitectureLikeDoc(base string) bool {
 	return filegroups.IsArchitectureLikeDoc(base)
 }

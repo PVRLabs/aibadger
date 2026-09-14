@@ -67,6 +67,33 @@ func TestCSharpDetectorKeepsMarkerOnlyModuleAndColocatedSolutionContext(t *testi
 	}
 }
 
+func TestCSharpDetectorSurfacesRootAppSettingsVariantsOnly(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "App.csproj"), "")
+	for _, name := range []string{"appsettings.json", "appsettings.Development.json", "appsettings.Production.json"} {
+		writeTestFile(t, filepath.Join(root, name), "{\"placeholder\":true}")
+	}
+	writeTestFile(t, filepath.Join(root, "settings.json"), "{\"unrelated\":true}")
+	writeTestFile(t, filepath.Join(root, "appsettings.Local.Debug.json"), "{\"unrelated\":true}")
+	writeTestFile(t, filepath.Join(root, "src", "appsettings.json"), "{\"deep\":true}")
+
+	modules, err := NewCSharpDetector().Detect(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := csharpModuleFilePaths(modules[0])
+	for _, want := range []string{"appsettings.json", "appsettings.Development.json", "appsettings.Production.json"} {
+		if !containsString(paths, want) {
+			t.Errorf("root appsettings path %q missing from %v", want, paths)
+		}
+	}
+	for _, unwanted := range []string{"settings.json", "appsettings.Local.Debug.json", filepath.Join("src", "appsettings.json")} {
+		if containsString(paths, unwanted) {
+			t.Errorf("unrelated/deep JSON unexpectedly surfaced: %v", paths)
+		}
+	}
+}
+
 func TestScannerCSharpWeightUsesOnlyBoundedAcceptedSources(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "app", "App.csproj"), "")

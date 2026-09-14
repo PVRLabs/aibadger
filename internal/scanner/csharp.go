@@ -83,6 +83,9 @@ func (c *CSharpDetector) analyzeModule(projectRoot, moduleRoot string, markers [
 	for _, solution := range colocatedSolutions(moduleRoot) {
 		c.recordFile(projectRoot, moduleRoot, solution, false, packages, &sourceRoot, &module)
 	}
+	for _, settings := range colocatedAppSettings(moduleRoot) {
+		c.recordFile(projectRoot, moduleRoot, settings, false, packages, &sourceRoot, &module)
+	}
 	c.scanSources(projectRoot, moduleRoot, packages, &sourceRoot, &module, remaining)
 
 	packagePaths := make([]string, 0, len(packages))
@@ -182,6 +185,20 @@ func colocatedSolutions(moduleRoot string) []string {
 	return paths
 }
 
+func colocatedAppSettings(moduleRoot string) []string {
+	entries, err := os.ReadDir(moduleRoot)
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	for _, entry := range entries {
+		if !entry.IsDir() && isAppSettingsFileName(entry.Name()) {
+			paths = append(paths, filepath.Join(moduleRoot, entry.Name()))
+		}
+	}
+	return paths
+}
+
 func ownsCSharpProject(dir string) bool {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -224,11 +241,14 @@ func csharpFileRank(name string) int {
 	case "startup.cs":
 		return 2
 	case "globalusings.cs", "assemblyinfo.cs":
-		return 3
+		return 4
 	default:
 		if strings.HasSuffix(lower, ".sln") {
-			return 5
+			return 6
 		}
-		return 4
+		if isAppSettingsFileName(name) {
+			return 3
+		}
+		return 5
 	}
 }

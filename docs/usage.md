@@ -377,7 +377,7 @@ every build graph or semantic relationship.
 | Java | Recognizes Maven and Gradle projects and summarizes conventional main/test source trees and package structure without evaluating the build system. |
 | JavaScript / TypeScript | Recognizes `package.json` projects and conservative workspace layouts using metadata and filesystem evidence; it does not build dependency or framework graphs. |
 | Python | Provides first-class filesystem/project detection with representative source grouping rather than import analysis. |
-| C# | Uses `.csproj` files as project boundaries and groups `.cs` files by their actual directories. Nested projects are recognized separately and generated outputs such as `bin/` and `obj/` are skipped; Badger does not evaluate MSBuild, solutions, namespaces, or target frameworks. |
+| C# | Uses `.csproj` files as project boundaries, groups `.cs` files by their actual directories, and surfaces root `appsettings.json` plus simple environment variants such as `appsettings.Development.json` as context. Nested projects are recognized separately and generated outputs such as `bin/` and `obj/` are skipped; Badger does not evaluate MSBuild, solutions, namespaces, or target frameworks. |
 
 When a first-class detector does not apply, Badger falls back to generic
 scanning for common source and configuration files.

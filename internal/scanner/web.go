@@ -241,6 +241,9 @@ func mergeWebSourceRoots(module *model.Module, sourceRoots []model.SourceRoot) {
 func mergeWebSourceRoot(module *model.Module, webRoot model.SourceRoot) {
 	for idx := range module.SourceRoots {
 		if module.SourceRoots[idx].Path == webRoot.Path {
+			if shouldKeepCppContextSourceRootSeparate(module, &module.SourceRoots[idx], webRoot) {
+				continue
+			}
 			module.SourceRoots[idx].FileCount += webRoot.FileCount
 			mergeWebPackages(&module.SourceRoots[idx], webRoot.Packages)
 			return

@@ -281,6 +281,41 @@ func TestCppFinalizationLeavesAttachedContextOnRoleSpecificSemantics(t *testing.
 	}
 }
 
+func TestScannerCppModuleOverviewBudgetsOwnedUnitsSeparatelyFromSharedContext(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < maxRootPackageTopFiles; i++ {
+		writeTestFile(t, filepath.Join(root, fmt.Sprintf("unit%02d.cpp", i)), "implementation\n")
+		writeTestFile(t, filepath.Join(root, fmt.Sprintf("unit%02d.hpp", i)), "header\n")
+	}
+	writeTestFile(t, filepath.Join(root, "README.md"), "project overview\n")
+	for i := 0; i < 3; i++ {
+		writeTestFile(t, filepath.Join(root, "docs", fmt.Sprintf("guide%02d.md", i)), "guide\n")
+	}
+	writeTestFile(t, filepath.Join(root, "schema", "model.sql"), "create table model(id int);\n")
+
+	topology, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(topology.Modules) != 1 || !isFirstClassCppModule(&topology.Modules[0]) {
+		t.Fatalf("modules=%+v, want one first-class C++ module", topology.Modules)
+	}
+	module := topology.Modules[0]
+	for i := 0; i < maxRootPackageTopFiles; i++ {
+		for _, ext := range []string{".cpp", ".hpp"} {
+			path := fmt.Sprintf("unit%02d%s", i, ext)
+			if !hasTopFile(module.TopFiles, path) {
+				t.Fatalf("shared context evicted C++ pair member %q: %v", path, cppPaths(module.TopFiles))
+			}
+		}
+	}
+	for _, path := range []string{"README.md", filepath.Join("docs", "guide00.md"), filepath.Join("schema", "model.sql")} {
+		if !hasTopFile(module.TopFiles, path) {
+			t.Fatalf("shared context %q missing from independently budgeted overview: %v", path, cppPaths(module.TopFiles))
+		}
+	}
+}
+
 func TestCppFinalizationPreservesSamePathSourceRootRoles(t *testing.T) {
 	for _, duplicateREADME := range []bool{false, true} {
 		for _, reverseRoots := range []bool{false, true} {
@@ -350,6 +385,125 @@ func TestCppDetectionIgnoresCreationOrder(t *testing.T) {
 	}
 	if first, second := scan(false), scan(true); !reflect.DeepEqual(first, second) {
 		t.Fatalf("creation order changed topology:\nfirst=%+v\nsecond=%+v", first, second)
+	}
+}
+
+func TestScannerIntegratesCppWithMixedLanguageWeighting(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "go.mod"), "module example.com/mixed\n")
+	writeTestFile(t, filepath.Join(root, "main.go"), "package main\n")
+	writeTestFile(t, filepath.Join(root, "src", "main.cpp"), "int main() {}\n")
+	writeTestFile(t, filepath.Join(root, "src", "parser.cc"), "void parse() {}\n")
+	writeTestFile(t, filepath.Join(root, "tests", "parser_test.cxx"), "void test() {}\n")
+	writeTestFile(t, filepath.Join(root, "include", "parser.hxx"), "void parse();\n")
+	writeTestFile(t, filepath.Join(root, "src", "compat.c"), "void compat() {}\n")
+	writeTestFile(t, filepath.Join(root, "CMakeLists.txt"), "project(mixed)\n")
+
+	first, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.ScanTime, second.ScanTime = 0, 0
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("repeated scans differ\nfirst: %+v\nsecond: %+v", first, second)
+	}
+	if first.PrimaryLanguage != "C++" || !reflect.DeepEqual(first.Languages, []string{"C++", "Go"}) {
+		t.Fatalf("primary=%q languages=%v, want additive source-based C++ and Go", first.PrimaryLanguage, first.Languages)
+	}
+	cppModules := 0
+	for i := range first.Modules {
+		if isFirstClassCppModule(&first.Modules[i]) {
+			cppModules++
+		}
+		if first.Modules[i].Language == "Generic" {
+			t.Fatalf("specialized mixed scan included Generic duplicate: %+v", first.Modules[i])
+		}
+	}
+	if cppModules != 1 || len(first.Modules) != 2 {
+		t.Fatalf("modules=%+v, want one C++ and one Go module", first.Modules)
+	}
+}
+
+func TestScannerCppWeightUsesOnlyBoundedAcceptedImplementations(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "go.mod"), "module example.com/bounded\n")
+	for i := 0; i < 3; i++ {
+		writeTestFile(t, filepath.Join(root, fmt.Sprintf("go%02d.go", i)), "package bounded\n")
+	}
+	for i := 0; i < 12; i++ {
+		writeTestFile(t, filepath.Join(root, "src", fmt.Sprintf("%02d.cpp", i)), "void f() {}\n")
+	}
+	scanner := NewScanner(root)
+	scanner.MaxFilesPerDirectory = 2
+	topology, err := scanner.Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topology.PrimaryLanguage != "Go" || !reflect.DeepEqual(topology.Languages, []string{"C++", "Go"}) {
+		t.Fatalf("primary=%q languages=%v, want Go from 3 sources over 2 bounded C++ sources", topology.PrimaryLanguage, topology.Languages)
+	}
+}
+
+func TestScannerDoesNotClaimCppOutsideConventionalBoundary(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "go.mod"), "module example.com/owned\n")
+	writeTestFile(t, filepath.Join(root, "main.go"), "package main\n")
+	for i := 0; i < 100; i++ {
+		writeTestFile(t, filepath.Join(root, "native", fmt.Sprintf("area-%03d", i), "deep", "main.cpp"), "int main() {}\n")
+	}
+	first, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.ScanTime, second.ScanTime = 0, 0
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("large out-of-bound scan is not deterministic\nfirst=%+v\nsecond=%+v", first, second)
+	}
+	if !reflect.DeepEqual(first.Languages, []string{"Go"}) || len(first.Modules) != 1 {
+		t.Fatalf("out-of-bound C++ changed specialized topology: languages=%v modules=%+v", first.Languages, first.Modules)
+	}
+}
+
+func TestCppDetectorLanguageCountRequiresActivation(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "tests", "only.cc"), "void test() {}\n")
+	detector := NewCppDetector()
+	modules, err := detector.Detect(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(modules) != 0 || detector.languageSourceCount != 0 {
+		t.Fatalf("modules=%+v count=%d, want no activation weight", modules, detector.languageSourceCount)
+	}
+}
+
+func TestCppDetectorLanguageCountIncludesOnlyAcceptedCppImplementations(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{
+		filepath.Join("src", "main.cpp"),
+		filepath.Join("src", "parser.cc"),
+		filepath.Join("tests", "parser_test.cxx"),
+		filepath.Join("src", "compat.c"),
+		filepath.Join("include", "parser.hh"),
+		"CMakeLists.txt",
+	} {
+		writeTestFile(t, filepath.Join(root, path), "content\n")
+	}
+	detector := NewCppDetector()
+	modules, err := detector.Detect(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(modules) != 1 || detector.languageSourceCount != 3 {
+		t.Fatalf("modules=%+v count=%d, want exactly 3 accepted C++ implementations", modules, detector.languageSourceCount)
 	}
 }
 

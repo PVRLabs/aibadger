@@ -139,6 +139,9 @@ func docsTargetModule(modules []model.Module) *model.Module {
 func mergeDocsSourceRoot(module *model.Module, docsRoot model.SourceRoot) {
 	for idx := range module.SourceRoots {
 		if module.SourceRoots[idx].Path == docsRoot.Path {
+			if shouldKeepCppContextSourceRootSeparate(module, &module.SourceRoots[idx], docsRoot) {
+				continue
+			}
 			mergeDocsPackage(&module.SourceRoots[idx], docsRoot.Packages[0])
 			return
 		}

@@ -33,12 +33,12 @@ var cppConventionalRoots = []struct {
 // CppDetector recognizes only obvious, bounded root and conventional-tree C++ layouts.
 // It deliberately does not parse build files or discover child modules.
 type CppDetector struct {
-	maxFilesPerDir int
-	maxEntries     int
+	maxFilesPerDir      int
+	maxEntries          int
+	languageSourceCount int
 }
 
-// NewCppDetector returns a standalone bounded C++ detector. Scanner integration is
-// intentionally separate so direct detection can be verified before orchestration.
+// NewCppDetector returns a bounded C++ detector.
 func NewCppDetector() *CppDetector {
 	return &CppDetector{maxFilesPerDir: defaults.MaxFilesPerDirectory, maxEntries: maxCppDetectorEntries}
 }
@@ -51,6 +51,7 @@ type cppCandidate struct {
 }
 
 func (c *CppDetector) Detect(root string) ([]model.Module, error) {
+	c.languageSourceCount = 0
 	remaining := c.maxEntries
 	if remaining <= 0 {
 		remaining = maxCppDetectorEntries
@@ -71,10 +72,24 @@ func (c *CppDetector) Detect(root string) ([]model.Module, error) {
 	}
 	for _, candidate := range candidates {
 		if isCppActivationFile(candidate.summary.Path) {
+			for _, accepted := range candidates {
+				if isCppLanguageSourceFile(accepted.summary.Name) {
+					c.languageSourceCount++
+				}
+			}
 			return []model.Module{buildCppModule(root, candidates)}, nil
 		}
 	}
 	return nil, nil
+}
+
+func isCppLanguageSourceFile(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".cpp", ".cc", ".cxx":
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *CppDetector) dirLimit() int {
@@ -257,29 +272,12 @@ func selectCppPackageFiles(files []model.FileSummary, limit int) []model.FileSum
 	return selectCppFiles(files, limit, false)
 }
 func selectCppModuleFiles(files []model.FileSummary, limit int) []model.FileSummary {
-	return selectCppModuleFilesForPaths(files, nil, limit)
-}
-
-func selectCppModuleFilesForPaths(files []model.FileSummary, ownedPaths map[string]bool, limit int) []model.FileSummary {
-	return selectCppFilesForPaths(files, limit, true, ownedPaths)
+	return selectCppFiles(files, limit, true)
 }
 
 func selectCppFiles(files []model.FileSummary, limit int, mirrored bool) []model.FileSummary {
-	return selectCppFilesForPaths(files, limit, mirrored, nil)
-}
-
-func selectCppFilesForPaths(files []model.FileSummary, limit int, mirrored bool, ownedPaths map[string]bool) []model.FileSummary {
 	files = uniqueCppFiles(files)
-	pairFiles := files
-	if ownedPaths != nil {
-		pairFiles = make([]model.FileSummary, 0, len(files))
-		for _, file := range files {
-			if ownedPaths[file.Path] {
-				pairFiles = append(pairFiles, file)
-			}
-		}
-	}
-	pairs := cppPairs(pairFiles, mirrored)
+	pairs := cppPairs(files, mirrored)
 	used := make(map[string]bool)
 	units := make([]cppUnit, 0, len(files))
 	for _, file := range files {
@@ -467,4 +465,8 @@ func isCppOwnedSourceRoot(sourceRoot *model.SourceRoot) bool {
 	default:
 		return false
 	}
+}
+
+func shouldKeepCppContextSourceRootSeparate(module *model.Module, existing *model.SourceRoot, incoming model.SourceRoot) bool {
+	return isFirstClassCppModule(module) && isCppOwnedSourceRoot(existing) && !isCppOwnedSourceRoot(&incoming)
 }

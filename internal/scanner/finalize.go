@@ -93,7 +93,7 @@ func sourceLanguageWeightsFromModules(modules []model.Module, projectRoot string
 		if module.Language == "" {
 			continue
 		}
-		if isFirstClassCSharpModule(&module) {
+		if isFirstClassCSharpModule(&module) || isFirstClassCppModule(&module) {
 			continue
 		}
 		weights[module.Language] += int64(countModuleLanguageSourceFiles(module, projectRoot))
@@ -143,6 +143,8 @@ func isLanguageSourceFile(language, path string) bool {
 		return isTypeScriptSourceFile(name)
 	case "C#":
 		return strings.EqualFold(filepath.Ext(name), ".cs")
+	case "C++":
+		return isCppLanguageSourceFile(name)
 	case "Generic":
 		kind := filekind.Classify(path)
 		return kind != model.FileKindAsset && kind != model.FileKindBinary

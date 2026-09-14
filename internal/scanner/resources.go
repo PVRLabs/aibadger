@@ -269,6 +269,9 @@ func mergeGenericResourceSourceRoot(module *model.Module, resourcesRoot model.So
 	}
 	for idx := range module.SourceRoots {
 		if module.SourceRoots[idx].Path == resourcesRoot.Path {
+			if shouldKeepCppContextSourceRootSeparate(module, &module.SourceRoots[idx], resourcesRoot) {
+				continue
+			}
 			module.SourceRoots[idx].FileCount += resourcesRoot.FileCount
 			mergeGenericResourcePackages(&module.SourceRoots[idx], resourcesRoot.Packages)
 			return

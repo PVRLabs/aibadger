@@ -42,6 +42,8 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 	nodeDetector.maxFilesPerDir = s.MaxFilesPerDirectory
 	csharpDetector := NewCSharpDetector()
 	csharpDetector.maxFilesPerDir = s.MaxFilesPerDirectory
+	cppDetector := NewCppDetector()
+	cppDetector.maxFilesPerDir = s.MaxFilesPerDirectory
 
 	detectors := []func(string) ([]model.Module, error){
 		NewGoDetector().Detect,
@@ -49,6 +51,7 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 		nodeDetector.Detect,
 		NewPythonDetector().Detect,
 		csharpDetector.Detect,
+		cppDetector.Detect,
 	}
 	for _, detect := range detectors {
 		wg.Add(1)
@@ -82,6 +85,9 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 	languageWeights := sourceLanguageWeightsFromModules(topology.Modules, s.ProjectRoot)
 	if csharpDetector.languageSourceCount > 0 {
 		languageWeights["C#"] += int64(csharpDetector.languageSourceCount)
+	}
+	if cppDetector.languageSourceCount > 0 {
+		languageWeights["C++"] += int64(cppDetector.languageSourceCount)
 	}
 
 	if !usedGenericFallback {

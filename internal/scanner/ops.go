@@ -205,6 +205,9 @@ func mergeOpsSourceRoot(module *model.Module, opsRoot model.SourceRoot) {
 	}
 	for idx := range module.SourceRoots {
 		if module.SourceRoots[idx].Path == opsRoot.Path {
+			if shouldKeepCppContextSourceRootSeparate(module, &module.SourceRoots[idx], opsRoot) {
+				continue
+			}
 			module.SourceRoots[idx].FileCount += opsRoot.FileCount
 			mergeOpsPackages(&module.SourceRoots[idx], opsRoot.Packages)
 			return

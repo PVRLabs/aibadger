@@ -130,7 +130,8 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 
 	for moduleIdx := range t.Modules {
 		module := &t.Modules[moduleIdx]
-		cppOwnedPaths := make(map[string]bool)
+		var cppOwnedTopFiles []model.FileSummary
+		var cppContextTopFiles []model.FileSummary
 		for sourceRootIdx := range module.SourceRoots {
 			sourceRoot := &module.SourceRoots[sourceRootIdx]
 			limit := 3
@@ -160,8 +161,13 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 				}
 				moduleLimit := moduleTopFileLimit(module.Path, pkgLimit)
 				for _, file := range pkg.TopFiles {
-					if isFirstClassCppModule(module) && isCppOwnedSourceRoot(sourceRoot) {
-						cppOwnedPaths[file.Path] = true
+					if isFirstClassCppModule(module) {
+						if isCppOwnedTopologyFile(sourceRoot, file) {
+							cppOwnedTopFiles = append(cppOwnedTopFiles, file)
+						} else {
+							cppContextTopFiles = addTopFile(cppContextTopFiles, file, moduleLimit)
+						}
+						continue
 					}
 					module.TopFiles = addTopologyTopFile(module.TopFiles, file, module, moduleLimit)
 				}
@@ -171,12 +177,16 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 			}
 		}
 		if isFirstClassCppModule(module) {
-			module.TopFiles = selectCppModuleFilesForPaths(module.TopFiles, cppOwnedPaths, maxRootPackageTopFiles)
+			module.TopFiles = append(selectCppModuleFiles(cppOwnedTopFiles, maxRootPackageTopFiles), cppContextTopFiles...)
 		}
 		if len(module.TopFiles) > 0 && !isFirstClassCppModule(module) {
 			module.Heaviest = heaviestFromSummary(module.TopFiles[0])
 		}
 	}
+}
+
+func isCppOwnedTopologyFile(sourceRoot *model.SourceRoot, file model.FileSummary) bool {
+	return isCppOwnedSourceRoot(sourceRoot) && isAcceptedCppFile(file.Name)
 }
 
 func addTopologyTopFile(files []model.FileSummary, file model.FileSummary, module *model.Module, limit int) []model.FileSummary {

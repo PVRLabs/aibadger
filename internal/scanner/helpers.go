@@ -206,7 +206,7 @@ func shouldOmitReviewPath(root, path, name string) bool {
 func isRecognizedSourcePath(base string) bool {
 	switch strings.ToLower(filepath.Ext(base)) {
 	case ".go", ".java", ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
-		".cpp", ".c", ".h", ".hpp", ".rs", ".rb", ".php", ".cs", ".kt", ".swift",
+		".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hh", ".hxx", ".rs", ".rb", ".php", ".cs", ".kt", ".swift",
 		".html", ".htm", ".css", ".scss", ".sass", ".json", ".yaml", ".yml",
 		".toml", ".xml", ".ini", ".conf", ".properties", ".md", ".txt",
 		".webmanifest", ".sql":

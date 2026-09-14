@@ -184,7 +184,7 @@ func (h *harness) testTopology(t *testing.T) {
 		"Languages: Go",
 		"Stack: Go Modules",
 		"[SOURCE TREE]",
-		"go.mod",
+		"Pkg: .",
 		"main.go",
 	)
 }

@@ -15,6 +15,7 @@ type topologyFileCandidate struct {
 	moduleName   string
 	moduleLang   string
 	sourceRoot   string
+	sourceRole   string
 	packagePath  string
 	inTopFiles   bool
 	priority     int
@@ -42,6 +43,7 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 							moduleName:  module.Name,
 							moduleLang:  module.Language,
 							sourceRoot:  sourceRoot.Path,
+							sourceRole:  sourceRoot.Role,
 							packagePath: pkg.Path,
 							inTopFiles:  true,
 							priority:    topologyFilePriority(file),
@@ -58,6 +60,7 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 							moduleName:  module.Name,
 							moduleLang:  module.Language,
 							sourceRoot:  sourceRoot.Path,
+							sourceRole:  sourceRoot.Role,
 							packagePath: pkg.Path,
 							inTopFiles:  false,
 							priority:    topologyFilePriority(file),
@@ -75,14 +78,18 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 		module := &t.Modules[moduleIdx]
 		module.TopFiles = nil
 		module.AuxFiles = nil
-		module.Heaviest = model.HeaviestFile{}
+		if !isFirstClassCppModule(module) {
+			module.Heaviest = model.HeaviestFile{}
+		}
 		for sourceRootIdx := range module.SourceRoots {
 			sourceRoot := &module.SourceRoots[sourceRootIdx]
 			for packageIdx := range sourceRoot.Packages {
 				pkg := &sourceRoot.Packages[packageIdx]
 				pkg.TopFiles = nil
 				pkg.AuxFiles = nil
-				pkg.Heaviest = model.HeaviestFile{}
+				if !isFirstClassCppModule(module) || !isCppOwnedSourceRoot(sourceRoot) {
+					pkg.Heaviest = model.HeaviestFile{}
+				}
 			}
 		}
 	}
@@ -92,13 +99,13 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 		if module == nil {
 			continue
 		}
-		pkg := findPackageInModule(module, winner.sourceRoot, winner.packagePath)
+		pkg := findPackageInModule(module, winner.sourceRoot, winner.sourceRole, winner.packagePath)
 		if pkg == nil {
 			continue
 		}
 
 		limit := 3
-		sourceRoot := findSourceRootInModule(module, winner.sourceRoot)
+		sourceRoot := findSourceRootInModule(module, winner.sourceRoot, winner.sourceRole)
 		if sourceRoot != nil {
 			switch sourceRoot.Role {
 			case "Documentation":
@@ -115,7 +122,7 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 		pkgLimit := packageTopFileLimit(pkg.Path, limit)
 
 		if winner.inTopFiles {
-			pkg.TopFiles = addTopologyPackageTopFile(pkg.TopFiles, winner.summary, module, pkgLimit)
+			pkg.TopFiles = addTopologyPackageTopFile(pkg.TopFiles, winner.summary, module, sourceRoot, pkgLimit)
 		} else {
 			pkg.AuxFiles = addTopologyAuxFile(pkg.AuxFiles, winner.summary, module, limit)
 		}
@@ -123,6 +130,7 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 
 	for moduleIdx := range t.Modules {
 		module := &t.Modules[moduleIdx]
+		cppOwnedPaths := make(map[string]bool)
 		for sourceRootIdx := range module.SourceRoots {
 			sourceRoot := &module.SourceRoots[sourceRootIdx]
 			limit := 3
@@ -147,11 +155,14 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 					}
 				}
 
-				if len(pkg.TopFiles) > 0 {
+				if len(pkg.TopFiles) > 0 && (!isFirstClassCppModule(module) || !isCppOwnedSourceRoot(sourceRoot)) {
 					pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
 				}
 				moduleLimit := moduleTopFileLimit(module.Path, pkgLimit)
 				for _, file := range pkg.TopFiles {
+					if isFirstClassCppModule(module) && isCppOwnedSourceRoot(sourceRoot) {
+						cppOwnedPaths[file.Path] = true
+					}
 					module.TopFiles = addTopologyTopFile(module.TopFiles, file, module, moduleLimit)
 				}
 				for _, file := range pkg.AuxFiles {
@@ -159,13 +170,19 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 				}
 			}
 		}
-		if len(module.TopFiles) > 0 {
+		if isFirstClassCppModule(module) {
+			module.TopFiles = selectCppModuleFilesForPaths(module.TopFiles, cppOwnedPaths, maxRootPackageTopFiles)
+		}
+		if len(module.TopFiles) > 0 && !isFirstClassCppModule(module) {
 			module.Heaviest = heaviestFromSummary(module.TopFiles[0])
 		}
 	}
 }
 
 func addTopologyTopFile(files []model.FileSummary, file model.FileSummary, module *model.Module, limit int) []model.FileSummary {
+	if isFirstClassCppModule(module) {
+		return append(files, file)
+	}
 	if isFirstClassCSharpModule(module) {
 		return addCSharpTopFile(files, file, maxRootPackageTopFiles)
 	}
@@ -175,7 +192,12 @@ func addTopologyTopFile(files []model.FileSummary, file model.FileSummary, modul
 	return addTopFile(files, file, limit)
 }
 
-func addTopologyPackageTopFile(files []model.FileSummary, file model.FileSummary, module *model.Module, limit int) []model.FileSummary {
+func addTopologyPackageTopFile(files []model.FileSummary, file model.FileSummary, module *model.Module, sourceRoot *model.SourceRoot, limit int) []model.FileSummary {
+	if isFirstClassCppModule(module) && isCppOwnedSourceRoot(sourceRoot) {
+		// The detector already applied its logical package cap. Retain both
+		// physical members when final path de-duplication rebuilds ownership.
+		return append(files, file)
+	}
 	if isFirstClassCSharpModule(module) {
 		if normalizeRelativeDir(filepath.Dir(file.Path)) == module.Path {
 			limit = maxRootPackageTopFiles
@@ -207,6 +229,7 @@ func recordTopologyFileCandidate(winners map[string]topologyFileCandidate, modul
 		moduleName:   module.Name,
 		moduleLang:   module.Language,
 		sourceRoot:   sourceRoot.Path,
+		sourceRole:   sourceRoot.Role,
 		packagePath:  pkg.Path,
 		inTopFiles:   inTopFiles,
 		priority:     topologyFilePriority(file),
@@ -244,7 +267,7 @@ func shouldReplaceTopologyFileCandidate(current, candidate topologyFileCandidate
 }
 
 func topologyFileOwnerKey(candidate topologyFileCandidate) string {
-	return candidate.modulePath + "\x00" + candidate.moduleName + "\x00" + candidate.moduleLang + "\x00" + candidate.sourceRoot + "\x00" + candidate.packagePath + "\x00" + candidate.summary.Name + "\x00" + candidate.summary.Kind
+	return candidate.modulePath + "\x00" + candidate.moduleName + "\x00" + candidate.moduleLang + "\x00" + candidate.sourceRoot + "\x00" + candidate.sourceRole + "\x00" + candidate.packagePath + "\x00" + candidate.summary.Name + "\x00" + candidate.summary.Kind
 }
 
 func topologyPackageSpecificity(packagePath string) int {
@@ -259,6 +282,7 @@ func sameTopologyFileCandidate(left, right topologyFileCandidate) bool {
 		left.moduleName == right.moduleName &&
 		left.moduleLang == right.moduleLang &&
 		left.sourceRoot == right.sourceRoot &&
+		left.sourceRole == right.sourceRole &&
 		left.packagePath == right.packagePath &&
 		left.inTopFiles == right.inTopFiles &&
 		left.summary.Name == right.summary.Name &&

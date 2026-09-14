@@ -33,7 +33,7 @@ func decrementTopologyOwnershipStats(t *model.ProjectTopology, candidate topolog
 	if module == nil {
 		return
 	}
-	pkg := findPackageInModule(module, candidate.sourceRoot, candidate.packagePath)
+	pkg := findPackageInModule(module, candidate.sourceRoot, candidate.sourceRole, candidate.packagePath)
 	if pkg != nil && pkg.FileCount > 0 {
 		pkg.FileCount--
 	}
@@ -52,7 +52,7 @@ func decrementTopologyOwnershipStats(t *model.ProjectTopology, candidate topolog
 		}
 	}
 
-	sourceRoot := findSourceRootInModule(module, candidate.sourceRoot)
+	sourceRoot := findSourceRootInModule(module, candidate.sourceRoot, candidate.sourceRole)
 	if sourceRoot != nil && sourceRoot.FileCount > 0 {
 		sourceRoot.FileCount--
 	}
@@ -85,10 +85,10 @@ func findModuleByCandidate(modules []model.Module, candidate topologyFileCandida
 	return findModuleByPath(modules, candidate.modulePath)
 }
 
-func findSourceRootInModule(module *model.Module, sourceRootPath string) *model.SourceRoot {
+func findSourceRootInModule(module *model.Module, sourceRootPath, sourceRootRole string) *model.SourceRoot {
 	for sourceRootIdx := range module.SourceRoots {
 		sourceRoot := &module.SourceRoots[sourceRootIdx]
-		if sourceRoot.Path == sourceRootPath {
+		if sourceRoot.Path == sourceRootPath && sourceRoot.Role == sourceRootRole {
 			return sourceRoot
 		}
 	}
@@ -117,10 +117,10 @@ func pruneEmptyTopologyOwners(t *model.ProjectTopology) {
 	}
 }
 
-func findPackageInModule(module *model.Module, sourceRootPath, packagePath string) *model.Package {
+func findPackageInModule(module *model.Module, sourceRootPath, sourceRootRole, packagePath string) *model.Package {
 	for sourceRootIdx := range module.SourceRoots {
 		sourceRoot := &module.SourceRoots[sourceRootIdx]
-		if sourceRoot.Path != sourceRootPath {
+		if sourceRoot.Path != sourceRootPath || sourceRoot.Role != sourceRootRole {
 			continue
 		}
 		for packageIdx := range sourceRoot.Packages {

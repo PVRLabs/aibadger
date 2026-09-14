@@ -24,7 +24,7 @@ func sortTopology(t *model.ProjectTopology) {
 				return packageSortKey(sourceRoot.Packages[i]) < packageSortKey(sourceRoot.Packages[j])
 			})
 			for packageIdx := range sourceRoot.Packages {
-				sortPackageFileSummaries(module, &sourceRoot.Packages[packageIdx])
+				sortPackageFileSummaries(module, sourceRoot, &sourceRoot.Packages[packageIdx])
 				sortAuxFileSummaries(sourceRoot.Packages[packageIdx].AuxFiles)
 			}
 		}
@@ -44,6 +44,10 @@ func packageSortKey(pkg model.Package) string {
 }
 
 func sortModuleFileSummaries(module *model.Module) {
+	if isFirstClassCppModule(module) {
+		sortCppModuleFileSummaries(module)
+		return
+	}
 	if isFirstClassCSharpModule(module) {
 		sortCSharpFileSummaries(module.TopFiles)
 		return
@@ -55,7 +59,11 @@ func sortModuleFileSummaries(module *model.Module) {
 	sortFileSummaries(module.TopFiles)
 }
 
-func sortPackageFileSummaries(module *model.Module, pkg *model.Package) {
+func sortPackageFileSummaries(module *model.Module, sourceRoot *model.SourceRoot, pkg *model.Package) {
+	if isFirstClassCppModule(module) && isCppOwnedSourceRoot(sourceRoot) {
+		sortCppFileSummaries(pkg.TopFiles)
+		return
+	}
 	if isFirstClassCSharpModule(module) {
 		sortCSharpFileSummaries(pkg.TopFiles)
 		return

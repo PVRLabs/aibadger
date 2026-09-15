@@ -30,9 +30,9 @@ func TestCollectUnclaimedSourceGroupsLanguagesAliasesAndDirectories(t *testing.T
 		writeTestFile(t, filepath.Join(root, "rust", fmt.Sprintf("tool-%02d.rs", i)), "fn tool() {}\n")
 	}
 
-	modules, err := collectUnclaimedSource(root, semanticSourceOwnership{projectRoot: root})
+	modules, _, err := NewGenericDetector().collectGenericAugmentation(root, semanticSourceOwnership{projectRoot: root})
 	if err != nil {
-		t.Fatalf("collectUnclaimedSource() error = %v", err)
+		t.Fatalf("collectGenericAugmentation() error = %v", err)
 	}
 	wantLanguages := []string{"C++", "Kotlin", "PHP", "Ruby", "Rust", "Swift"}
 	if got := coverageLanguages(modules); !reflect.DeepEqual(got, wantLanguages) {
@@ -101,9 +101,9 @@ func TestCollectUnclaimedSourceFiltersClaimedControlsAndResources(t *testing.T) 
 		language: "Go", areas: []sourceClaimArea{{root: "src", recursive: true}},
 	}}}
 
-	modules, err := collectUnclaimedSource(root, ownership)
+	modules, _, err := NewGenericDetector().collectGenericAugmentation(root, ownership)
 	if err != nil {
-		t.Fatalf("collectUnclaimedSource() error = %v", err)
+		t.Fatalf("collectGenericAugmentation() error = %v", err)
 	}
 	if got, want := coveragePaths(modules), []string{"native/unclaimed.cpp", "migrations/application.py", "scripts/reporting/formatter.rb"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("coverage paths = %v, want %v", got, want)
@@ -168,7 +168,7 @@ func TestCollectUnclaimedSourceCppCompanionIndexHonorsDirectoryLimit(t *testing.
 	detector := NewGenericDetector()
 	detector.maxFilesPerDir = 3
 
-	modules, err := detector.collectUnclaimedSource(root, ownership)
+	modules, _, err := detector.collectGenericAugmentation(root, ownership)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,16 +197,16 @@ func TestCollectUnclaimedSourceBoundsAndOrderingAreDeterministic(t *testing.T) {
 	detector.maxFilesPerDir = 5
 	detector.maxTotalFiles = 5
 	ownership := semanticSourceOwnership{projectRoot: root}
-	first, err := detector.collectUnclaimedSource(root, ownership)
+	first, firstContext, err := detector.collectGenericAugmentation(root, ownership)
 	if err != nil {
 		t.Fatalf("first collection error = %v", err)
 	}
-	second, err := detector.collectUnclaimedSource(root, ownership)
+	second, secondContext, err := detector.collectGenericAugmentation(root, ownership)
 	if err != nil {
 		t.Fatalf("second collection error = %v", err)
 	}
-	if !reflect.DeepEqual(first, second) {
-		t.Fatalf("repeated collection differs:\nfirst=%+v\nsecond=%+v", first, second)
+	if !reflect.DeepEqual(first, second) || !reflect.DeepEqual(firstContext, secondContext) {
+		t.Fatalf("repeated collection differs:\nfirst=(%+v, %+v)\nsecond=(%+v, %+v)", first, firstContext, second, secondContext)
 	}
 	if len(first) != 1 || first[0].Language != "Ruby" || first[0].FileCount != 5 {
 		t.Fatalf("bounded modules = %+v, want five deterministic Ruby files", first)

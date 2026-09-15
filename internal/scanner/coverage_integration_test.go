@@ -1,3 +1,5 @@
+// This file tests how specialized ownership and generic source coverage combine
+// in the scanner's final topology.
 package scanner
 
 import (
@@ -214,7 +216,7 @@ func TestCoverageLanguageWeightsUseAcceptedCounts(t *testing.T) {
 		root := t.TempDir()
 		writeTestFile(t, filepath.Join(root, "scripts", "helper.py"), "print('ok')\n")
 		writeTestFile(t, filepath.Join(root, "scripts", "deploy.py"), "print('control')\n")
-		modules, err := collectUnclaimedSource(root, semanticSourceOwnership{projectRoot: root})
+		modules, _, err := NewGenericDetector().collectGenericAugmentation(root, semanticSourceOwnership{projectRoot: root})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -233,7 +235,7 @@ func TestCoverageLanguageWeightsUseAcceptedCounts(t *testing.T) {
 		}
 		detector := NewGenericDetector()
 		detector.maxFilesPerDir = 5
-		modules, err := detector.collectUnclaimedSource(root, semanticSourceOwnership{projectRoot: root})
+		modules, _, err := detector.collectGenericAugmentation(root, semanticSourceOwnership{projectRoot: root})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -459,7 +461,7 @@ func TestScannerCppHobbyShapeAddsOnlyUnclaimedCppCoverage(t *testing.T) {
 	if ownership.Owns(toolPath) {
 		t.Fatal("specialized C++ ownership claimed fixture tool")
 	}
-	directCoverage, err := collectUnclaimedSource(root, ownership)
+	directCoverage, _, err := NewGenericDetector().collectGenericAugmentation(root, ownership)
 	if err != nil || coverageModuleContaining(directCoverage, toolPath) == nil {
 		t.Fatalf("direct coverage=%+v err=%v, want fixture tool", directCoverage, err)
 	}

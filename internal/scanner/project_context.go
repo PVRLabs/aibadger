@@ -1,3 +1,5 @@
+// This file finds relevant build, setup, configuration, and script files and
+// adds them to the project topology as context alongside source files.
 package scanner
 
 import (

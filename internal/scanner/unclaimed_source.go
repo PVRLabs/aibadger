@@ -12,13 +12,8 @@ import (
 
 const genericSourceRole = "Generic Source"
 
-// collectUnclaimedSource builds source-only coverage groups. Scanner
-// orchestration intentionally does not call this until the integration phase.
-func (d *GenericDetector) collectUnclaimedSource(root string, ownership semanticSourceOwnership) ([]model.Module, error) {
-	modules, _, err := d.collectGenericAugmentation(root, ownership)
-	return modules, err
-}
-
+// collectGenericAugmentation returns unclaimed source coverage and project-context
+// candidates from the same bounded file walk.
 func (d *GenericDetector) collectGenericAugmentation(root string, ownership semanticSourceOwnership) ([]model.Module, []projectContextCandidate, error) {
 	packagesByLanguage := make(map[string]map[string]*model.Package)
 	bytesByLanguage := make(map[string]int64)
@@ -184,8 +179,4 @@ func (i *cppCompanionHeaderIndex) indexDirectory(dir string) map[string][]model.
 		byStem[stem] = append(byStem[stem], file)
 	}
 	return byStem
-}
-
-func collectUnclaimedSource(root string, ownership semanticSourceOwnership) ([]model.Module, error) {
-	return NewGenericDetector().collectUnclaimedSource(filepath.Clean(root), ownership)
 }

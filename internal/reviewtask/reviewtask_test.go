@@ -96,7 +96,10 @@ func createUnbornTemplate() (dir string) {
 
 func runTemplateGit(dir string, args ...string) {
 	gitTestProcesses.Add(1)
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	// Template repositories are copied concurrently by parallel tests. Disable
+	// auto maintenance so transient .git/objects locks cannot disappear while
+	// os.CopyFS walks the shared template.
+	cmd := exec.Command("git", append([]string{"-c", "gc.auto=0", "-c", "maintenance.auto=false", "-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(),
 		"GIT_AUTHOR_NAME=Badger Test",
 		"GIT_AUTHOR_EMAIL=badger@example.com",

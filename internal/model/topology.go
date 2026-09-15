@@ -47,6 +47,8 @@ type Module struct {
 	SourceRoots []SourceRoot  `json:"source_roots"`
 	Language    string        `json:"language"` // e.g. "Java", "Go"
 	Coverage    bool          `json:"-"`        // Internal source-coverage group, not a structural module.
+	// LanguageSourceCount excludes companion context from synthetic coverage weighting.
+	LanguageSourceCount int `json:"-"`
 }
 
 // SourceRoot represents a directory containing source files (e.g., src/main/java).

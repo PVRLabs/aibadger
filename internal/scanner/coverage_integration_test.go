@@ -55,6 +55,160 @@ func TestScannerCoverageDoesNotRecoverCSharpObjOutput(t *testing.T) {
 	}
 }
 
+func TestScannerCoveragePairsOneColocatedCppHeader(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "main.cpp"), "int main() {}\n")
+	implementation := filepath.Join("lib", "math", "math.cpp")
+	header := filepath.Join("lib", "math", "math.hpp")
+	writeTestFile(t, filepath.Join(root, implementation), "int add(int a, int b) { return a + b; }\n")
+	writeTestFile(t, filepath.Join(root, header), "int add(int, int);\n")
+
+	topology, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	coverage := coverageModuleContaining(topology.Modules, implementation)
+	if coverage == nil || !moduleHasPackageTopFile(*coverage, header) {
+		t.Fatalf("recovered C++ pair missing: %+v", topology.Modules)
+	}
+	if coverage.FileCount != 2 || sourceLanguageWeightsFromModules([]model.Module{*coverage}, root)["C++"] != 1 {
+		t.Fatalf("coverage counts or language weight include the header: %+v", coverage)
+	}
+	if countPackageTopFile(*coverage, implementation) != 1 || countPackageTopFile(*coverage, header) != 1 {
+		t.Fatalf("implementation/header pair was duplicated: %+v", coverage)
+	}
+	assertUniqueSurfacedPaths(t, topology)
+}
+
+func TestScannerCoveragePairsCaseInsensitiveCppHeaderExtension(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "main.cpp"), "int main() {}\n")
+	implementation := filepath.Join("lib", "math", "math.cpp")
+	header := filepath.Join("lib", "math", "math.HPP")
+	writeTestFile(t, filepath.Join(root, implementation), "int add(int a, int b) { return a + b; }\n")
+	writeTestFile(t, filepath.Join(root, header), "int add(int, int);\n")
+
+	topology, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	coverage := coverageModuleContaining(topology.Modules, implementation)
+	if coverage == nil || !moduleHasPackageTopFile(*coverage, header) || coverage.FileCount != 2 {
+		t.Fatalf("case-insensitive C++ header companion missing: %+v", topology.Modules)
+	}
+	assertUniqueSurfacedPaths(t, topology)
+}
+
+func TestScannerCoveragePairsMultipleColocatedCppHeaders(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "main.cpp"), "int main() {}\n")
+	pairs := map[string]string{
+		"a.cpp": "a.hpp",
+		"b.cpp": "b.HPP",
+		"c.cpp": "c.hpp",
+	}
+	for implementation, header := range pairs {
+		writeTestFile(t, filepath.Join(root, "lib", "math", implementation), "int "+strings.TrimSuffix(implementation, ".cpp")+"() { return 1; }\n")
+		writeTestFile(t, filepath.Join(root, "lib", "math", header), "int "+strings.TrimSuffix(header, filepath.Ext(header))+"();\n")
+	}
+
+	topology, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	coverage := coverageModuleContaining(topology.Modules, filepath.Join("lib", "math", "a.cpp"))
+	if coverage == nil || coverage.FileCount != 6 {
+		t.Fatalf("coverage = %+v, want three implementation/header pairs", coverage)
+	}
+	for implementation, header := range pairs {
+		for _, name := range []string{implementation, header} {
+			if !moduleHasPackageTopFile(*coverage, filepath.Join("lib", "math", name)) {
+				t.Errorf("coverage missing colocated pair member %s", name)
+			}
+		}
+	}
+	if got := sourceLanguageWeightsFromModules([]model.Module{*coverage}, root)["C++"]; got != 3 {
+		t.Fatalf("C++ language weight = %d, want only three implementation files", got)
+	}
+	assertUniqueSurfacedPaths(t, topology)
+}
+
+func TestScannerCoverageCppCompanionLookupIsConservative(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers []string
+	}{
+		{name: "missing header"},
+		{name: "ambiguous headers", headers: []string{"math.h", "math.hpp"}},
+		{name: "mixed-case ambiguous headers", headers: []string{"math.h", "math.HPP"}},
+		{name: "unpaired header", headers: []string{"other.hpp"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeTestFile(t, filepath.Join(root, "main.cpp"), "int main() {}\n")
+			implementation := filepath.Join("lib", "math", "math.cpp")
+			writeTestFile(t, filepath.Join(root, implementation), "int math() {}\n")
+			for _, header := range tt.headers {
+				writeTestFile(t, filepath.Join(root, "lib", "math", header), "header\n")
+			}
+
+			topology, err := NewScanner(root).Scan()
+			if err != nil {
+				t.Fatal(err)
+			}
+			coverage := coverageModuleContaining(topology.Modules, implementation)
+			if coverage == nil || coverage.FileCount != 1 {
+				t.Fatalf("conservative lookup recovered a header: %+v", coverage)
+			}
+			for _, header := range tt.headers {
+				path := filepath.Join("lib", "math", header)
+				if topologyHasPackageTopFile(topology, path) {
+					t.Errorf("header %s surfaced without one exact companion match", path)
+				}
+			}
+		})
+	}
+	t.Run("generated header", func(t *testing.T) {
+		root := t.TempDir()
+		writeTestFile(t, filepath.Join(root, "main.cpp"), "int main() {}\n")
+		implementation := filepath.Join("generated", "math.cpp")
+		header := filepath.Join("generated", "math.hpp")
+		writeTestFile(t, filepath.Join(root, implementation), "int math() {}\n")
+		writeTestFile(t, filepath.Join(root, header), "int math();\n")
+
+		topology, err := NewScanner(root).Scan()
+		if err != nil {
+			t.Fatal(err)
+		}
+		coverage := coverageModuleContaining(topology.Modules, implementation)
+		if coverage == nil || coverage.FileCount != 1 || topologyHasPackageTopFile(topology, header) {
+			t.Fatalf("generated companion header was recovered: %+v", topology.Modules)
+		}
+	})
+}
+
+func TestScannerCoverageLeavesConventionalCppOwnershipAuthoritative(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "main.cpp"), "int main() {}\n")
+	writeTestFile(t, filepath.Join(root, "main.hpp"), "int main();\n")
+	for _, dir := range []string{"src", "include", "test", "tests"} {
+		writeTestFile(t, filepath.Join(root, dir, "owned.cpp"), "int owned() {}\n")
+		writeTestFile(t, filepath.Join(root, dir, "owned.hpp"), "int owned();\n")
+	}
+
+	topology, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, module := range topology.Modules {
+		if module.Coverage && module.Language == "C++" {
+			t.Fatalf("specialized C++ paths leaked into coverage: %+v", module)
+		}
+	}
+	assertUniqueSurfacedPaths(t, topology)
+}
+
 func TestCoverageLanguageWeightsUseAcceptedCounts(t *testing.T) {
 	t.Run("rejected control in accepted package", func(t *testing.T) {
 		root := t.TempDir()

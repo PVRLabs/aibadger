@@ -3,6 +3,7 @@ package scanner
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -106,6 +107,82 @@ func TestCollectUnclaimedSourceFiltersClaimedControlsAndResources(t *testing.T) 
 	}
 	if got, want := coveragePaths(modules), []string{"native/unclaimed.cpp", "migrations/application.py", "scripts/reporting/formatter.rb"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("coverage paths = %v, want %v", got, want)
+	}
+}
+
+func TestCppCompanionHeaderIndexCachesOneDirectory(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "lib", "math")
+	for _, name := range []string{"a.cpp", "a.hpp", "b.cpp", "b.HPP", "c.cpp", "c.hpp"} {
+		writeTestFile(t, filepath.Join(dir, name), "source\n")
+	}
+
+	index := newCppCompanionHeaderIndex(root, semanticSourceOwnership{projectRoot: root}, 0)
+	for _, test := range []struct {
+		implementation string
+		header         string
+	}{
+		{implementation: "a.cpp", header: "a.hpp"},
+		{implementation: "b.cpp", header: "b.HPP"},
+		{implementation: "c.cpp", header: "c.hpp"},
+	} {
+		header, ok := index.find(filepath.Join(dir, test.implementation))
+		if !ok || header.Name != test.header {
+			t.Errorf("find(%s) = (%+v, %v), want %s", test.implementation, header, ok, test.header)
+		}
+	}
+	if len(index.byDirectory) != 1 {
+		t.Fatalf("indexed %d directories for repeated lookups in one directory, want 1", len(index.byDirectory))
+	}
+}
+
+func TestCppCompanionHeaderIndexCachesEmptyDirectoryResult(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "lib", "math")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	index := newCppCompanionHeaderIndex(root, semanticSourceOwnership{projectRoot: root}, 0)
+	if _, ok := index.find(filepath.Join(dir, "math.cpp")); ok {
+		t.Fatal("missing header unexpectedly matched")
+	}
+	writeTestFile(t, filepath.Join(dir, "math.hpp"), "int math();\n")
+	if _, ok := index.find(filepath.Join(dir, "math.cpp")); ok {
+		t.Fatal("cached empty directory result was re-enumerated")
+	}
+	if len(index.byDirectory) != 1 {
+		t.Fatalf("indexed %d directories after repeated empty lookup, want cached result", len(index.byDirectory))
+	}
+}
+
+func TestCollectUnclaimedSourceCppCompanionIndexHonorsDirectoryLimit(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "main.cpp"), "int main() {}\n")
+	for _, name := range []string{"a.cpp", "a.hpp", "b.cpp", "b.hpp"} {
+		writeTestFile(t, filepath.Join(root, "lib", "math", name), "source\n")
+	}
+	ownership := semanticSourceOwnership{projectRoot: root, claims: []semanticSourceClaim{{
+		language: "C++",
+		areas:    []sourceClaimArea{{root: ""}},
+	}}}
+	detector := NewGenericDetector()
+	detector.maxFilesPerDir = 3
+
+	modules, err := detector.collectUnclaimedSource(root, ownership)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cpp := findCoverageModule(modules, "C++")
+	if cpp == nil || cpp.FileCount != 3 {
+		t.Fatalf("C++ coverage = %+v, want a.cpp/a.hpp/b.cpp only", cpp)
+	}
+	for _, want := range []string{"lib/math/a.cpp", "lib/math/a.hpp", "lib/math/b.cpp"} {
+		if !moduleHasPackageTopFile(*cpp, want) {
+			t.Errorf("bounded coverage missing %q", want)
+		}
+	}
+	if moduleHasPackageTopFile(*cpp, "lib/math/b.hpp") {
+		t.Fatalf("companion lookup bypassed per-directory limit: %+v", cpp)
 	}
 }
 

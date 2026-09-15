@@ -86,7 +86,7 @@ func (c *CSharpDetector) analyzeModule(projectRoot, moduleRoot string, markers [
 	for _, settings := range colocatedAppSettings(moduleRoot) {
 		c.recordFile(projectRoot, moduleRoot, settings, false, packages, &sourceRoot, &module)
 	}
-	c.scanSources(projectRoot, moduleRoot, packages, &sourceRoot, &module, remaining)
+	c.scanModuleFiles(projectRoot, moduleRoot, packages, &sourceRoot, &module, remaining)
 
 	packagePaths := make([]string, 0, len(packages))
 	for path := range packages {
@@ -108,7 +108,7 @@ func (c *CSharpDetector) analyzeModule(projectRoot, moduleRoot string, markers [
 	return module
 }
 
-func (c *CSharpDetector) scanSources(projectRoot, moduleRoot string, packages map[string]*model.Package, sourceRoot *model.SourceRoot, module *model.Module, remaining *int) {
+func (c *CSharpDetector) scanModuleFiles(projectRoot, moduleRoot string, packages map[string]*model.Package, sourceRoot *model.SourceRoot, module *model.Module, remaining *int) {
 	var walk func(string, int)
 	walk = func(dir string, depth int) {
 		if *remaining <= 0 || depth > maxCSharpSourceDepth {
@@ -138,12 +138,26 @@ func (c *CSharpDetector) scanSources(projectRoot, moduleRoot string, packages ma
 				walk(path, depth+1)
 				continue
 			}
-			if strings.EqualFold(filepath.Ext(entry.Name()), ".cs") && !promptpolicy.IsSensitivePath(relativePath(projectRoot, path)) {
-				c.recordFile(projectRoot, moduleRoot, path, true, packages, sourceRoot, module)
+			isSource := strings.EqualFold(filepath.Ext(entry.Name()), ".cs")
+			if (isSource || isCSharpCompanionFile(moduleRoot, path)) && !shouldOmitFile(projectRoot, path, entry.Name()) {
+				c.recordFile(projectRoot, moduleRoot, path, isSource, packages, sourceRoot, module)
 			}
 		}
 	}
 	walk(moduleRoot, 0)
+}
+
+// isCSharpCompanionFile recognizes only conventional, module-relative C#
+// application context. It deliberately does not infer project semantics.
+func isCSharpCompanionFile(moduleRoot, path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".razor" || ext == ".cshtml" || ext == ".xaml" {
+		return true
+	}
+
+	rel := strings.ToLower(relativePath(moduleRoot, path))
+	return rel == filepath.Join("properties", "launchsettings.json") ||
+		strings.HasPrefix(rel, "wwwroot"+string(filepath.Separator))
 }
 
 func (c *CSharpDetector) recordFile(projectRoot, moduleRoot, path string, languageSource bool, packages map[string]*model.Package, sourceRoot *model.SourceRoot, module *model.Module) {
@@ -159,9 +173,13 @@ func (c *CSharpDetector) recordFile(projectRoot, moduleRoot, path string, langua
 	}
 	file := model.FileSummary{Name: filepath.Base(path), Path: relativePath(projectRoot, path), Size: info.Size(), Kind: filekind.Classify(path)}
 	pkg.FileCount++
-	pkg.TopFiles = addCSharpTopFile(pkg.TopFiles, file, packageTopFileLimit(relativePath(moduleRoot, filepath.Dir(path)), maxPackageTopFiles))
-	if len(pkg.TopFiles) > 0 {
-		pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
+	if isUnderCSharpWWWRoot(moduleRoot, path) && (file.Kind == model.FileKindAsset || file.Kind == model.FileKindBinary) {
+		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, maxPackageTopFiles)
+	} else {
+		pkg.TopFiles = addCSharpTopFile(pkg.TopFiles, file, packageTopFileLimit(relativePath(moduleRoot, filepath.Dir(path)), maxPackageTopFiles))
+		if len(pkg.TopFiles) > 0 {
+			pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
+		}
 	}
 	sourceRoot.FileCount++
 	module.FileCount++
@@ -169,6 +187,11 @@ func (c *CSharpDetector) recordFile(projectRoot, moduleRoot, path string, langua
 	if languageSource {
 		c.languageSourceCount++
 	}
+}
+
+func isUnderCSharpWWWRoot(moduleRoot, path string) bool {
+	rel := strings.ToLower(relativePath(moduleRoot, path))
+	return strings.HasPrefix(rel, "wwwroot"+string(filepath.Separator))
 }
 
 func colocatedSolutions(moduleRoot string) []string {
@@ -243,12 +266,18 @@ func csharpFileRank(name string) int {
 	case "globalusings.cs", "assemblyinfo.cs":
 		return 4
 	default:
-		if strings.HasSuffix(lower, ".sln") {
-			return 6
-		}
 		if isAppSettingsFileName(name) {
 			return 3
 		}
-		return 5
+		switch strings.ToLower(filepath.Ext(name)) {
+		case ".cs":
+			return 5
+		case ".razor", ".cshtml", ".xaml":
+			return 6
+		case ".sln":
+			return 8
+		default:
+			return 7
+		}
 	}
 }

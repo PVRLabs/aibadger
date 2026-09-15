@@ -94,6 +94,192 @@ func TestCSharpDetectorSurfacesRootAppSettingsVariantsOnly(t *testing.T) {
 	}
 }
 
+func TestCSharpDetectorKeepsBoundedApplicationCompanionContext(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "App.csproj"), "")
+	writeTestFile(t, filepath.Join(root, "Pages", "Index.razor"), "<h1>Home</h1>")
+	writeTestFile(t, filepath.Join(root, "Views", "Home", "Index.cshtml"), "<h1>Home</h1>")
+	writeTestFile(t, filepath.Join(root, "UI", "MainWindow.xaml"), "<Window />")
+	writeTestFile(t, filepath.Join(root, "wwwroot", "css", "site.css"), "body {}")
+	writeTestFile(t, filepath.Join(root, "wwwroot", "images", "logo.svg"), "<svg />")
+	writeTestFile(t, filepath.Join(root, "Properties", "launchSettings.json"), "{}")
+	writeTestFile(t, filepath.Join(root, "Properties", "unrelated.json"), "{}")
+	writeTestFile(t, filepath.Join(root, "assets", "outside-wwwroot.css"), "body {}")
+
+	modules, err := NewCSharpDetector().Detect(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := csharpModuleFilePaths(modules[0])
+	for _, want := range []string{
+		filepath.Join("Pages", "Index.razor"),
+		filepath.Join("Views", "Home", "Index.cshtml"),
+		filepath.Join("UI", "MainWindow.xaml"),
+		filepath.Join("wwwroot", "css", "site.css"),
+		filepath.Join("Properties", "launchSettings.json"),
+	} {
+		if !containsString(paths, want) {
+			t.Errorf("companion path %q missing from %v", want, paths)
+		}
+	}
+	if !csharpModuleHasPackageAuxFile(modules[0], filepath.Join("wwwroot", "images", "logo.svg")) {
+		t.Fatalf("wwwroot asset was not retained as auxiliary context: %+v", modules[0].SourceRoots)
+	}
+	for _, unwanted := range []string{
+		filepath.Join("Properties", "unrelated.json"),
+		filepath.Join("assets", "outside-wwwroot.css"),
+	} {
+		if containsString(paths, unwanted) {
+			t.Errorf("unrelated context unexpectedly surfaced: %v", paths)
+		}
+	}
+}
+
+func TestCSharpDetectorRanksSourceBeforeCompanionContext(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "App.csproj"), "")
+	writeTestFile(t, filepath.Join(root, "UI", "Service.cs"), "class Service {}")
+	writeTestFile(t, filepath.Join(root, "UI", "Page.razor"), strings.Repeat("razor", 100))
+	writeTestFile(t, filepath.Join(root, "UI", "View.cshtml"), strings.Repeat("view", 100))
+	writeTestFile(t, filepath.Join(root, "UI", "Window.xaml"), strings.Repeat("xaml", 100))
+
+	modules, err := NewCSharpDetector().Detect(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg := csharpPackage(modules[0], "UI")
+	if pkg == nil || len(pkg.TopFiles) != maxPackageTopFiles {
+		t.Fatalf("UI package summary = %+v", pkg)
+	}
+	if !containsFilePath(pkg.TopFiles, filepath.Join("UI", "Service.cs")) {
+		t.Fatalf("large companions displaced real C# source: %+v", pkg.TopFiles)
+	}
+	if pkg.TopFiles[0].Path != filepath.Join("UI", "Service.cs") {
+		t.Fatalf("package top-file ranking = %+v, want C# source first", pkg.TopFiles)
+	}
+}
+
+func TestCSharpDetectorKeepsCompanionOnlyPackages(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "App.csproj"), "")
+	writeTestFile(t, filepath.Join(root, "Pages", "Index.razor"), "<h1>Home</h1>")
+	writeTestFile(t, filepath.Join(root, "UI", "Window.xaml"), "<Window />")
+
+	detector := NewCSharpDetector()
+	modules, err := detector.Detect(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join("Pages", "Index.razor"), filepath.Join("UI", "Window.xaml")} {
+		if !containsString(csharpModuleFilePaths(modules[0]), path) {
+			t.Errorf("companion-only package lost %q", path)
+		}
+	}
+	if detector.languageSourceCount != 0 {
+		t.Fatal("companion-only module contributed C# language weight")
+	}
+}
+
+func TestCSharpDetectorRoutesWWWRootAssetsToAuxiliaryFiles(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "App.csproj"), "")
+	writeTestFile(t, filepath.Join(root, "Program.cs"), "class Program {}")
+	writeTestFile(t, filepath.Join(root, "wwwroot", "site.css"), "body {}")
+	writeTestFile(t, filepath.Join(root, "wwwroot", "app.js"), "console.log('ok')")
+	writeTestFile(t, filepath.Join(root, "wwwroot", "logo.png"), "png data")
+	writeTestFile(t, filepath.Join(root, "wwwroot", "font.woff2"), "font data")
+
+	detector := NewCSharpDetector()
+	modules, err := detector.Detect(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg := csharpPackage(modules[0], filepath.Join("wwwroot"))
+	if pkg == nil || pkg.FileCount != 4 || len(pkg.TopFiles) != 2 {
+		t.Fatalf("wwwroot package = %+v, want four counted files and two primary text files", pkg)
+	}
+	for _, path := range []string{filepath.Join("wwwroot", "site.css"), filepath.Join("wwwroot", "app.js")} {
+		if !containsFilePath(pkg.TopFiles, path) {
+			t.Errorf("text companion %q missing from TopFiles: %+v", path, pkg.TopFiles)
+		}
+	}
+	for _, path := range []string{filepath.Join("wwwroot", "logo.png"), filepath.Join("wwwroot", "font.woff2")} {
+		if !containsFilePath(pkg.AuxFiles, path) {
+			t.Errorf("asset %q missing from AuxFiles: %+v", path, pkg.AuxFiles)
+		}
+		if containsFilePath(pkg.TopFiles, path) {
+			t.Errorf("asset %q competes in TopFiles: %+v", path, pkg.TopFiles)
+		}
+	}
+	if modules[0].FileCount != 6 || modules[0].TotalBytes == 0 || detector.languageSourceCount != 1 {
+		t.Fatalf("file/byte/language accounting = module %+v, C# weight %d", modules[0], detector.languageSourceCount)
+	}
+	if pkg.Heaviest.Path == filepath.Join("wwwroot", "logo.png") || pkg.Heaviest.Path == filepath.Join("wwwroot", "font.woff2") {
+		t.Fatalf("asset became package heaviest primary context: %+v", pkg.Heaviest)
+	}
+
+	topology, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scannedCSharp *model.Module
+	for idx := range topology.Modules {
+		if isFirstClassCSharpModule(&topology.Modules[idx]) {
+			scannedCSharp = &topology.Modules[idx]
+			break
+		}
+	}
+	if scannedCSharp == nil {
+		t.Fatalf("first-class C# module missing from scanned topology: %+v", topology.Modules)
+	}
+	scannedPkg := csharpPackage(*scannedCSharp, filepath.Join("wwwroot"))
+	if scannedPkg == nil || !containsFilePath(scannedPkg.AuxFiles, filepath.Join("wwwroot", "logo.png")) || containsFilePath(scannedPkg.TopFiles, filepath.Join("wwwroot", "logo.png")) {
+		t.Fatalf("finalized topology lost auxiliary asset classification: %+v", scannedCSharp.SourceRoots)
+	}
+	if scannedCSharp.Heaviest.Path == filepath.Join("wwwroot", "logo.png") || scannedCSharp.Heaviest.Path == filepath.Join("wwwroot", "font.woff2") {
+		t.Fatalf("asset became module heaviest primary context: %+v", scannedCSharp.Heaviest)
+	}
+}
+
+func TestCSharpDetectorCompanionContextHonorsExclusionsAndOmissions(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "App.csproj"), "")
+	for _, dir := range []string{"bin", "obj", ".vs", "packages", "coverage", "TestResults"} {
+		writeTestFile(t, filepath.Join(root, dir, "Generated.razor"), "generated")
+		writeTestFile(t, filepath.Join(root, dir, "wwwroot", "generated.js"), "generated")
+	}
+	writeTestFile(t, filepath.Join(root, "wwwroot", "native.dll"), "binary")
+
+	modules, err := NewCSharpDetector().Detect(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := csharpModuleFilePaths(modules[0])
+	if len(paths) != 1 || paths[0] != "App.csproj" {
+		t.Fatalf("excluded or omitted companion context surfaced: %v", paths)
+	}
+}
+
+func TestScannerCSharpCompanionContextHasZeroLanguageWeight(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "app", "App.csproj"), "")
+	writeTestFile(t, filepath.Join(root, "app", "Page.razor"), "@page")
+	writeTestFile(t, filepath.Join(root, "app", "View.cshtml"), "view")
+	writeTestFile(t, filepath.Join(root, "app", "Window.xaml"), "<Window />")
+	writeTestFile(t, filepath.Join(root, "app", "wwwroot", "site.css"), "body {}")
+	writeTestFile(t, filepath.Join(root, "app", "Properties", "launchSettings.json"), "{}")
+	writeTestFile(t, filepath.Join(root, "tool", "go.mod"), "module example.com/tool")
+	writeTestFile(t, filepath.Join(root, "tool", "main.go"), "package main")
+
+	topology, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topology.PrimaryLanguage != "Go" || !reflect.DeepEqual(topology.Languages, []string{"C#", "Go"}) {
+		t.Fatalf("primary=%q languages=%v, want Go primary with C# structural presence", topology.PrimaryLanguage, topology.Languages)
+	}
+}
+
 func TestScannerCSharpWeightUsesOnlyBoundedAcceptedSources(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "app", "App.csproj"), "")
@@ -340,6 +526,9 @@ func csharpModuleFilePaths(module model.Module) []string {
 			for _, file := range pkg.TopFiles {
 				seen[file.Path] = true
 			}
+			for _, file := range pkg.AuxFiles {
+				seen[file.Path] = true
+			}
 		}
 	}
 	paths := make([]string, 0, len(seen))
@@ -360,6 +549,26 @@ func csharpPackage(module model.Module, path string) *model.Package {
 		}
 	}
 	return nil
+}
+
+func containsFilePath(files []model.FileSummary, want string) bool {
+	for _, file := range files {
+		if file.Path == want {
+			return true
+		}
+	}
+	return false
+}
+
+func csharpModuleHasPackageAuxFile(module model.Module, path string) bool {
+	for _, sourceRoot := range module.SourceRoots {
+		for _, pkg := range sourceRoot.Packages {
+			if containsFilePath(pkg.AuxFiles, path) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func containsString(values []string, want string) bool {

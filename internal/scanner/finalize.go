@@ -100,7 +100,11 @@ func sourceLanguageWeightsFromModules(modules []model.Module, projectRoot string
 			continue
 		}
 		if module.Coverage {
-			weights[module.Language] += int64(module.FileCount)
+			count := module.LanguageSourceCount
+			if count == 0 {
+				count = module.FileCount
+			}
+			weights[module.Language] += int64(count)
 			continue
 		}
 		if isFirstClassCSharpModule(&module) || isFirstClassCppModule(&module) {

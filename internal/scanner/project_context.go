@@ -4,7 +4,6 @@ package scanner
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -176,72 +175,11 @@ func projectContextModuleTargets(modules []model.Module) []projectContextModuleT
 		}
 		targets = append(targets, projectContextModuleTarget{
 			index: idx, path: normalizeRelativeDir(filepath.Clean(modules[idx].Path)),
-			identity: projectContextModuleIdentity(modules[idx]),
+			identity: stableModuleContentIdentity(modules[idx], true),
 		})
 	}
 	sort.Slice(targets, func(i, j int) bool { return targets[i].identity < targets[j].identity })
 	return targets
-}
-
-func projectContextModuleIdentity(module model.Module) string {
-	return stableModuleContentIdentity(module, true)
-}
-
-func isEnrichmentSourceRootRole(role string) bool {
-	switch role {
-	case "Documentation", "Web Resources", "Ops/Deploy", "Resources", projectContextRole:
-		return true
-	default:
-		return false
-	}
-}
-
-func stableModuleContentIdentity(module model.Module, excludeEnrichment bool) string {
-	stable := module
-	stable.SourceRoots = nil
-	stable.TopFiles = append([]model.FileSummary(nil), module.TopFiles...)
-	stable.AuxFiles = append([]model.FileSummary(nil), module.AuxFiles...)
-	sortStableFileSummaries(stable.TopFiles)
-	sortStableFileSummaries(stable.AuxFiles)
-	for _, sourceRoot := range module.SourceRoots {
-		if excludeEnrichment && isEnrichmentSourceRootRole(sourceRoot.Role) {
-			continue
-		}
-		rootCopy := sourceRoot
-		rootCopy.Packages = make([]model.Package, len(sourceRoot.Packages))
-		for idx, pkg := range sourceRoot.Packages {
-			pkgCopy := pkg
-			pkgCopy.TopFiles = append([]model.FileSummary(nil), pkg.TopFiles...)
-			pkgCopy.AuxFiles = append([]model.FileSummary(nil), pkg.AuxFiles...)
-			sortStableFileSummaries(pkgCopy.TopFiles)
-			sortStableFileSummaries(pkgCopy.AuxFiles)
-			rootCopy.Packages[idx] = pkgCopy
-		}
-		sort.Slice(rootCopy.Packages, func(i, j int) bool {
-			return packageSortKey(rootCopy.Packages[i]) < packageSortKey(rootCopy.Packages[j])
-		})
-		stable.SourceRoots = append(stable.SourceRoots, rootCopy)
-	}
-	sort.Slice(stable.SourceRoots, func(i, j int) bool {
-		return sourceRootSortKey(stable.SourceRoots[i]) < sourceRootSortKey(stable.SourceRoots[j])
-	})
-	encoded, _ := json.Marshal(stable)
-	return string(encoded)
-}
-
-func sortStableFileSummaries(files []model.FileSummary) {
-	sort.Slice(files, func(i, j int) bool {
-		if files[i].Path != files[j].Path {
-			return files[i].Path < files[j].Path
-		}
-		if files[i].Name != files[j].Name {
-			return files[i].Name < files[j].Name
-		}
-		if files[i].Kind != files[j].Kind {
-			return files[i].Kind < files[j].Kind
-		}
-		return files[i].Size < files[j].Size
-	})
 }
 
 func projectContextOwner(targets []projectContextModuleTarget, candidatePath string) int {

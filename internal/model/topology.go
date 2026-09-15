@@ -46,6 +46,7 @@ type Module struct {
 	AuxFiles    []FileSummary `json:"aux_files,omitempty"`
 	SourceRoots []SourceRoot  `json:"source_roots"`
 	Language    string        `json:"language"` // e.g. "Java", "Go"
+	Coverage    bool          `json:"-"`        // Internal source-coverage group, not a structural module.
 }
 
 // SourceRoot represents a directory containing source files (e.g., src/main/java).

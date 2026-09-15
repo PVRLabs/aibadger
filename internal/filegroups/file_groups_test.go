@@ -148,7 +148,7 @@ func TestOpsTopLevelDirNames(t *testing.T) {
 			t.Fatalf("%s should be an ops top-level directory name", name)
 		}
 	}
-	for _, name := range []string{"scripts", "bin", "src", "internal", "cmd", "pkg", "node_modules", ".github"} {
+	for _, name := range []string{"scripts", "migrations", "bin", "src", "internal", "cmd", "pkg", "node_modules", ".github"} {
 		if IsOpsTopLevelDirName(name) {
 			t.Fatalf("%s should not be an ops top-level directory name", name)
 		}
@@ -303,6 +303,19 @@ func TestOpsContextFileNames(t *testing.T) {
 	}
 }
 
+func TestOperationalNameTokens(t *testing.T) {
+	for _, name := range []string{"backup", "health", "export", "diagnose", "run-tests", "compile_assets", "db.migrate"} {
+		if !HasOperationalNameToken(name) {
+			t.Fatalf("%s should contain an operational name token", name)
+		}
+	}
+	for _, name := range []string{"helper", "formatter", "reporting", "runner", "healthcare", "exporter"} {
+		if HasOperationalNameToken(name) {
+			t.Fatalf("%s should not contain an operational name token", name)
+		}
+	}
+}
+
 func TestOpsFileRank(t *testing.T) {
 	ordered := []string{
 		"README.md",
@@ -319,5 +332,16 @@ func TestOpsFileRank(t *testing.T) {
 		if OpsFileRank(prev) >= OpsFileRank(current) {
 			t.Fatalf("expected %s to rank before %s", prev, current)
 		}
+	}
+}
+
+func TestOpsFileRankDoesNotInheritClassificationOnlyTokens(t *testing.T) {
+	for _, name := range []string{"builder.py", "compiler.py", "installer.py", "bootstrapper.py", "generated-report.py", "codegen-helper.py"} {
+		if got := OpsFileRank(name); got != 5 {
+			t.Fatalf("OpsFileRank(%q) = %d, want fallback ops-context rank 5", name, got)
+		}
+	}
+	if got := OpsFileRank("healthcheck.py"); got != 4 {
+		t.Fatalf("OpsFileRank(healthcheck.py) = %d, want established keyword rank 4", got)
 	}
 }

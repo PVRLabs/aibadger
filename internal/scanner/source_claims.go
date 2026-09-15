@@ -351,26 +351,17 @@ func isAugmentationScriptControlPath(dir, name string) bool {
 		return false
 	}
 	localDir := strings.TrimPrefix(lowerDir, "scripts"+string(filepath.Separator))
-	parts := strings.Split(localDir, string(filepath.Separator))
-	parts = append(parts, strings.TrimSuffix(strings.ToLower(name), strings.ToLower(filepath.Ext(name))))
-	for _, value := range parts {
-		if containsAugmentationControlToken(value) {
+	for _, segment := range strings.Split(localDir, string(filepath.Separator)) {
+		if isAugmentationOperationalSegment(segment) {
 			return true
 		}
 	}
-	return false
+	stem := strings.TrimSuffix(strings.ToLower(name), strings.ToLower(filepath.Ext(name)))
+	return filegroups.HasOperationalNameToken(stem)
 }
 
-func containsAugmentationControlToken(value string) bool {
-	parts := strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
-		return r == '-' || r == '_' || r == '.'
-	})
-	for _, part := range parts {
-		switch part {
-		case "build", "compile", "deploy", "release", "migrate", "migration",
-			"generate", "generator", "codegen", "install", "bootstrap", "seed":
-			return true
-		}
-	}
-	return false
+func isAugmentationOperationalSegment(segment string) bool {
+	return filegroups.IsOpsTopLevelDirName(segment) ||
+		filegroups.HasOperationalNameToken(segment) ||
+		(strings.HasSuffix(segment, "s") && filegroups.HasOperationalNameToken(strings.TrimSuffix(segment, "s")))
 }

@@ -72,6 +72,7 @@ var genericExtensionLanguages = map[string]string{
 type GenericDetector struct {
 	Exclusions     map[string]bool
 	maxFilesPerDir int
+	maxTotalFiles  int
 }
 
 // NewGenericDetector creates a new GenericDetector.
@@ -111,50 +112,11 @@ func (d *GenericDetector) Detect(root string) ([]model.Module, error) {
 	packages := make(map[string]*model.Package)
 	extCounts := make(map[string]int)
 
-	var perDirFiles map[string]int
-	if d.maxFilesPerDir > 0 {
-		perDirFiles = make(map[string]int)
-	}
-	totalProcessed := 0
-
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-
-		if d.maxFilesPerDir > 0 {
-			dir := filepath.Dir(path)
-			perDirFiles[dir]++
-			if perDirFiles[dir] > d.maxFilesPerDir {
-				if entry.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-		}
-
-		if entry.IsDir() {
-			if shouldSkipDir(entry.Name(), d.Exclusions) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		totalProcessed++
-		if totalProcessed > defaults.MaxTotalScanFiles {
-			return filepath.SkipAll
-		}
-
-		info, infoErr := entry.Info()
-		if infoErr != nil {
-			return nil
-		}
+	err := d.walkFiles(root, func(path string, entry os.DirEntry, info os.FileInfo) {
 		if shouldOmitFile(root, path, entry.Name()) {
-			return nil
+			return
 		}
 		recordGenericFile(root, path, entry.Name(), info.Size(), packages, extCounts)
-
-		return nil
 	})
 
 	if err != nil {
@@ -183,6 +145,51 @@ func (d *GenericDetector) Detect(root string) ([]model.Module, error) {
 	module.SourceRoots = append(module.SourceRoots, sourceRoot)
 
 	return []model.Module{module}, nil
+}
+
+// walkFiles supplies the bounded, deterministic traversal shared by the full
+// Generic fallback and mixed-repository source coverage.
+func (d *GenericDetector) walkFiles(root string, visit func(string, os.DirEntry, os.FileInfo)) error {
+	var perDirFiles map[string]int
+	if d.maxFilesPerDir > 0 {
+		perDirFiles = make(map[string]int)
+	}
+	maxTotalFiles := d.maxTotalFiles
+	if maxTotalFiles <= 0 {
+		maxTotalFiles = defaults.MaxTotalScanFiles
+	}
+	totalProcessed := 0
+
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.maxFilesPerDir > 0 {
+			dir := filepath.Dir(path)
+			perDirFiles[dir]++
+			if perDirFiles[dir] > d.maxFilesPerDir {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+		if entry.IsDir() {
+			if shouldSkipDir(entry.Name(), d.Exclusions) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		totalProcessed++
+		if totalProcessed > maxTotalFiles {
+			return filepath.SkipAll
+		}
+		info, infoErr := entry.Info()
+		if infoErr == nil {
+			visit(path, entry, info)
+		}
+		return nil
+	})
 }
 
 func recordGenericFile(root, path, name string, size int64, packages map[string]*model.Package, extCounts map[string]int) {

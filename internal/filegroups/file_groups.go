@@ -172,6 +172,22 @@ var (
 		"ops",
 		"infra",
 	}
+
+	operationalNameTokens = map[string]bool{
+		"backup": true, "bootstrap": true, "build": true, "check": true,
+		"codegen": true, "compile": true, "deploy": true, "deployment": true,
+		"diagnose": true, "export": true, "generate": true, "generator": true,
+		"health": true, "import": true, "install": true, "migrate": true,
+		"migration": true, "provision": true, "release": true, "restart": true,
+		"restore": true, "run": true, "schema": true, "seed": true,
+		"start": true, "status": true, "stop": true,
+	}
+
+	opsRankingKeywords = []string{
+		"deploy", "deployment", "provision", "release", "start", "stop",
+		"restart", "run", "diagnose", "check", "health", "status", "backup",
+		"restore", "import", "export", "migration", "schema", "seed",
+	}
 )
 
 var rootWebResourceNames = []string{
@@ -268,6 +284,21 @@ func IsOpsContextFileName(name string) bool {
 	return hasAnyLowerSuffix(lowerName, opsContextExtensions)
 }
 
+// HasOperationalNameToken reports whether a filename stem or path segment is
+// explicitly operational. Token boundaries avoid treating broad scripts/
+// directories, or words that merely contain an operational term, as ops.
+func HasOperationalNameToken(value string) bool {
+	parts := strings.FieldsFunc(normalizeName(value), func(r rune) bool {
+		return r == '-' || r == '_' || r == '.'
+	})
+	for _, part := range parts {
+		if operationalNameTokens[part] {
+			return true
+		}
+	}
+	return false
+}
+
 func OpsFileRank(name string) int {
 	lowerName := normalizeName(name)
 	switch {
@@ -279,7 +310,7 @@ func OpsFileRank(name string) int {
 		return 2
 	case strings.HasSuffix(lowerName, ".md") && hasAnyLowerSubstring(lowerName, []string{"runbook", "manual", "deploy", "deployment", "provision", "release"}):
 		return 3
-	case hasAnyLowerSubstring(lowerName, []string{"deploy", "deployment", "provision", "release", "start", "stop", "restart", "run", "diagnose", "check", "health", "status", "backup", "restore", "import", "export", "migration", "schema", "seed"}):
+	case hasAnyLowerSubstring(strings.TrimSuffix(lowerName, filepath.Ext(lowerName)), opsRankingKeywords):
 		return 4
 	case IsOpsContextFileName(lowerName):
 		return 5

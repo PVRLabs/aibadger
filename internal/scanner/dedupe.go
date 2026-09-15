@@ -196,7 +196,7 @@ func addTopologyTopFile(files []model.FileSummary, file model.FileSummary, modul
 	if isFirstClassCSharpModule(module) {
 		return addCSharpTopFile(files, file, maxRootPackageTopFiles)
 	}
-	if module != nil && module.Language == "Generic" {
+	if usesGenericRanking(module) {
 		return addGenericTopFile(files, file, maxGenericPackageFiles)
 	}
 	return addTopFile(files, file, limit)
@@ -214,17 +214,21 @@ func addTopologyPackageTopFile(files []model.FileSummary, file model.FileSummary
 		}
 		return addCSharpTopFile(files, file, limit)
 	}
-	if module != nil && module.Language == "Generic" {
+	if usesGenericRanking(module) {
 		return addGenericTopFile(files, file, maxGenericPackageFiles)
 	}
 	return addTopFile(files, file, limit)
 }
 
 func addTopologyAuxFile(files []model.FileSummary, file model.FileSummary, module *model.Module, limit int) []model.FileSummary {
-	if module != nil && module.Language == "Generic" {
+	if usesGenericRanking(module) {
 		return addAuxFile(files, file, maxGenericPackageFiles)
 	}
 	return addAuxFile(files, file, limit)
+}
+
+func usesGenericRanking(module *model.Module) bool {
+	return module != nil && (module.Language == "Generic" || module.Coverage)
 }
 
 func recordTopologyFileCandidate(winners map[string]topologyFileCandidate, module *model.Module, sourceRoot *model.SourceRoot, pkg *model.Package, file model.FileSummary, inTopFiles bool) {

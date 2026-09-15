@@ -196,6 +196,15 @@ func TestClassifyGenericSourceCandidateFiltersControlsAndOps(t *testing.T) {
 		filepath.Join("scripts", "release", "helper.py"),
 		filepath.Join("scripts", "build", "main.ts"),
 		filepath.Join("scripts", "deploy", "task.rb"),
+		filepath.Join("scripts", "backup.py"),
+		filepath.Join("scripts", "health.rb"),
+		filepath.Join("scripts", "export.ts"),
+		filepath.Join("scripts", "diagnose.py"),
+		filepath.Join("scripts", "run-tests.ts"),
+		filepath.Join("scripts", "provisioning", "main.py"),
+		filepath.Join("scripts", "deployments", "task.rb"),
+		filepath.Join("scripts", "releases", "publish.ts"),
+		filepath.Join("scripts", "migrations", "helper.py"),
 		filepath.Join("Scripts", "Release", "helper.py"),
 		filepath.Join("build", "generated.rb"),
 		filepath.Join(".azure", "token.kt"),
@@ -209,9 +218,11 @@ func TestClassifyGenericSourceCandidateFiltersControlsAndOps(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "php", "index.php"), "<?php\n")
 	writeTestFile(t, filepath.Join(root, "scripts", "data_analysis.py"), "print('analysis')\n")
 	writeTestFile(t, filepath.Join(root, "scripts", "helper.py"), "print('helper')\n")
+	writeTestFile(t, filepath.Join(root, "scripts", "reporting", "formatter.rb"), "puts 'format'\n")
 	writeTestFile(t, filepath.Join(root, "scripts", "analysis", "helper.py"), "print('helper')\n")
 	writeTestFile(t, filepath.Join(root, "Scripts", "Analysis", "helper.py"), "print('helper')\n")
 	writeTestFile(t, filepath.Join(root, "tools", "helper.py"), "print('helper')\n")
+	writeTestFile(t, filepath.Join(root, "migrations", "helper.py"), "print('application migration')\n")
 
 	for _, path := range paths {
 		if language, ok := classifyGenericSourceCandidate(root, path); ok {
@@ -219,15 +230,17 @@ func TestClassifyGenericSourceCandidateFiltersControlsAndOps(t *testing.T) {
 		}
 	}
 	for path, want := range map[string]string{
-		filepath.Join("src", "main", "kotlin", "Foo.kt"):  "Kotlin",
-		filepath.Join("native", "main.cpp"):               "C++",
-		filepath.Join("lib", "worker.rb"):                 "Ruby",
-		filepath.Join("php", "index.php"):                 "PHP",
-		filepath.Join("scripts", "data_analysis.py"):      "Python",
-		filepath.Join("scripts", "helper.py"):             "Python",
-		filepath.Join("scripts", "analysis", "helper.py"): "Python",
-		filepath.Join("Scripts", "Analysis", "helper.py"): "Python",
-		filepath.Join("tools", "helper.py"):               "Python",
+		filepath.Join("src", "main", "kotlin", "Foo.kt"):      "Kotlin",
+		filepath.Join("native", "main.cpp"):                   "C++",
+		filepath.Join("lib", "worker.rb"):                     "Ruby",
+		filepath.Join("php", "index.php"):                     "PHP",
+		filepath.Join("scripts", "data_analysis.py"):          "Python",
+		filepath.Join("scripts", "helper.py"):                 "Python",
+		filepath.Join("scripts", "reporting", "formatter.rb"): "Ruby",
+		filepath.Join("scripts", "analysis", "helper.py"):     "Python",
+		filepath.Join("Scripts", "Analysis", "helper.py"):     "Python",
+		filepath.Join("tools", "helper.py"):                   "Python",
+		filepath.Join("migrations", "helper.py"):              "Python",
 	} {
 		if got, ok := classifyGenericSourceCandidate(root, path); !ok || got != want {
 			t.Errorf("candidate %s = %q, %v; want %q, true", path, got, ok, want)

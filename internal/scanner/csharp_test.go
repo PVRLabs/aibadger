@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PVRLabs/aibadger/internal/defaults"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
 
@@ -426,14 +425,15 @@ func TestCSharpDetectorTotalBudgetLeavesLaterProjectMarkerVisible(t *testing.T) 
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "a", "A.csproj"), "")
 	writeTestFile(t, filepath.Join(root, "z", "Z.csproj"), "")
-	for dir := 0; dir < 41; dir++ {
-		for file := 0; file < defaults.MaxFilesPerDirectory; file++ {
+	for dir := 0; dir < 2; dir++ {
+		for file := 0; file < 8; file++ {
 			writeTestFile(t, filepath.Join(root, "a", fmt.Sprintf("d%02d", dir), fmt.Sprintf("f%03d.cs", file)), "x")
 		}
 	}
 	writeTestFile(t, filepath.Join(root, "z", "Program.cs"), "class Program {}")
 
-	modules, err := NewCSharpDetector().Detect(root)
+	// Small budgets exercise project fairness without a large filesystem fixture.
+	modules, err := NewCSharpDetector().detectWithBudgets(root, 12, 4)
 	if err != nil {
 		t.Fatal(err)
 	}

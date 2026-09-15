@@ -35,6 +35,10 @@ func NewCSharpDetector() *CSharpDetector {
 
 // Detect discovers bounded .csproj markers and builds directory-backed C# topology.
 func (c *CSharpDetector) Detect(root string) ([]model.Module, error) {
+	return c.detectWithBudgets(root, defaults.MaxTotalScanFiles, maxCSharpProjectEntries)
+}
+
+func (c *CSharpDetector) detectWithBudgets(root string, totalBudget, projectBudget int) ([]model.Module, error) {
 	c.languageSourceCount = 0
 	markers, err := discoverProjectMarkers(root, ".csproj")
 	if err != nil {
@@ -56,10 +60,10 @@ func (c *CSharpDetector) Detect(root string) ([]model.Module, error) {
 	}
 	sort.Strings(dirs)
 
-	remaining := defaults.MaxTotalScanFiles
+	remaining := totalBudget
 	modules := make([]model.Module, 0, len(dirs))
 	for _, dir := range dirs {
-		projectRemaining := min(remaining, maxCSharpProjectEntries)
+		projectRemaining := min(remaining, projectBudget)
 		before := projectRemaining
 		modules = append(modules, c.analyzeModule(root, dir, markersByDir[dir], &projectRemaining))
 		remaining -= before - projectRemaining

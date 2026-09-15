@@ -182,7 +182,7 @@ func TestRunAPIReviewContextSelectedPathsAndFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	runAPIGit(t, root, "add", "gone.go")
-	runAPIGit(t, root, "commit", "-m", "add deleted fixture")
+	runAPICommit(t, root, "-m", "add deleted fixture")
 	if err := os.Remove(filepath.Join(root, "gone.go")); err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +303,7 @@ func TestRunAPIReviewContextModesAndInvalidRef(t *testing.T) {
 			}
 		})
 	}
-	runAPIGit(t, root, "commit", "-m", "changed")
+	runAPICommit(t, root, "-m", "changed")
 	for _, tt := range []struct{ mode, ref string }{{"commit", "HEAD"}, {"branch", "HEAD~1"}} {
 		t.Run(tt.mode, func(t *testing.T) {
 			var stdout bytes.Buffer
@@ -1124,16 +1124,20 @@ func writeAPIReviewRepo(t *testing.T) string {
 func writeAPIReviewRepoAt(t *testing.T, root string) {
 	t.Helper()
 	runAPIGit(t, root, "init")
-	runAPIGit(t, root, "config", "user.email", "test@example.com")
-	runAPIGit(t, root, "config", "user.name", "Test User")
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nconst changed = false\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	runAPIGit(t, root, "add", "main.go")
-	runAPIGit(t, root, "commit", "-m", "initial")
+	runAPICommit(t, root, "-m", "initial")
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nconst changed = true\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func runAPICommit(t *testing.T, root string, args ...string) {
+	t.Helper()
+	gitArgs := append([]string{"-c", "user.email=test@example.com", "-c", "user.name=Test User", "commit"}, args...)
+	runAPIGit(t, root, gitArgs...)
 }
 
 func runAPIGit(t *testing.T, root string, args ...string) {

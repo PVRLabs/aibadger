@@ -23,38 +23,25 @@ func (j *JavaDetector) Detect(root string) ([]model.Module, error) {
 	var modules []model.Module
 	seenModules := make(map[string]bool)
 
-	// Find all module markers (pom.xml, build.gradle, build.gradle.kts)
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
+	markers, err := discoverProjectMarkers(root, "pom.xml", "build.gradle", "build.gradle.kts")
+	if err != nil {
+		return nil, err
+	}
+	for _, marker := range markers {
+		modulePath := filepath.Dir(marker)
+		relPath := relativePath(root, modulePath)
+		if seenModules[relPath] {
+			continue
 		}
+		seenModules[relPath] = true
 
-		if d.IsDir() {
-			if shouldSkipDir(d.Name(), commonIgnoredDirs) {
-				return filepath.SkipDir
-			}
-			return nil
+		module := j.analyzeModule(root, relPath)
+		if module.FileCount > 0 {
+			modules = append(modules, module)
 		}
+	}
 
-		name := d.Name()
-		if name == "pom.xml" || name == "build.gradle" || name == "build.gradle.kts" {
-			modulePath := filepath.Dir(path)
-			relPath := relativePath(root, modulePath)
-			if seenModules[relPath] {
-				return nil
-			}
-			seenModules[relPath] = true
-
-			module := j.analyzeModule(root, relPath)
-			if module.FileCount > 0 {
-				modules = append(modules, module)
-			}
-		}
-
-		return nil
-	})
-
-	return modules, err
+	return modules, nil
 }
 
 func (j *JavaDetector) analyzeModule(root, relPath string) model.Module {

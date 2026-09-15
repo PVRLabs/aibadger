@@ -67,6 +67,35 @@ func TestJavaDetectorDetectsGradleModule(t *testing.T) {
 	}
 }
 
+func TestJavaDetectorBoundsMarkerDiscoveryAndRecursesAcceptedSourceRoots(t *testing.T) {
+	root := t.TempDir()
+	modulePath := filepath.Join("one", "two", "three", "four")
+	deepModulePath := filepath.Join(modulePath, "five")
+	sourcePath := filepath.Join(modulePath, "src", "main", "java", "com", "example", "service", "internal", "DeepService.java")
+
+	writeTestFile(t, filepath.Join(root, modulePath, "pom.xml"), "<project />\n")
+	writeTestFile(t, filepath.Join(root, sourcePath), "package com.example.service.internal; class DeepService {}\n")
+	writeTestFile(t, filepath.Join(root, deepModulePath, "build.gradle"), "plugins { id 'java' }\n")
+	writeTestFile(t, filepath.Join(root, deepModulePath, "src", "main", "java", "DeepModule.java"), "class DeepModule {}\n")
+
+	modules, err := NewJavaDetector().Detect(root)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("len(modules) = %d, want only the depth-four module: %+v", len(modules), modules)
+	}
+	if modules[0].Path != modulePath {
+		t.Fatalf("module.Path = %q, want %q", modules[0].Path, modulePath)
+	}
+	if !hasJavaSourceRoot(modules[0], filepath.Join(modulePath, "src", "main", "java")) {
+		t.Fatalf("SourceRoots = %+v, missing accepted Java source root", modules[0].SourceRoots)
+	}
+	if !hasTopFile(modules[0].TopFiles, sourcePath) {
+		t.Fatalf("TopFiles = %+v, missing recursively discovered source %q", modules[0].TopFiles, sourcePath)
+	}
+}
+
 func TestJavaDetectorFindsSourceRoot(t *testing.T) {
 	tmpDir := t.TempDir()
 

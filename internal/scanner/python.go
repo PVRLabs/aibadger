@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,8 +9,6 @@ import (
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
 )
-
-var errPythonEvidenceFound = errors.New("python evidence found")
 
 // PythonDetector handles Python projects using shallow markers and common layouts.
 type PythonDetector struct {
@@ -33,38 +30,32 @@ func NewPythonDetector() *PythonDetector {
 	}
 }
 
-// Detect creates a single additive Python module when Python markers or files exist.
+// Detect creates a single additive Python module for root markers or recognized
+// shallow source layouts. Unrelated Python files elsewhere remain available to
+// generic source augmentation without activating an empty root module.
 func (p *PythonDetector) Detect(root string) ([]model.Module, error) {
-	found, err := p.hasPythonEvidence(root)
+	hasRootMarker, err := p.hasRootPythonMarker(root)
 	if err != nil {
 		return nil, err
 	}
-	if !found {
+	module := p.analyzeModule(root)
+	if !hasRootMarker && module.FileCount == 0 {
 		return nil, nil
 	}
-	return []model.Module{p.analyzeModule(root)}, nil
+	return []model.Module{module}, nil
 }
 
-func (p *PythonDetector) hasPythonEvidence(root string) (bool, error) {
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if shouldSkipDir(d.Name(), p.Exclusions) || shouldSkipTopLevelOpsDir(root, path, d.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if isPythonMarker(d.Name()) || isPythonSourceFile(d.Name()) {
-			return errPythonEvidenceFound
-		}
-		return nil
-	})
-	if errors.Is(err, errPythonEvidenceFound) {
-		return true, nil
+func (p *PythonDetector) hasRootPythonMarker(root string) (bool, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return false, err
 	}
-	return false, err
+	for _, entry := range entries {
+		if !entry.IsDir() && isPythonMarker(entry.Name()) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (p *PythonDetector) analyzeModule(projectRoot string) model.Module {

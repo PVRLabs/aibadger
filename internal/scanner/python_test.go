@@ -115,6 +115,42 @@ func TestScannerAddsPythonToMixedLanguageTopology(t *testing.T) {
 	}
 }
 
+func TestScannerKeepsDeepOnlyPythonSourceAsGenericCoverage(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "go.mod"), "module example.com/api\n")
+	writeTestFile(t, filepath.Join(root, "main.go"), "package main\n")
+	deepPythonPath := filepath.Join("unrelated", "nested", "support", "helper.py")
+	writeTestFile(t, filepath.Join(root, deepPythonPath), "print('helper')\n")
+
+	topology, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+
+	var pythonCoverageFound bool
+	for _, module := range topology.Modules {
+		if module.Language != "Python" {
+			continue
+		}
+		if !module.Coverage {
+			t.Fatalf("deep-only Python source created structural module: %+v", module)
+		}
+		if !moduleHasPackageTopFile(module, deepPythonPath) {
+			t.Fatalf("Python coverage omitted %s: %+v", deepPythonPath, module)
+		}
+		pythonCoverageFound = true
+	}
+	if !pythonCoverageFound {
+		t.Fatalf("Python source was not retained as generic coverage: %+v", topology.Modules)
+	}
+	if !reflect.DeepEqual(topology.Languages, []string{"Go", "Python"}) {
+		t.Fatalf("Languages = %v, want generic coverage to retain Python", topology.Languages)
+	}
+	if topology.Structure != "Single Module" {
+		t.Fatalf("Structure = %q, want Single Module", topology.Structure)
+	}
+}
+
 func TestPythonTopologyPromptSurfacesBadgerCertPytestFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	writeTestFile(t, filepath.Join(tmpDir, "package.json"), `{"name":"cert-harness","main":"src/index.js"}`)

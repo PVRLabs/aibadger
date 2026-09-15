@@ -15,15 +15,27 @@ const genericSourceRole = "Generic Source"
 // collectUnclaimedSource builds source-only coverage groups. Scanner
 // orchestration intentionally does not call this until the integration phase.
 func (d *GenericDetector) collectUnclaimedSource(root string, ownership semanticSourceOwnership) ([]model.Module, error) {
+	modules, _, err := d.collectGenericAugmentation(root, ownership)
+	return modules, err
+}
+
+func (d *GenericDetector) collectGenericAugmentation(root string, ownership semanticSourceOwnership) ([]model.Module, []projectContextCandidate, error) {
 	packagesByLanguage := make(map[string]map[string]*model.Package)
 	bytesByLanguage := make(map[string]int64)
 	sourcesByLanguage := make(map[string]int)
 	recordedPaths := make(map[string]bool)
+	var contextCandidates []projectContextCandidate
 	headerIndex := newCppCompanionHeaderIndex(root, ownership, d.maxFilesPerDir)
 
 	err := d.walkFiles(root, func(path string, entry os.DirEntry, info os.FileInfo) {
 		language, ok := classifyGenericSourceCandidate(root, path)
-		if !ok || ownership.Owns(path) || ownership.ownsWebResource(path) {
+		if !ok {
+			if candidate, contextOK := classifyProjectContextCandidate(root, path, info.Size()); contextOK {
+				contextCandidates = append(contextCandidates, candidate)
+			}
+			return
+		}
+		if ownership.Owns(path) || ownership.ownsWebResource(path) {
 			return
 		}
 		packages := packagesByLanguage[language]
@@ -48,7 +60,7 @@ func (d *GenericDetector) collectUnclaimedSource(root string, ownership semantic
 		}
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	languages := make([]string, 0, len(packagesByLanguage))
@@ -93,7 +105,7 @@ func (d *GenericDetector) collectUnclaimedSource(root string, ownership semantic
 			modules = append(modules, module)
 		}
 	}
-	return modules, nil
+	return modules, contextCandidates, nil
 }
 
 func recordCoverageFile(pkg *model.Package, file model.FileSummary, language string) {

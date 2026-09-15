@@ -10,60 +10,74 @@ import (
 )
 
 type topologyFileCandidate struct {
-	summary      model.FileSummary
-	modulePath   string
-	moduleName   string
-	moduleLang   string
-	sourceRoot   string
-	sourceRole   string
-	packagePath  string
-	inTopFiles   bool
-	priority     int
-	normalizedID string
+	summary        model.FileSummary
+	moduleIndex    int
+	moduleIndexed  bool
+	moduleIdentity string
+	modulePath     string
+	moduleName     string
+	moduleLang     string
+	sourceRoot     string
+	sourceRole     string
+	packagePath    string
+	inTopFiles     bool
+	priority       int
+	normalizedID   string
 }
 
 // Deduplicate surfaced file summaries by repo-relative path, then rebuild ownership rollups.
 func deduplicateTopologyFiles(t *model.ProjectTopology) {
 	winners := make(map[string]topologyFileCandidate)
 	candidateGroups := make(map[string][]topologyFileCandidate)
+	moduleIdentities := make([]string, len(t.Modules))
+	for moduleIdx := range t.Modules {
+		moduleIdentities[moduleIdx] = stableModuleContentIdentity(t.Modules[moduleIdx], true)
+	}
 
 	for moduleIdx := range t.Modules {
 		module := &t.Modules[moduleIdx]
+		moduleIdentity := moduleIdentities[moduleIdx]
 		for sourceRootIdx := range module.SourceRoots {
 			sourceRoot := &module.SourceRoots[sourceRootIdx]
 			for packageIdx := range sourceRoot.Packages {
 				pkg := &sourceRoot.Packages[packageIdx]
 				for _, file := range pkg.TopFiles {
-					recordTopologyFileCandidate(winners, module, sourceRoot, pkg, file, true)
+					recordTopologyFileCandidate(winners, moduleIdx, moduleIdentity, module, sourceRoot, pkg, file, true)
 					normalizedPath := normalizeTopologyFilePath(file.Path)
 					if normalizedPath != "" {
 						candidateGroups[normalizedPath] = append(candidateGroups[normalizedPath], topologyFileCandidate{
-							summary:     file,
-							modulePath:  module.Path,
-							moduleName:  module.Name,
-							moduleLang:  module.Language,
-							sourceRoot:  sourceRoot.Path,
-							sourceRole:  sourceRoot.Role,
-							packagePath: pkg.Path,
-							inTopFiles:  true,
-							priority:    topologyFilePriority(file),
+							summary:        file,
+							moduleIndex:    moduleIdx,
+							moduleIndexed:  true,
+							moduleIdentity: moduleIdentity,
+							modulePath:     module.Path,
+							moduleName:     module.Name,
+							moduleLang:     module.Language,
+							sourceRoot:     sourceRoot.Path,
+							sourceRole:     sourceRoot.Role,
+							packagePath:    pkg.Path,
+							inTopFiles:     true,
+							priority:       topologyFilePriority(file),
 						})
 					}
 				}
 				for _, file := range pkg.AuxFiles {
-					recordTopologyFileCandidate(winners, module, sourceRoot, pkg, file, false)
+					recordTopologyFileCandidate(winners, moduleIdx, moduleIdentity, module, sourceRoot, pkg, file, false)
 					normalizedPath := normalizeTopologyFilePath(file.Path)
 					if normalizedPath != "" {
 						candidateGroups[normalizedPath] = append(candidateGroups[normalizedPath], topologyFileCandidate{
-							summary:     file,
-							modulePath:  module.Path,
-							moduleName:  module.Name,
-							moduleLang:  module.Language,
-							sourceRoot:  sourceRoot.Path,
-							sourceRole:  sourceRoot.Role,
-							packagePath: pkg.Path,
-							inTopFiles:  false,
-							priority:    topologyFilePriority(file),
+							summary:        file,
+							moduleIndex:    moduleIdx,
+							moduleIndexed:  true,
+							moduleIdentity: moduleIdentity,
+							modulePath:     module.Path,
+							moduleName:     module.Name,
+							moduleLang:     module.Language,
+							sourceRoot:     sourceRoot.Path,
+							sourceRole:     sourceRoot.Role,
+							packagePath:    pkg.Path,
+							inTopFiles:     false,
+							priority:       topologyFilePriority(file),
 						})
 					}
 				}
@@ -114,6 +128,8 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 				limit = 10
 			case "Ops/Deploy":
 				limit = maxOpsPackageFiles
+			case projectContextRole:
+				limit = maxProjectContextPackageFiles
 			}
 		}
 		if strings.HasSuffix(strings.ToLower(winner.summary.Name), ".md") {
@@ -142,6 +158,8 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 				limit = 10
 			case "Ops/Deploy":
 				limit = maxOpsPackageFiles
+			case projectContextRole:
+				limit = maxProjectContextPackageFiles
 			}
 			for packageIdx := range sourceRoot.Packages {
 				pkg := &sourceRoot.Packages[packageIdx]
@@ -231,23 +249,26 @@ func usesGenericRanking(module *model.Module) bool {
 	return module != nil && (module.Language == "Generic" || module.Coverage)
 }
 
-func recordTopologyFileCandidate(winners map[string]topologyFileCandidate, module *model.Module, sourceRoot *model.SourceRoot, pkg *model.Package, file model.FileSummary, inTopFiles bool) {
+func recordTopologyFileCandidate(winners map[string]topologyFileCandidate, moduleIndex int, moduleIdentity string, module *model.Module, sourceRoot *model.SourceRoot, pkg *model.Package, file model.FileSummary, inTopFiles bool) {
 	normalizedPath := normalizeTopologyFilePath(file.Path)
 	if normalizedPath == "" {
 		return
 	}
 
 	candidate := topologyFileCandidate{
-		summary:      file,
-		modulePath:   module.Path,
-		moduleName:   module.Name,
-		moduleLang:   module.Language,
-		sourceRoot:   sourceRoot.Path,
-		sourceRole:   sourceRoot.Role,
-		packagePath:  pkg.Path,
-		inTopFiles:   inTopFiles,
-		priority:     topologyFilePriority(file),
-		normalizedID: normalizedPath,
+		summary:        file,
+		moduleIndex:    moduleIndex,
+		moduleIndexed:  true,
+		moduleIdentity: moduleIdentity,
+		modulePath:     module.Path,
+		moduleName:     module.Name,
+		moduleLang:     module.Language,
+		sourceRoot:     sourceRoot.Path,
+		sourceRole:     sourceRoot.Role,
+		packagePath:    pkg.Path,
+		inTopFiles:     inTopFiles,
+		priority:       topologyFilePriority(file),
+		normalizedID:   normalizedPath,
 	}
 
 	current, exists := winners[normalizedPath]
@@ -281,7 +302,7 @@ func shouldReplaceTopologyFileCandidate(current, candidate topologyFileCandidate
 }
 
 func topologyFileOwnerKey(candidate topologyFileCandidate) string {
-	return candidate.modulePath + "\x00" + candidate.moduleName + "\x00" + candidate.moduleLang + "\x00" + candidate.sourceRoot + "\x00" + candidate.sourceRole + "\x00" + candidate.packagePath + "\x00" + candidate.summary.Name + "\x00" + candidate.summary.Kind
+	return candidate.modulePath + "\x00" + candidate.moduleName + "\x00" + candidate.moduleLang + "\x00" + candidate.moduleIdentity + "\x00" + candidate.sourceRoot + "\x00" + candidate.sourceRole + "\x00" + candidate.packagePath + "\x00" + candidate.summary.Name + "\x00" + candidate.summary.Kind
 }
 
 func topologyPackageSpecificity(packagePath string) int {
@@ -292,7 +313,9 @@ func topologyPackageSpecificity(packagePath string) int {
 }
 
 func sameTopologyFileCandidate(left, right topologyFileCandidate) bool {
-	return left.modulePath == right.modulePath &&
+	return left.moduleIndexed == right.moduleIndexed &&
+		(!left.moduleIndexed || left.moduleIndex == right.moduleIndex) &&
+		left.modulePath == right.modulePath &&
 		left.moduleName == right.moduleName &&
 		left.moduleLang == right.moduleLang &&
 		left.sourceRoot == right.sourceRoot &&

@@ -9,9 +9,23 @@ import (
 )
 
 func sortTopology(t *model.ProjectTopology) {
-	sort.SliceStable(t.Modules, func(i, j int) bool {
-		return moduleSortKey(t.Modules[i]) < moduleSortKey(t.Modules[j])
+	type keyedModule struct {
+		module model.Module
+		key    string
+	}
+	keyed := make([]keyedModule, len(t.Modules))
+	for idx, module := range t.Modules {
+		keyed[idx] = keyedModule{
+			module: module,
+			key:    moduleSortKey(module) + "\x00" + stableModuleContentIdentity(module, false),
+		}
+	}
+	sort.SliceStable(keyed, func(i, j int) bool {
+		return keyed[i].key < keyed[j].key
 	})
+	for idx := range keyed {
+		t.Modules[idx] = keyed[idx].module
+	}
 	for moduleIdx := range t.Modules {
 		module := &t.Modules[moduleIdx]
 		sortModuleFileSummaries(module)

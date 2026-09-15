@@ -72,6 +72,12 @@ func findModuleByPath(modules []model.Module, modulePath string) *model.Module {
 }
 
 func findModuleByCandidate(modules []model.Module, candidate topologyFileCandidate) *model.Module {
+	if candidate.moduleIndexed {
+		if candidate.moduleIndex < 0 || candidate.moduleIndex >= len(modules) {
+			return nil
+		}
+		return &modules[candidate.moduleIndex]
+	}
 	for idx := range modules {
 		if modules[idx].Path == candidate.modulePath &&
 			modules[idx].Name == candidate.moduleName &&

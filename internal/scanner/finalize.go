@@ -86,7 +86,7 @@ func (s *Scanner) finalizeTopologyWithLanguageWeights(t *model.ProjectTopology, 
 
 func isLanguageOwnedSourceRoot(role string) bool {
 	switch role {
-	case "Documentation", "Web Resources", "Ops/Deploy", "Resources":
+	case "Documentation", "Web Resources", "Ops/Deploy", "Resources", projectContextRole:
 		return false
 	default:
 		return true

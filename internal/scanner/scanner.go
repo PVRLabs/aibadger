@@ -73,6 +73,7 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 	// detectors succeed, add only recognized source they do not semantically
 	// own so normal language weighting and finalization can consume it.
 	usedGenericFallback := false
+	var projectContext []projectContextCandidate
 	if len(topology.Modules) == 0 {
 		det := NewGenericDetector()
 		if s.MaxFilesPerDirectory > 0 {
@@ -89,9 +90,10 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 			det.maxFilesPerDir = s.MaxFilesPerDirectory
 		}
 		ownership := newSemanticSourceOwnership(s.ProjectRoot, topology.Modules)
-		coverage, coverageErr := det.collectUnclaimedSource(s.ProjectRoot, ownership)
+		coverage, contextCandidates, coverageErr := det.collectGenericAugmentation(s.ProjectRoot, ownership)
 		if coverageErr == nil {
 			topology.Modules = append(topology.Modules, coverage...)
+			projectContext = contextCandidates
 		}
 	}
 	languageWeights := sourceLanguageWeightsFromModules(topology.Modules, s.ProjectRoot)
@@ -127,6 +129,7 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 		resources = nil
 	}
 	attachGenericResourcesToTopology(topology, resources)
+	attachProjectContextToTopology(topology, projectContext)
 
 	// Finalize topology
 	topology.ScanTime = time.Since(start)

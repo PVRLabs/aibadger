@@ -207,6 +207,8 @@ func TestClassifyGenericSourceCandidateFiltersControlsAndOps(t *testing.T) {
 		filepath.Join("scripts", "migrations", "helper.py"),
 		filepath.Join("Scripts", "Release", "helper.py"),
 		filepath.Join("build", "generated.rb"),
+		filepath.Join("obj", "GeneratedAssemblyInfo.cs"),
+		filepath.Join("nested", "OBJ", "Generated.cs"),
 		filepath.Join(".azure", "token.kt"),
 	}
 	for _, path := range paths {
@@ -223,6 +225,9 @@ func TestClassifyGenericSourceCandidateFiltersControlsAndOps(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "Scripts", "Analysis", "helper.py"), "print('helper')\n")
 	writeTestFile(t, filepath.Join(root, "tools", "helper.py"), "print('helper')\n")
 	writeTestFile(t, filepath.Join(root, "migrations", "helper.py"), "print('application migration')\n")
+	writeTestFile(t, filepath.Join(root, "obj", "parser.cpp"), "int parser;\n")
+	writeTestFile(t, filepath.Join(root, "obj", "tool.rb"), "puts 'tool'\n")
+	writeTestFile(t, filepath.Join(root, "src", "obj", "helper.py"), "print('helper')\n")
 
 	for _, path := range paths {
 		if language, ok := classifyGenericSourceCandidate(root, path); ok {
@@ -241,6 +246,9 @@ func TestClassifyGenericSourceCandidateFiltersControlsAndOps(t *testing.T) {
 		filepath.Join("Scripts", "Analysis", "helper.py"):     "Python",
 		filepath.Join("tools", "helper.py"):                   "Python",
 		filepath.Join("migrations", "helper.py"):              "Python",
+		filepath.Join("obj", "parser.cpp"):                    "C++",
+		filepath.Join("obj", "tool.rb"):                       "Ruby",
+		filepath.Join("src", "obj", "helper.py"):              "Python",
 	} {
 		if got, ok := classifyGenericSourceCandidate(root, path); !ok || got != want {
 			t.Errorf("candidate %s = %q, %v; want %q, true", path, got, ok, want)

@@ -333,7 +333,7 @@ func classifyGenericSourceCandidate(projectRoot, path string) (string, bool) {
 	}
 	name := filepath.Base(rel)
 	language, ok := genericExtensionLanguages[strings.ToLower(filepath.Ext(name))]
-	if !ok || shouldOmitFile(projectRoot, full, name) || isUnderIgnoredDir(projectRoot, full, NewGenericDetector().Exclusions) {
+	if !ok || shouldOmitFile(projectRoot, full, name) || isUnderIgnoredDir(projectRoot, full, NewGenericDetector().Exclusions) || (language == "C#" && isUnderCSharpObjDir(rel)) {
 		return "", false
 	}
 	if filekind.Classify(full) != model.FileKindSource || isIdentityManifest(name) || isOperationalConfigFile(name) || isTextControlFile(name) {
@@ -348,6 +348,15 @@ func classifyGenericSourceCandidate(projectRoot, path string) (string, bool) {
 		return "", false
 	}
 	return language, true
+}
+
+func isUnderCSharpObjDir(rel string) bool {
+	for _, segment := range strings.Split(filepath.Dir(rel), string(filepath.Separator)) {
+		if strings.EqualFold(segment, "obj") {
+			return true
+		}
+	}
+	return false
 }
 
 func isUnderAugmentationControlArea(dir, name string) bool {

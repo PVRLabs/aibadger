@@ -36,6 +36,25 @@ func TestScannerCoverageDoesNotRecoverSpecializedFilesBeyondSummaryCaps(t *testi
 	assertUniqueSurfacedPaths(t, topology)
 }
 
+func TestScannerCoverageDoesNotRecoverCSharpObjOutput(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "App.csproj"), "<Project />\n")
+	writeTestFile(t, filepath.Join(root, "Program.cs"), "class Program {}\n")
+	generated := filepath.Join("obj", "GeneratedAssemblyInfo.cs")
+	writeTestFile(t, filepath.Join(root, generated), "class GeneratedAssemblyInfo {}\n")
+
+	topology, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topologyHasPackageTopFile(topology, generated) {
+		t.Fatalf("generated C# obj output was recovered as coverage: %+v", topology.Modules)
+	}
+	if coverageModuleContaining(topology.Modules, generated) != nil {
+		t.Fatal("generated C# obj output received coverage ownership")
+	}
+}
+
 func TestCoverageLanguageWeightsUseAcceptedCounts(t *testing.T) {
 	t.Run("rejected control in accepted package", func(t *testing.T) {
 		root := t.TempDir()

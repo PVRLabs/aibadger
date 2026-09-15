@@ -145,6 +145,9 @@ func isLanguageSourceFile(language, path string) bool {
 		return strings.EqualFold(filepath.Ext(name), ".cs")
 	case "C++":
 		return isCppLanguageSourceFile(name)
+	case "C", "Rust", "Ruby", "PHP", "Kotlin", "Swift",
+		"Ada", "COBOL", "JCL", "SystemVerilog", "VHDL", "Fortran", "PL/I", "RPG", "IBM CL", "ABAP":
+		return genericExtensionLanguages[strings.ToLower(filepath.Ext(name))] == language
 	case "Generic":
 		kind := filekind.Classify(path)
 		return kind != model.FileKindAsset && kind != model.FileKindBinary

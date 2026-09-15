@@ -170,6 +170,55 @@ func TestReviewPathPriorityPathCategories(t *testing.T) {
 	}
 }
 
+func TestReviewPathPriorityRecognizesLegacyAndSpecializedSourceExtensions(t *testing.T) {
+	root := t.TempDir()
+	for _, ext := range []string{
+		".ads", ".adb", ".ada", ".cbl", ".cob", ".cobol", ".ccp", ".cpy", ".jcl",
+		".sv", ".svh", ".vhd", ".vhdl", ".f77", ".f90", ".f95", ".f03", ".f08", ".fpp", ".ftn",
+		".pli", ".pl1", ".rpgle", ".sqlrpgle", ".rpgleinc", ".sqlrpg", ".clle", ".clp", ".clp38", ".abap",
+	} {
+		priority, ok := ReviewPathPriority(root, filepath.Join(root, "src", "source"+ext))
+		if !ok || priority != 1 {
+			t.Fatalf("ReviewPathPriority(%q) = (%d, %v), want (1, true)", ext, priority, ok)
+		}
+	}
+}
+
+func TestReviewPathPriorityRecognizesExistingLanguageAliases(t *testing.T) {
+	root := t.TempDir()
+	for _, ext := range []string{".mts", ".cts", ".kts"} {
+		priority, ok := ReviewPathPriority(root, filepath.Join(root, "src", "source"+ext))
+		if !ok || priority != 1 {
+			t.Fatalf("ReviewPathPriority(%q) = (%d, %v), want (1, true)", ext, priority, ok)
+		}
+	}
+}
+
+func TestReviewPathPriorityLeavesAmbiguousExtensionsUnrecognized(t *testing.T) {
+	root := t.TempDir()
+	for _, ext := range []string{".v", ".vh", ".f", ".for", ".cl", ".inc", ".job", ".prc", ".cmd"} {
+		if isRecognizedSourcePath("source" + ext) {
+			t.Fatalf("isRecognizedSourcePath(%q) = true, want excluded extension", ext)
+		}
+	}
+	for _, ext := range []string{".v", ".vh", ".f", ".for", ".cl", ".inc", ".job", ".prc"} {
+		priority, ok := ReviewPathPriority(root, filepath.Join(root, "src", "source"+ext))
+		if !ok || priority != 0 {
+			t.Fatalf("ReviewPathPriority(%q) = (%d, %v), want (0, true)", ext, priority, ok)
+		}
+	}
+	// .cmd retains its pre-existing operational-script priority; it is not
+	// recognized as a language source extension by this change.
+}
+
+func TestReviewPathPriorityRanksAdaProjectFileAsConfigOnly(t *testing.T) {
+	root := t.TempDir()
+	priority, ok := ReviewPathPriority(root, filepath.Join(root, "project.gpr"))
+	if !ok || priority != 1 {
+		t.Fatalf("ReviewPathPriority(.gpr) = (%d, %v), want (1, true)", priority, ok)
+	}
+}
+
 func TestReviewPathPrioritySeparatorHandling(t *testing.T) {
 	root := t.TempDir()
 	tests := []struct {

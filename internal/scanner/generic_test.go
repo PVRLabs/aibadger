@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +29,36 @@ func TestGenericDetectorGuessLanguageAliases(t *testing.T) {
 		ext  string
 		want string
 	}{
+		{ext: ".ads", want: "Ada"},
+		{ext: ".ADB", want: "Ada"},
+		{ext: ".ada", want: "Ada"},
+		{ext: ".cbl", want: "COBOL"},
+		{ext: ".cob", want: "COBOL"},
+		{ext: ".COBOL", want: "COBOL"},
+		{ext: ".ccp", want: "COBOL"},
+		{ext: ".cpy", want: "COBOL"},
+		{ext: ".jcl", want: "JCL"},
+		{ext: ".sv", want: "SystemVerilog"},
+		{ext: ".svh", want: "SystemVerilog"},
+		{ext: ".vhd", want: "VHDL"},
+		{ext: ".VHDL", want: "VHDL"},
+		{ext: ".f77", want: "Fortran"},
+		{ext: ".f90", want: "Fortran"},
+		{ext: ".f95", want: "Fortran"},
+		{ext: ".f03", want: "Fortran"},
+		{ext: ".f08", want: "Fortran"},
+		{ext: ".fpp", want: "Fortran"},
+		{ext: ".ftn", want: "Fortran"},
+		{ext: ".pli", want: "PL/I"},
+		{ext: ".pl1", want: "PL/I"},
+		{ext: ".rpgle", want: "RPG"},
+		{ext: ".sqlrpgle", want: "RPG"},
+		{ext: ".rpgleinc", want: "RPG"},
+		{ext: ".sqlrpg", want: "RPG"},
+		{ext: ".clle", want: "IBM CL"},
+		{ext: ".clp", want: "IBM CL"},
+		{ext: ".clp38", want: "IBM CL"},
+		{ext: ".abap", want: "ABAP"},
 		{ext: ".cc", want: "C++"},
 		{ext: ".cxx", want: "C++"},
 		{ext: ".CPP", want: "C++"},
@@ -60,6 +91,15 @@ func TestGenericDetectorGuessLanguageAggregatesAliases(t *testing.T) {
 
 	if got := detector.guessLanguage(counts); got != "JavaScript" {
 		t.Fatalf("guessLanguage() = %q, want JavaScript after aggregating aliases", got)
+	}
+}
+
+func TestGenericDetectorGuessLanguagePreservesExcludedExtensions(t *testing.T) {
+	detector := NewGenericDetector()
+	for _, ext := range []string{".v", ".vh", ".f", ".for", ".cl", ".inc", ".job", ".prc", ".cmd", ".gpr"} {
+		if got := detector.guessLanguage(map[string]int{ext: 1}); got != "Generic" {
+			t.Fatalf("guessLanguage(%q) = %q, want Generic", ext, got)
+		}
 	}
 }
 
@@ -227,6 +267,60 @@ func TestGenericDetectorUsesFallbackTopFileBudgetForRootAndNestedPackages(t *tes
 	if len(srcPkg.TopFiles) != maxGenericPackageFiles {
 		t.Fatalf("len(srcPkg.TopFiles) = %d, want %d", len(srcPkg.TopFiles), maxGenericPackageFiles)
 	}
+}
+
+func TestScannerPreservesGenericTopologyAndDetectorPrecedence(t *testing.T) {
+	t.Run("markerless generic grouping and caps", func(t *testing.T) {
+		root := t.TempDir()
+		for i := 0; i < maxGenericPackageFiles+2; i++ {
+			writeTestFile(t, filepath.Join(root, fmt.Sprintf("root-%02d.ads", i)), "package Example is end Example;\n")
+		}
+		writeTestFile(t, filepath.Join(root, "src", "main.ads"), "package Example.Main is end Example.Main;\n")
+		writeTestFile(t, filepath.Join(root, "src", "body.adb"), "package body Example.Main is end Example.Main;\n")
+		writeTestFile(t, filepath.Join(root, "src", "nested", "support.ada"), "package Example.Support is end Example.Support;\n")
+
+		topology, err := NewScanner(root).Scan()
+		if err != nil {
+			t.Fatalf("Scan() error = %v", err)
+		}
+		if len(topology.Modules) != 1 {
+			t.Fatalf("len(topology.Modules) = %d, want one Generic fallback module", len(topology.Modules))
+		}
+		module := topology.Modules[0]
+		if module.Language != "Ada" {
+			t.Fatalf("module.Language = %q, want Ada", module.Language)
+		}
+		rootPkg := findGenericPackage(module, "")
+		if rootPkg == nil || rootPkg.FileCount != maxGenericPackageFiles+2 || len(rootPkg.TopFiles) != maxGenericPackageFiles {
+			t.Fatalf("root package = %+v, want %d files and %d top files", rootPkg, maxGenericPackageFiles+2, maxGenericPackageFiles)
+		}
+		srcPkg := findGenericPackage(module, "src")
+		if srcPkg == nil || srcPkg.FileCount != 2 || len(srcPkg.TopFiles) != 2 {
+			t.Fatalf("src package = %+v, want two grouped source files", srcPkg)
+		}
+		nestedPkg := findGenericPackage(module, filepath.Join("src", "nested"))
+		if nestedPkg == nil || nestedPkg.FileCount != 1 {
+			t.Fatalf("nested package = %+v, want one grouped source file", nestedPkg)
+		}
+	})
+
+	t.Run("first-class detector takes precedence", func(t *testing.T) {
+		root := t.TempDir()
+		writeTestFile(t, filepath.Join(root, "go.mod"), "module example.com/claimed\n")
+		writeTestFile(t, filepath.Join(root, "main.go"), "package main\n")
+		writeTestFile(t, filepath.Join(root, "legacy.ads"), "package Legacy is end Legacy;\n")
+
+		topology, err := NewScanner(root).Scan()
+		if err != nil {
+			t.Fatalf("Scan() error = %v", err)
+		}
+		if len(topology.Modules) != 1 || topology.Modules[0].Language != "Go" {
+			t.Fatalf("modules = %+v, want one Go detector module and no Generic fallback", topology.Modules)
+		}
+		if topology.Modules[0].Language == "Generic" {
+			t.Fatal("Generic fallback took precedence over the Go detector")
+		}
+	})
 }
 
 func TestGenericDetectorOmitsNoiseFiles(t *testing.T) {

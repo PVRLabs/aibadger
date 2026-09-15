@@ -24,8 +24,11 @@ func classifyByName(path string) string {
 	ext := strings.ToLower(filepath.Ext(name))
 
 	switch ext {
-	case ".go", ".java", ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
-		".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hh", ".hxx", ".rs", ".rb", ".php", ".cs", ".kt", ".swift",
+	case ".go", ".java", ".py", ".js", ".jsx", ".ts", ".tsx", ".mts", ".cts", ".mjs", ".cjs",
+		".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hh", ".hxx", ".rs", ".rb", ".php", ".cs", ".kt", ".kts", ".swift",
+		".ads", ".adb", ".ada", ".cbl", ".cob", ".cobol", ".ccp", ".cpy", ".jcl",
+		".sv", ".svh", ".vhd", ".vhdl", ".f77", ".f90", ".f95", ".f03", ".f08", ".fpp", ".ftn",
+		".pli", ".pl1", ".rpgle", ".sqlrpgle", ".rpgleinc", ".sqlrpg", ".clle", ".clp", ".clp38", ".abap",
 		".html", ".htm", ".css", ".scss", ".sass", ".json", ".yaml", ".yml",
 		".toml", ".xml", ".ini", ".conf", ".properties", ".md", ".txt",
 		".webmanifest", ".sh", ".bash", ".zsh", ".sql":

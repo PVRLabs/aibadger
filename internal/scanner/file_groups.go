@@ -25,7 +25,7 @@ func isTextControlFile(name string) bool {
 
 func isConfigFileName(name string) bool {
 	switch strings.ToLower(filepath.Ext(name)) {
-	case ".toml", ".yaml", ".yml", ".json", ".xml", ".ini", ".conf", ".properties":
+	case ".toml", ".yaml", ".yml", ".json", ".xml", ".ini", ".conf", ".properties", ".gpr":
 		return true
 	default:
 		return false

@@ -3,6 +3,7 @@ package scanner
 import (
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -134,6 +135,84 @@ func TestSourceLanguageWeightsCountActualSourceFiles(t *testing.T) {
 	weights := sourceLanguageWeightsFromModules(modules, tmpDir)
 	if weights["Go"] != 2 {
 		t.Fatalf("Go source weight = %d, want actual .go file count 2", weights["Go"])
+	}
+}
+
+func TestSourceLanguageWeightsRecognizeGenericLanguageExtensions(t *testing.T) {
+	tests := []struct {
+		language string
+		ext      string
+	}{
+		{language: "Ada", ext: ".ads"},
+		{language: "Ada", ext: ".adb"},
+		{language: "Ada", ext: ".ada"},
+		{language: "COBOL", ext: ".cbl"},
+		{language: "COBOL", ext: ".cob"},
+		{language: "COBOL", ext: ".cobol"},
+		{language: "COBOL", ext: ".ccp"},
+		{language: "COBOL", ext: ".cpy"},
+		{language: "JCL", ext: ".jcl"},
+		{language: "SystemVerilog", ext: ".sv"},
+		{language: "SystemVerilog", ext: ".svh"},
+		{language: "VHDL", ext: ".vhd"},
+		{language: "VHDL", ext: ".vhdl"},
+		{language: "Fortran", ext: ".f77"},
+		{language: "Fortran", ext: ".f90"},
+		{language: "Fortran", ext: ".f95"},
+		{language: "Fortran", ext: ".f03"},
+		{language: "Fortran", ext: ".f08"},
+		{language: "Fortran", ext: ".fpp"},
+		{language: "Fortran", ext: ".ftn"},
+		{language: "PL/I", ext: ".pli"},
+		{language: "PL/I", ext: ".pl1"},
+		{language: "RPG", ext: ".rpgle"},
+		{language: "RPG", ext: ".sqlrpgle"},
+		{language: "RPG", ext: ".rpgleinc"},
+		{language: "RPG", ext: ".sqlrpg"},
+		{language: "IBM CL", ext: ".clle"},
+		{language: "IBM CL", ext: ".clp"},
+		{language: "IBM CL", ext: ".clp38"},
+		{language: "ABAP", ext: ".abap"},
+	}
+
+	root := t.TempDir()
+	modules := make([]model.Module, 0, len(tests)+1)
+	want := make(map[string]int64)
+	for i, tt := range tests {
+		dir := filepath.Join("src", "unit-"+strconv.Itoa(i))
+		writeTestFile(t, filepath.Join(root, dir, "source"+tt.ext), "source\n")
+		writeTestFile(t, filepath.Join(root, dir, "README.md"), "context\n")
+		modules = append(modules, model.Module{
+			Language: tt.language,
+			SourceRoots: []model.SourceRoot{{
+				Path:     dir,
+				Packages: []model.Package{{Path: dir}},
+			}},
+		})
+		want[tt.language]++
+	}
+	contextDir := filepath.Join("src", "context-only")
+	writeTestFile(t, filepath.Join(root, contextDir, "project.gpr"), "project Example is end Example;\n")
+	writeTestFile(t, filepath.Join(root, contextDir, "README.md"), "context\n")
+	modules = append(modules, model.Module{
+		Language: "Ada",
+		SourceRoots: []model.SourceRoot{{
+			Path:     contextDir,
+			Packages: []model.Package{{Path: contextDir}},
+		}},
+	})
+
+	weights := sourceLanguageWeightsFromModules(modules, root)
+	for language, expected := range want {
+		if weights[language] != expected {
+			t.Fatalf("%s source weight = %d, want %d", language, weights[language], expected)
+		}
+	}
+	if weights["Ada"] != want["Ada"] {
+		t.Fatalf("Ada source weight = %d, want %d without counting .gpr/context files", weights["Ada"], want["Ada"])
+	}
+	if isLanguageSourceFile("SystemVerilog", "header.vh") {
+		t.Fatal(".vh should not contribute to SystemVerilog weighting")
 	}
 }
 

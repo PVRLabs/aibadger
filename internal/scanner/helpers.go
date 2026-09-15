@@ -205,8 +205,11 @@ func shouldOmitReviewPath(root, path, name string) bool {
 
 func isRecognizedSourcePath(base string) bool {
 	switch strings.ToLower(filepath.Ext(base)) {
-	case ".go", ".java", ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
-		".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hh", ".hxx", ".rs", ".rb", ".php", ".cs", ".kt", ".swift",
+	case ".go", ".java", ".py", ".js", ".jsx", ".ts", ".tsx", ".mts", ".cts", ".mjs", ".cjs",
+		".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hh", ".hxx", ".rs", ".rb", ".php", ".cs", ".kt", ".kts", ".swift",
+		".ads", ".adb", ".ada", ".cbl", ".cob", ".cobol", ".ccp", ".cpy", ".jcl",
+		".sv", ".svh", ".vhd", ".vhdl", ".f77", ".f90", ".f95", ".f03", ".f08", ".fpp", ".ftn",
+		".pli", ".pl1", ".rpgle", ".sqlrpgle", ".rpgleinc", ".sqlrpg", ".clle", ".clp", ".clp38", ".abap",
 		".html", ".htm", ".css", ".scss", ".sass", ".json", ".yaml", ".yml",
 		".toml", ".xml", ".ini", ".conf", ".properties", ".md", ".txt",
 		".webmanifest", ".sql":

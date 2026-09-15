@@ -284,10 +284,17 @@ func TestScannerCoverageKeepsSharedContextOnStructuralModule(t *testing.T) {
 	assertUniqueSurfacedPaths(t, topology)
 }
 
-func TestScannerCppHobbyFixtureAddsOnlyUnclaimedCppCoverage(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", "badger-cert", "fixtures", "cpp-gcc-hobby-app", "project"))
-	if err != nil {
-		t.Fatal(err)
+func TestScannerCppHobbyShapeAddsOnlyUnclaimedCppCoverage(t *testing.T) {
+	root := t.TempDir()
+	for path, contents := range map[string]string{
+		"main.cpp":                                  "int main() { return 0; }\n",
+		filepath.Join("src", "app.cpp"):             "void run() {}\n",
+		filepath.Join("include", "app.h"):           "void run();\n",
+		filepath.Join("tests", "app_test.cpp"):      "void test_run() {}\n",
+		filepath.Join("tools", "notes_to_json.cpp"): "void convert_notes() {}\n",
+		filepath.Join("scripts", "compile.sh"):      "c++ main.cpp src/app.cpp\n",
+	} {
+		writeTestFile(t, filepath.Join(root, path), contents)
 	}
 	toolPath := filepath.Join("tools", "notes_to_json.cpp")
 	if language, ok := classifyGenericSourceCandidate(root, toolPath); !ok || language != "C++" {
@@ -310,8 +317,15 @@ func TestScannerCppHobbyFixtureAddsOnlyUnclaimedCppCoverage(t *testing.T) {
 	if coverage == nil {
 		t.Fatalf("missing tools/notes_to_json.cpp coverage: %+v", topology.Modules)
 	}
-	if coverageModuleContaining(topology.Modules, "main.cpp") != nil || coverageModuleContaining(topology.Modules, filepath.Join("src", "app.cpp")) != nil {
-		t.Fatal("coverage bypassed specialized C++ ownership")
+	for _, claimed := range []string{
+		"main.cpp",
+		filepath.Join("src", "app.cpp"),
+		filepath.Join("include", "app.h"),
+		filepath.Join("tests", "app_test.cpp"),
+	} {
+		if coverageModuleContaining(topology.Modules, claimed) != nil {
+			t.Fatalf("coverage bypassed specialized C++ ownership for %s", claimed)
+		}
 	}
 	if coverageModuleContaining(topology.Modules, filepath.Join("scripts", "compile.sh")) != nil {
 		t.Fatal("shell control was recovered as language-source coverage")

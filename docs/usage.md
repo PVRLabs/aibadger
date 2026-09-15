@@ -378,6 +378,46 @@ every build graph or semantic relationship.
 | JavaScript / TypeScript | Recognizes `package.json` projects and conservative workspace layouts using metadata and filesystem evidence; it does not build dependency or framework graphs. |
 | Python | Provides first-class filesystem/project detection with representative source grouping rather than import analysis. |
 | C# | Uses `.csproj` files as project boundaries, groups `.cs` files by their actual directories, and surfaces root `appsettings.json` plus simple environment variants such as `appsettings.Development.json` as context. Nested projects are recognized separately and generated outputs such as `bin/` and `obj/` are skipped; Badger does not evaluate MSBuild, solutions, namespaces, or target frameworks. |
+| C++ | Uses a conservative CMake/source-layout detector for conventional root, `src/`, `include/`, `test/`, and `tests/` trees; it preserves physical files and does not evaluate CMake or compiler/build graphs. |
 
-When a first-class detector does not apply, Badger falls back to generic
-scanning for common source and configuration files.
+When a first-class detector does not apply, Badger falls back to Generic
+filesystem scanning with extension-based language recognition. Generic uses
+ordinary filesystem grouping, the same bounded topology and source-weighting
+rules, and one dominant language label; it does
+not parse languages, evaluate build systems, infer project boundaries, create
+semantic relationships, or augment a project already claimed by a first-class
+detector.
+
+Generic language labels are assigned for these source extensions:
+
+| Language | Extensions |
+| --- | --- |
+| Go | `.go` |
+| Java | `.java` |
+| Python | `.py` |
+| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` |
+| TypeScript | `.ts`, `.tsx`, `.mts`, `.cts` |
+| C++ | `.cpp`, `.cc`, `.cxx` |
+| C | `.c` |
+| Rust | `.rs` |
+| Ruby | `.rb` |
+| PHP | `.php` |
+| C# | `.cs` |
+| Kotlin | `.kt`, `.kts` |
+| Swift | `.swift` |
+| Ada | `.ads`, `.adb`, `.ada` |
+| COBOL | `.cbl`, `.cob`, `.cobol`, `.ccp`, `.cpy` |
+| JCL | `.jcl` |
+| SystemVerilog | `.sv`, `.svh` |
+| VHDL | `.vhd`, `.vhdl` |
+| Fortran | `.f77`, `.f90`, `.f95`, `.f03`, `.f08`, `.fpp`, `.ftn` |
+| PL/I | `.pli`, `.pl1` |
+| RPG | `.rpgle`, `.sqlrpgle`, `.rpgleinc`, `.sqlrpg` |
+| IBM CL | `.clle`, `.clp`, `.clp38` |
+| ABAP | `.abap` |
+
+Ambiguous extensions such as `.v`, `.vh`, `.f`, `.for`, `.cl`, `.inc`, `.job`,
+`.prc`, and `.cmd` are intentionally omitted. Ada `.gpr` project files are
+ranked as configuration/context only; they do not identify Ada projects.
+Other text files may still be surfaced by Generic content sniffing, but that
+does not assign them one of the named extension-based languages.

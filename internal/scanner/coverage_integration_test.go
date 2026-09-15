@@ -1,13 +1,16 @@
 package scanner
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/PVRLabs/aibadger/internal/model"
+	"github.com/PVRLabs/aibadger/internal/protocol"
 )
 
 func TestScannerCoverageDoesNotRecoverSpecializedFilesBeyondSummaryCaps(t *testing.T) {
@@ -295,6 +298,64 @@ func TestScannerCppHobbyFixtureAddsOnlyUnclaimedCppCoverage(t *testing.T) {
 		t.Fatal("shell control was recovered as language-source coverage")
 	}
 	assertUniqueSurfacedPaths(t, topology)
+}
+
+func TestCoveragePublicJSONAndSchemaAKeepStructuralContract(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "go.mod"), "module example.com/public-contract\n")
+	writeTestFile(t, filepath.Join(root, "main.go"), "package main\n")
+	writeTestFile(t, filepath.Join(root, "native", "tool.cpp"), "int tool;\n")
+
+	topology, err := NewScanner(root).Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topology.Structure != "Single Module" || len(topology.Modules) != 2 {
+		t.Fatalf("structure=%q modules=%d, want Single Module with two topology groups", topology.Structure, len(topology.Modules))
+	}
+	coverage := coverageModuleContaining(topology.Modules, filepath.Join("native", "tool.cpp"))
+	if coverage == nil || coverage.FileCount != 1 || coverage.TotalBytes != int64(len("int tool;\n")) || coverage.SourceRoots[0].FileCount != 1 {
+		t.Fatalf("coverage ownership/counts are incoherent: %+v", coverage)
+	}
+
+	data, err := json.Marshal(topology)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var public map[string]any
+	if err := json.Unmarshal(data, &public); err != nil {
+		t.Fatal(err)
+	}
+	modules, ok := public["modules"].([]any)
+	if !ok || len(modules) != 2 || public["structure"] != "Single Module" {
+		t.Fatalf("public topology shape=%s", data)
+	}
+	for _, item := range modules {
+		module, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("invalid public module shape: %T", item)
+		}
+		for _, field := range []string{"name", "path", "file_count", "total_bytes", "heaviest", "top_files", "source_roots", "language"} {
+			if _, exists := module[field]; !exists {
+				t.Fatalf("public module missing %q: %s", field, data)
+			}
+		}
+		if _, exists := module["coverage"]; exists {
+			t.Fatalf("internal coverage marker serialized: %s", data)
+		}
+	}
+
+	schemaA := protocol.NewFormatter().GenerateSchemaA(topology, "summarize")
+	for _, want := range []string{"Structure: Single Module", "Pkg: native [1 files]", "tool.cpp"} {
+		if !strings.Contains(schemaA, want) {
+			t.Fatalf("Schema A missing %q:\n%s", want, schemaA)
+		}
+	}
+	for _, forbidden := range []string{"[COVERAGE]", "Coverage:", "coverage_module"} {
+		if strings.Contains(schemaA, forbidden) {
+			t.Fatalf("Schema A added coverage structure %q:\n%s", forbidden, schemaA)
+		}
+	}
 }
 
 func coverageModuleContaining(modules []model.Module, path string) *model.Module {

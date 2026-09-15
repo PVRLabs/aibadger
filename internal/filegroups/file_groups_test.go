@@ -21,7 +21,7 @@ func TestFileGroupMembership(t *testing.T) {
 		{
 			name: "identity manifests",
 			fn:   IsIdentityManifest,
-			in:   []string{"package.json", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts", "pyproject.toml", "cargo.toml"},
+			in:   []string{"package.json", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts", "pyproject.toml", "cargo.toml"},
 			out:  []string{"go.sum", "makefile", "readme.md"},
 		},
 		{

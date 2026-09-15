@@ -21,6 +21,8 @@ var (
 		"pom.xml",
 		"build.gradle",
 		"build.gradle.kts",
+		"settings.gradle",
+		"settings.gradle.kts",
 		"pyproject.toml",
 		"cargo.toml",
 	}

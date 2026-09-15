@@ -19,6 +19,17 @@ func moduleWebResourceDirs() []string {
 	return []string{"public", "static", "assets", filepath.Join("src", "main", "resources", "static")}
 }
 
+// isSharedWebResourcePath identifies layouts consumed by the repository-level
+// web scanner. Module-relative layouts require a known web-owning module.
+func isSharedWebResourcePath(path string) bool {
+	for _, resourceDir := range standaloneWebResourceDirs() {
+		if sameOrDescendantRelativePath(resourceDir, path) {
+			return true
+		}
+	}
+	return false
+}
+
 // scanWebResources finds root-level static web resources for the shared scanner path.
 func scanWebResources(root string) ([]model.SourceRoot, error) {
 	sourceRoots, err := scanWebResourceDirs(root, root, standaloneWebResourceDirs())

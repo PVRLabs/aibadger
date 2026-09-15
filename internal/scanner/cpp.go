@@ -452,7 +452,7 @@ func sortCppModuleFileSummaries(module *model.Module) {
 	})
 }
 func isFirstClassCppModule(module *model.Module) bool {
-	return module != nil && module.Language == "C++" && module.Path == ""
+	return module != nil && module.Language == "C++" && module.Path == "" && !module.Coverage
 }
 
 func isCppOwnedSourceRoot(sourceRoot *model.SourceRoot) bool {

@@ -69,7 +69,9 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 
 	wg.Wait()
 
-	// Fallback to GenericDetector if no modules found
+	// Preserve the full Generic detector as a fallback. When specialized
+	// detectors succeed, add only recognized source they do not semantically
+	// own so normal language weighting and finalization can consume it.
 	usedGenericFallback := false
 	if len(topology.Modules) == 0 {
 		det := NewGenericDetector()
@@ -80,6 +82,16 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 		if detErr == nil {
 			topology.Modules = modules
 			usedGenericFallback = true
+		}
+	} else {
+		det := NewGenericDetector()
+		if s.MaxFilesPerDirectory > 0 {
+			det.maxFilesPerDir = s.MaxFilesPerDirectory
+		}
+		ownership := newSemanticSourceOwnership(s.ProjectRoot, topology.Modules)
+		coverage, coverageErr := det.collectUnclaimedSource(s.ProjectRoot, ownership)
+		if coverageErr == nil {
+			topology.Modules = append(topology.Modules, coverage...)
 		}
 	}
 	languageWeights := sourceLanguageWeightsFromModules(topology.Modules, s.ProjectRoot)

@@ -16,7 +16,7 @@ func TestCollectUnclaimedSourceGroupsLanguagesAliasesAndDirectories(t *testing.T
 		"native/main.cpp":          "int main() { return 0; }\n",
 		"native/support.cc":        "void support() {}\n",
 		"lib/worker.rb":            "puts 'work'\n",
-		"public/index.php":         "<?php echo 'ok';\n",
+		"php/index.php":            "<?php echo 'ok';\n",
 		"src/main/kotlin/App.kt":   "class App\n",
 		"src/main/kotlin/Util.kts": "class Util\n",
 		"tools/tool.rs":            "fn main() {}\n",

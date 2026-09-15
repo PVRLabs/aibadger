@@ -66,7 +66,13 @@ func (s *Scanner) finalizeTopologyWithLanguageWeights(t *model.ProjectTopology, 
 
 	t.Languages = sortedLanguages(languageSet, primary)
 	t.PrimaryLanguage = primary
-	if len(t.Modules) > 1 || isMavenMultiModule(s.ProjectRoot) {
+	structuralModules := 0
+	for idx := range t.Modules {
+		if !t.Modules[idx].Coverage {
+			structuralModules++
+		}
+	}
+	if structuralModules > 1 || isMavenMultiModule(s.ProjectRoot) {
 		t.Structure = "Multi-Module"
 	} else {
 		t.Structure = "Single Module"
@@ -91,6 +97,10 @@ func sourceLanguageWeightsFromModules(modules []model.Module, projectRoot string
 	weights := make(map[string]int64)
 	for _, module := range modules {
 		if module.Language == "" {
+			continue
+		}
+		if module.Coverage {
+			weights[module.Language] += int64(module.FileCount)
 			continue
 		}
 		if isFirstClassCSharpModule(&module) || isFirstClassCppModule(&module) {
@@ -130,6 +140,9 @@ func countLanguageSourceFilesInDir(language, projectRoot, relDir string, seen ma
 
 func isLanguageSourceFile(language, path string) bool {
 	name := filepath.Base(path)
+	if genericExtensionLanguages[strings.ToLower(filepath.Ext(name))] == language {
+		return true
+	}
 	switch language {
 	case "Go":
 		return isGoSourceFile(name)
@@ -145,9 +158,6 @@ func isLanguageSourceFile(language, path string) bool {
 		return strings.EqualFold(filepath.Ext(name), ".cs")
 	case "C++":
 		return isCppLanguageSourceFile(name)
-	case "C", "Rust", "Ruby", "PHP", "Kotlin", "Swift",
-		"Ada", "COBOL", "JCL", "SystemVerilog", "VHDL", "Fortran", "PL/I", "RPG", "IBM CL", "ABAP":
-		return genericExtensionLanguages[strings.ToLower(filepath.Ext(name))] == language
 	case "Generic":
 		kind := filekind.Classify(path)
 		return kind != model.FileKindAsset && kind != model.FileKindBinary

@@ -123,6 +123,9 @@ func attachDocsToTopology(topology *model.ProjectTopology, docs []model.SourceRo
 func docsTargetModule(modules []model.Module) *model.Module {
 	targetIdx := -1
 	for idx := range modules {
+		if modules[idx].Coverage {
+			continue
+		}
 		if modules[idx].Path == "" {
 			return &modules[idx]
 		}

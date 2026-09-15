@@ -18,7 +18,7 @@ func (d *GenericDetector) collectUnclaimedSource(root string, ownership semantic
 
 	err := d.walkFiles(root, func(path string, entry os.DirEntry, info os.FileInfo) {
 		language, ok := classifyGenericSourceCandidate(root, path)
-		if !ok || ownership.Owns(path) {
+		if !ok || ownership.Owns(path) || ownership.ownsWebResource(path) {
 			return
 		}
 		packages := packagesByLanguage[language]

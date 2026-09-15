@@ -467,8 +467,8 @@ func TestScannerDoesNotClaimCppOutsideConventionalBoundary(t *testing.T) {
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("large out-of-bound scan is not deterministic\nfirst=%+v\nsecond=%+v", first, second)
 	}
-	if !reflect.DeepEqual(first.Languages, []string{"Go"}) || len(first.Modules) != 1 {
-		t.Fatalf("out-of-bound C++ changed specialized topology: languages=%v modules=%+v", first.Languages, first.Modules)
+	if !reflect.DeepEqual(first.Languages, []string{"C++", "Go"}) || len(first.Modules) != 2 || first.Structure != "Single Module" {
+		t.Fatalf("out-of-bound C++ was not added as non-structural coverage: languages=%v structure=%q modules=%+v", first.Languages, first.Structure, first.Modules)
 	}
 }
 

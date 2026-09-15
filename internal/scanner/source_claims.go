@@ -17,6 +17,7 @@ import (
 type semanticSourceOwnership struct {
 	projectRoot string
 	claims      []semanticSourceClaim
+	webRoots    []string
 }
 
 type semanticSourceClaim struct {
@@ -40,6 +41,12 @@ func newSemanticSourceOwnership(projectRoot string, modules []model.Module) sema
 			continue
 		}
 		claim := semanticSourceClaim{language: module.Language, moduleRoot: moduleRoot}
+		// Only Go and Java delegate to scanModuleWebResources.
+		if !module.Coverage && (module.Language == "Go" || module.Language == "Java") {
+			for _, dir := range moduleWebResourceDirs() {
+				ownership.webRoots = append(ownership.webRoots, joinRelativePath(moduleRoot, dir))
+			}
+		}
 		switch module.Language {
 		case "Go":
 			claim.areas = goSourceClaimAreas(module)
@@ -72,6 +79,19 @@ func newSemanticSourceOwnership(projectRoot string, modules []model.Module) sema
 		ownership.claims = append(ownership.claims, claim)
 	}
 	return ownership
+}
+
+func (o semanticSourceOwnership) ownsWebResource(path string) bool {
+	rel, _, ok := normalizeSourcePath(o.projectRoot, path)
+	if !ok {
+		return false
+	}
+	for _, root := range o.webRoots {
+		if sameOrDescendantRelativePath(root, rel) {
+			return true
+		}
+	}
+	return false
 }
 
 // Owns reports whether a successful specialized detector owns path as source.
@@ -320,7 +340,7 @@ func classifyGenericSourceCandidate(projectRoot, path string) (string, bool) {
 		return "", false
 	}
 	dir := normalizeRelativeDir(filepath.Dir(rel))
-	if isUnderAugmentationControlArea(dir, name) {
+	if isUnderAugmentationControlArea(dir, name) || isSharedWebResourcePath(rel) {
 		return "", false
 	}
 	info, err := os.Stat(full)

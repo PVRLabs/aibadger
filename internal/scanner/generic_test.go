@@ -314,11 +314,13 @@ func TestScannerPreservesGenericTopologyAndDetectorPrecedence(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Scan() error = %v", err)
 		}
-		if len(topology.Modules) != 1 || topology.Modules[0].Language != "Go" {
-			t.Fatalf("modules = %+v, want one Go detector module and no Generic fallback", topology.Modules)
+		if len(topology.Modules) != 2 || topology.Structure != "Single Module" {
+			t.Fatalf("modules = %+v structure=%q, want Go plus non-structural Ada coverage", topology.Modules, topology.Structure)
 		}
-		if topology.Modules[0].Language == "Generic" {
-			t.Fatal("Generic fallback took precedence over the Go detector")
+		for _, module := range topology.Modules {
+			if module.Language == "Generic" {
+				t.Fatal("Generic fallback took precedence over the Go detector")
+			}
 		}
 	})
 }

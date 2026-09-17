@@ -73,6 +73,19 @@ func TestNewGoalGitDiffAttachmentUsesDiffSummaryWhenStatsPresent(t *testing.T) {
 	}
 }
 
+func TestFormatReviewAttachmentDisplaySummaryUsesSemanticFields(t *testing.T) {
+	withStats := newGoalReviewAttachment("review context", "review payload", 3, 9, 2, nil)
+	withStats.Summary = "[custom presentation summary]"
+	if got, want := formatReviewAttachmentDisplaySummary(withStats), "Review context: 3 changed files, +9/-2, 14B, 1 line"; got != want {
+		t.Fatalf("formatReviewAttachmentDisplaySummary() = %q, want %q", got, want)
+	}
+
+	withoutStats := newGoalReviewAttachment("review context", "line 1\nline 2", 0, 0, 0, nil)
+	if got, want := formatReviewAttachmentDisplaySummary(withoutStats), "Review context: 13B, 2 lines"; got != want {
+		t.Fatalf("formatReviewAttachmentDisplaySummary() fallback = %q, want %q", got, want)
+	}
+}
+
 func TestRemoveGoalAttachmentAt(t *testing.T) {
 	attachments := []goalAttachment{
 		newGoalTextAttachment("paste", "first"),

@@ -142,15 +142,27 @@ func formatGoalAttachmentSummary(attachment goalAttachment) string {
 	default:
 		return fmt.Sprintf("[text: %s, %d lines]", protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines)
 	case goalAttachmentReview:
-		if attachment.FilesChanged > 0 {
-			label := "files"
-			if attachment.FilesChanged == 1 {
-				label = "file"
-			}
-			return fmt.Sprintf("[review context: %d changed %s, +%d/-%d, %s, %d lines]", attachment.FilesChanged, label, attachment.Additions, attachment.Deletions, protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines)
-		}
-		return fmt.Sprintf("[review context: %s, %d lines]", protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines)
+		return "[review context: " + formatReviewAttachmentDetails(attachment) + "]"
 	}
+}
+
+func formatReviewAttachmentDisplaySummary(attachment goalAttachment) string {
+	return "Review context: " + formatReviewAttachmentDetails(attachment)
+}
+
+func formatReviewAttachmentDetails(attachment goalAttachment) string {
+	lineLabel := "lines"
+	if attachment.Lines == 1 {
+		lineLabel = "line"
+	}
+	if attachment.FilesChanged > 0 {
+		label := "files"
+		if attachment.FilesChanged == 1 {
+			label = "file"
+		}
+		return fmt.Sprintf("%d changed %s, +%d/-%d, %s, %d %s", attachment.FilesChanged, label, attachment.Additions, attachment.Deletions, protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines, lineLabel)
+	}
+	return fmt.Sprintf("%s, %d %s", protocol.FormatFileSize(attachment.SizeBytes), attachment.Lines, lineLabel)
 }
 
 func isLargeGoalPaste(text string) bool {

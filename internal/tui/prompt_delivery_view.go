@@ -12,17 +12,22 @@ import (
 )
 
 func (m Model) viewScanComplete() string {
+	topologySummary := renderSummary(m.eng.Topology)
+	if reviewSummary := m.reviewAttachmentDisplaySummary(); reviewSummary != "" {
+		topologySummary += "\n\n" + reviewSummary
+	}
+
 	if m.largeProjectPending {
 		return fmt.Sprintf(
 			"%s\n\n%s\n\n%s",
-			renderSummary(m.eng.Topology),
+			topologySummary,
 			renderWarningLine(fmt.Sprintf("Large project detected: %d files.", totalFiles(m.eng.Topology))),
 			m.viewLargeProjectDelivery(),
 		)
 	}
 
 	if m.promptDeliveryIsLarge(topologyPromptKind) {
-		return fmt.Sprintf("%s\n\n%s\n\n%s", renderSummary(m.eng.Topology), promptOnePrivacyTextWithAttachment(m.cfg.Focus, m.reviewSensitivePaths(), m.hasReviewAttachment()), m.viewLargePromptDelivery(topologyPromptKind, m.schemaA))
+		return fmt.Sprintf("%s\n\n%s\n\n%s", topologySummary, promptOnePrivacyTextWithAttachment(m.cfg.Focus, m.reviewSensitivePaths(), m.hasReviewAttachment()), m.viewLargePromptDelivery(topologyPromptKind, m.schemaA))
 	}
 
 	note := fmt.Sprintf(
@@ -31,7 +36,16 @@ func (m Model) viewScanComplete() string {
 		promptOnePrivacyTextWithAttachment(m.cfg.Focus, m.reviewSensitivePaths(), m.hasReviewAttachment()),
 		renderBold(fmt.Sprintf("Copy Prompt 1: Topology to clipboard (payload: %s)? (Y/n)", protocol.FormatFileSize(int64(len(m.schemaA)))))+"\n\n[D] Save to Downloads",
 	)
-	return fmt.Sprintf("%s\n\n%s", renderSummary(m.eng.Topology), note)
+	return fmt.Sprintf("%s\n\n%s", topologySummary, note)
+}
+
+func (m Model) reviewAttachmentDisplaySummary() string {
+	for _, attachment := range m.goalAttachments {
+		if attachment.Type == goalAttachmentReview {
+			return formatReviewAttachmentDisplaySummary(attachment)
+		}
+	}
+	return ""
 }
 
 func promptOnePrivacyText(focus protocol.Focus) string {

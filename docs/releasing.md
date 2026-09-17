@@ -45,11 +45,30 @@ Set the release version once and reuse it:
 RELEASE_VERSION=vX.Y.Z
 ```
 
-1. Write user-facing notes under `## Unreleased` in `CHANGELOG.md` if that
-   section is still empty.
+1. Before editing the version, quickly analyze the changes since the previous
+   published release. Identify the previous non-development tag, review the
+   commits and relevant diffs since that tag, and distinguish user-facing
+   features and bug fixes from tests, refactors, and release-only changes. Add
+   every major user-facing change to `## Unreleased` in `CHANGELOG.md`, grouped
+   under concise feature-area headings. An existing non-empty `Unreleased`
+   section is not a substitute for this audit.
+
+   A quick starting point is:
+
+   ```bash
+   previous_release="$(git tag --sort=-version:refname | grep -v '\-dev' | head -1)"
+   git log --oneline "${previous_release}..HEAD"
+   git diff --stat "${previous_release}..HEAD"
+   ```
+
+   Show the proposed changelog section to the operator and wait for explicit
+   approval before changing the version, committing, pushing, or dispatching a
+   release workflow. If the operator requests edits, update the notes and
+   repeat the review gate.
 2. Replace the development version constant in `internal/version/version.go`
    with the exact release version (`vX.Y.Z`, not `-dev`).
-3. Move the `Unreleased` notes to a dated heading that matches the tag, and
+3. Move the approved `Unreleased` notes to a dated heading that matches the
+   tag, and
    leave an empty `## Unreleased` section for the next cycle:
 
 ```markdown

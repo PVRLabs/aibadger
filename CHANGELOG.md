@@ -12,6 +12,25 @@ Notable user-facing changes to Badger are documented here.
   with literal directory grouping, nested-project detection, and generated
   output exclusions. C# support remains intentionally lightweight: Badger does
   not evaluate MSBuild, solutions, namespaces, or target frameworks.
+- Added bounded C++ topology detection for conventional root, `src/`,
+  `include/`, `test/`, and `tests/` layouts, including paired implementation
+  and header files without evaluating build systems.
+- Improved mixed-language and generic project scans to preserve useful,
+  bounded project context and source coverage while keeping specialized module
+  ownership boundaries intact.
+
+### Language recognition
+
+- Expanded deterministic Generic language recognition for legacy and
+  specialized source extensions, including Ada (`.ads`, `.adb`, `.ada`),
+  COBOL, JCL, SystemVerilog, VHDL, Fortran, PL/I, RPG, IBM CL, and ABAP.
+- Tightened Python and Java project discovery so conventional source files are
+  classified more accurately without over-claiming unrelated directories.
+
+### Review experience
+
+- Fixed the interactive review summary disappearing after the scan completes;
+  review context details now remain visible through prompt delivery.
 
 ## [v0.5.5] - 2026-09-11
 

@@ -280,8 +280,8 @@ rc.
 
 ```bash
 work="$(mktemp -d)"
-HOME="${work}" curl -fsSL "https://raw.githubusercontent.com/PVRLabs/aibadger/${RELEASE_VERSION}/install.sh" \
-  | HOME="${work}" BADGER_VERSION="${RELEASE_VERSION}" BADGER_INSTALL_DIR="${work}/bin" sh
+PATH="${work}/bin:${PATH}" HOME="${work}" curl -fsSL "https://raw.githubusercontent.com/PVRLabs/aibadger/${RELEASE_VERSION}/install.sh" \
+  | PATH="${work}/bin:${PATH}" HOME="${work}" BADGER_VERSION="${RELEASE_VERSION}" BADGER_INSTALL_DIR="${work}/bin" sh
 "${work}/bin/badger" --version
 rm -rf "${work}"
 ```

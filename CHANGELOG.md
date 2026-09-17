@@ -4,6 +4,8 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.6.0] - 2026-09-17
+
 ### Project topology
 
 - Added first-class C# topology detection from `.csproj` project boundaries,

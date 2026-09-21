@@ -1,6 +1,6 @@
 # Protocol
 
-Badger bridges your local project and an AI chat in a three-step exchange: **Map → Extract → Apply**.
+Badger bridges your local project and an AI chat in a three-step exchange: **Map → Extract → Review/Apply**.
 
 The goal editor may carry separate removable attachments, such as large pasted diffs or supporting notes. Those attachments stay outside the typed instruction surface and are assembled only when the goal is submitted.
 
@@ -121,10 +121,10 @@ unchanged; only the optional current-repository review attachment is marked.
 The continuation protocol and clean/non-Git editable fallback are unchanged
 apart from this additive marker framing.
 
-## Step 3: Apply
+## Step 3: Review and Apply
 
-Copy **Prompt 2 (Code Context)** back to the AI chat. The AI reads the code and can write back
-using:
+Copy **Prompt 2 (Code Context)** back to the AI chat. The AI reads the code
+and can write back proposed changes using:
 
 - `--- File: <path> ---` ... content ... `--- End File ---` — creates or updates a file.
 - `--- Delete File: <path> ---` — deletes a file.
@@ -136,3 +136,6 @@ package main
 func main() {}
 --- End File ---
 ```
+
+Paste the response back into Badger to review the proposed changes. Badger
+requires explicit confirmation before writing them.

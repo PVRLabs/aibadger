@@ -1,6 +1,10 @@
 # Limitations
 
-Badger is a context bridge, not an AI provider or autonomous coding agent.
+Badger is a local repository-context and review tool (a context bridge). It
+maps project structure, extracts focused files, and prepares prompts or review
+context for the AI chat, editor, or coding-agent workflow you choose. It does
+not host an AI model, contact an AI service automatically, or make repository
+changes without your explicit confirmation.
 
 ## Current Constraints
 
@@ -8,11 +12,7 @@ Badger is a context bridge, not an AI provider or autonomous coding agent.
 - Non-interactive review automation uses the stable `badger api review-context` operation.
 - Binary and generated files are intentionally excluded or minimized to keep prompts compact.
 
-## Scope Notes
-
-The supported language detectors improve ranking for common project shapes, but Badger is designed to work across arbitrary repositories.
-
-## Project Size and Topology
+### Project Size and Topology
 
 Badger is designed to work best with small and medium-size projects. It can
 handle projects of arbitrary size, but topology becomes increasingly sparse as
@@ -21,7 +21,13 @@ relevant subfolder such as a module or service to focus the context. Use
 [External Context](settings.md#external-context) to connect related
 directories when the work spans multiple subprojects.
 
-## File Size Limits
+### Repository Support
+
+Badger works with repositories in many languages and layouts. It may provide
+more focused context for common project structures, but it does not require a
+particular language, framework, or project layout.
+
+### File Size Limits
 
 Badger bounds file and prompt context to keep requests compact. For unusually
 large repositories or source files, see [Configuring interactive limits](settings.md#configuring-interactive-limits)

@@ -17,7 +17,7 @@ Get **precise, token-efficient context** on demand without uploading your entire
 
 [![AI Badger Interactive Demo](assets/demo.gif)](https://pvrlabs.xyz/aibadger/demo.html)
 
-**Map → Extract → Apply:** Smart local context bridge that prepares focused codebase snippets for any LLM chat.
+**Map → Extract → Review/Apply:** A local repository-context and review tool (a context bridge) that prepares focused context for any AI chat or coding-agent workflow.
 
 ## How it works
 
@@ -29,9 +29,11 @@ Enter your goal. Badger builds a prompt.
 AI replies asking for specific files.  
 ↳ You copy that → paste back into Badger
 
-**3. Apply**  
-Badger fetches those files, builds a second prompt.  
-↳ You copy it → paste into AI → review before writing
+**3. Review and Apply**
+
+Badger fetches those files and builds a second prompt.
+
+↳ You copy it → paste into AI → review its response in Badger → confirm any writes
 
 ✓ Fully local — nothing leaves your machine until you copy it  
 ✓ You control every paste and every write

@@ -668,7 +668,7 @@ func applyReviewStartupWithBuilder(cfg *badger.Config, app appConfig, buildRevie
 }
 
 func printUsage() {
-	fmt.Printf(`%s - local context bridge
+	fmt.Printf(`%s - local repository context and review bridge
 %s
 
 Usage:

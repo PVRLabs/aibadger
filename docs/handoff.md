@@ -144,5 +144,9 @@ Badger does not write files without an explicit confirmation.
 Nothing is sent automatically. Your browser AI provider receives only what you
 explicitly paste.
 
+Editor and coding-agent integrations use Badger's local non-interactive API for
+the same repository-context and review workflows without contacting an AI
+service.
+
 For a complete command-line walkthrough, see [Usage](usage.md). For the prompt
 formats, see the [Protocol Reference](protocol.md).

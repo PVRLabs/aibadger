@@ -35,6 +35,13 @@ func PipeCommand() (string, bool) {
 	return pipeCommand(runtime.GOOS)
 }
 
+// Available reports whether this platform has a supported clipboard command.
+// It deliberately does not expose the command or its installation path.
+func Available() bool {
+	_, ok := nativeCommand(runtime.GOOS)
+	return ok
+}
+
 func pipeCommand(goos string) (string, bool) {
 	clip, ok := nativeCommand(goos)
 	if !ok {

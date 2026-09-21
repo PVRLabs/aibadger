@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/diagnose"
 	"github.com/PVRLabs/aibadger/internal/handoff"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
@@ -33,15 +34,11 @@ type appConfig struct {
 }
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "api" {
-		if err := runAPI(os.Args[2:], os.Stdout, os.Stderr); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "skills" {
-		if err := runSkillsCommand(os.Args[2:], os.Stdout, os.Stderr); err != nil {
+	if handled, err := dispatchEarlyCommand(os.Args[1:], os.Stdout, os.Stderr); handled {
+		if err != nil {
+			if os.Args[1] != "skills" {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			}
 			os.Exit(1)
 		}
 		return
@@ -123,6 +120,34 @@ func main() {
 	if err := badger.Run(badgerCfg); err != nil {
 		fmt.Printf("TUI error: %v\n", err)
 	}
+}
+
+func dispatchEarlyCommand(args []string, stdout, stderr io.Writer) (bool, error) {
+	if len(args) == 0 {
+		return false, nil
+	}
+	switch args[0] {
+	case "api":
+		return true, runAPI(args[1:], stdout, stderr)
+	case "skills":
+		return true, runSkillsCommand(args[1:], stdout, stderr)
+	case "diagnose":
+		return true, runDiagnoseCommand(args[1:], stdout)
+	default:
+		return false, nil
+	}
+}
+
+func runDiagnoseCommand(args []string, stdout io.Writer) error {
+	if len(args) == 1 && isHelpArg(args[0]) {
+		diagnose.PrintHelp(stdout)
+		return nil
+	}
+	if len(args) != 0 {
+		return fmt.Errorf("badger diagnose does not accept arguments: %s", args[0])
+	}
+	diagnose.Run(stdout, diagnose.Options{})
+	return nil
 }
 
 type apiConfig struct {
@@ -651,6 +676,7 @@ Usage:
   badger continue
   badger badge
   badger skills install
+  badger diagnose
   badger api <command> --help
   badger version
 
@@ -669,6 +695,9 @@ Workspace handoff:
 
 Agent Skills:
   badger skills install installs bundled official skills to ~/.agents/skills/.
+
+Troubleshooting:
+  diagnose    Print environment information for troubleshooting and bug reports.
 
 Review options:
   badger review [--staged | --branch <ref> | --commit <sha>]

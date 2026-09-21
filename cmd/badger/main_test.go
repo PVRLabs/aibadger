@@ -574,6 +574,8 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 		"badger badge",
 		"badger continue",
 		"badger skills install",
+		"badger diagnose",
+		"diagnose    Print environment information for troubleshooting and bug reports.",
 		"~/.agents/skills/",
 		"Launch the TUI with /badge preloaded",
 		"Interactive focuses:",
@@ -610,6 +612,41 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 		if strings.Contains(out, hidden) {
 			t.Fatalf("printUsage output exposed certification-only operation %q:\n%s", hidden, out)
 		}
+	}
+}
+
+func TestDispatchEarlyDiagnoseHelp(t *testing.T) {
+	for _, help := range []string{"--help", "-h"} {
+		var stdout, stderr bytes.Buffer
+		handled, err := dispatchEarlyCommand([]string{"diagnose", help}, &stdout, &stderr)
+		if err != nil {
+			t.Fatalf("dispatchEarlyCommand(diagnose %s) error = %v", help, err)
+		}
+		if !handled {
+			t.Fatalf("dispatchEarlyCommand(diagnose %s) handled = false", help)
+		}
+		for _, want := range []string{"badger diagnose", "project-independent", "network requests"} {
+			if !strings.Contains(stdout.String(), want) {
+				t.Fatalf("help output missing %q:\n%s", want, stdout.String())
+			}
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("stderr = %q, want empty", stderr.String())
+		}
+	}
+}
+
+func TestDispatchEarlyDiagnoseRejectsArguments(t *testing.T) {
+	handled, err := dispatchEarlyCommand([]string{"diagnose", "--root", "."}, io.Discard, io.Discard)
+	if !handled || err == nil || !strings.Contains(err.Error(), "does not accept arguments") {
+		t.Fatalf("handled = %v, error = %v", handled, err)
+	}
+}
+
+func TestDiagnoseIsNotAPIOperation(t *testing.T) {
+	_, err := parseAPIConfig([]string{"diagnose"})
+	if err == nil || err.Error() != "unknown api operation: diagnose" {
+		t.Fatalf("parseAPIConfig(diagnose) error = %v", err)
 	}
 }
 

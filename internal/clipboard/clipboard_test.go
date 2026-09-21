@@ -133,3 +133,10 @@ func withLookPath(t *testing.T, fn func(string) (string, error)) {
 		lookPath = original
 	})
 }
+
+func TestAvailableReportsDetectedClipboardWithoutExposingPath(t *testing.T) {
+	withLookPath(t, func(string) (string, error) { return "/private/tool/path", nil })
+	if !Available() {
+		t.Fatal("Available() = false, want true")
+	}
+}

@@ -625,7 +625,7 @@ func TestDispatchEarlyDiagnoseHelp(t *testing.T) {
 		if !handled {
 			t.Fatalf("dispatchEarlyCommand(diagnose %s) handled = false", help)
 		}
-		for _, want := range []string{"badger diagnose", "project-independent", "network requests"} {
+		for _, want := range []string{"badger diagnose", "does not analyze project files", "network requests"} {
 			if !strings.Contains(stdout.String(), want) {
 				t.Fatalf("help output missing %q:\n%s", want, stdout.String())
 			}

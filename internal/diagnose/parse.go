@@ -9,7 +9,6 @@ var (
 	versionPattern       = regexp.MustCompile(`\d+(?:\.\d+)+(?:[-+._][0-9A-Za-z]+)*`)
 	simpleVersionPattern = regexp.MustCompile(`^v?(\d+(?:\.\d+)+(?:[-+._][0-9A-Za-z]+)*)$`)
 	goVersionPattern     = regexp.MustCompile(`\bgo(\d+(?:\.\d+){1,2}(?:(?:beta|rc)\d+)?)\b`)
-	dotnetSDKPattern     = regexp.MustCompile(`^\s*(\d+(?:\.\d+)+(?:[-+._][0-9A-Za-z]+)*)\s+\[[^\]]+\]\s*$`)
 )
 
 func parseGit(output string) (string, bool)    { return afterPrefix(output, "git version") }
@@ -43,23 +42,6 @@ func parseSimpleVersion(output string) (string, bool) {
 }
 
 func parsePip(output string) (string, bool) { return afterPrefix(output, "pip") }
-
-func parseDotnetSDKs(output string) (string, bool) {
-	var versions []string
-	seen := make(map[string]bool)
-	for _, line := range lines(output) {
-		match := dotnetSDKPattern.FindStringSubmatch(line)
-		if len(match) != 2 || seen[match[1]] {
-			continue
-		}
-		seen[match[1]] = true
-		versions = append(versions, match[1])
-	}
-	if len(versions) == 0 {
-		return "", false
-	}
-	return strings.Join(versions, ", "), true
-}
 
 func parseCompiler(output string) (string, bool) {
 	first := ""

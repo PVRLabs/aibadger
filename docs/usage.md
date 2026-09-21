@@ -6,6 +6,27 @@ Badger runs from the root of the project you want to inspect:
 badger
 ```
 
+## Diagnose the local environment
+
+Use `badger diagnose` to print a compact snapshot of the local Badger and
+development-tool environment:
+
+```bash
+badger diagnose
+```
+
+The command does not analyze project files or infer project requirements, so it
+can be run from any directory. Individual tools may apply their normal
+current-directory selection behavior (for example, a .NET SDK selected through
+`global.json`); Badger does not read or parse that metadata itself. It uses
+bounded local version and availability probes and does not run builds, tests,
+dependency resolution, package installation, or updates. The output is
+designed to be shareable. Include the complete output when reporting an
+environment-dependent Badger issue. Missing optional tools are reported as
+informational `not found` entries.
+
+Run `badger diagnose --help` for command-specific help.
+
 ## Walkthrough
 
 This example traces a full session end-to-end using `badger review`.

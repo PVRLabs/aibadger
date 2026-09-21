@@ -75,7 +75,7 @@ func TestRunRendersFixedOrderedNormalizedReport(t *testing.T) {
 			"npm --version":            {output: "11.6.0\n"},
 			"python3 --version":        {output: "Python 3.14.6\n"},
 			"python3 -m pip --version": {output: "pip 25.2 from /Users/alice/secret/pip (python 3.14)\n"},
-			"dotnet --list-sdks":       {output: "8.0.414 [/secret/dotnet/sdk]\n10.0.100 [/another/private/sdk]\n"},
+			"dotnet --version":         {output: "10.0.100\n"},
 			"cmake --version":          {output: "cmake version 4.1.0\n"},
 			"clang --version":          {output: "Apple clang version 17.0.0 (clang-1700)\nTarget: arm64-apple-darwin\n"},
 		},
@@ -92,7 +92,7 @@ Environment
   Badger: 0.6.1-dev
   Platform: macOS arm64
   Git: 2.51.0
-  Clipboard: available
+  Clipboard command: available
 
 Development tools
   Go: 1.27.1
@@ -103,7 +103,7 @@ Development tools
   npm: 11.6.0
   Python: 3.14.6
   pip: 25.2
-  .NET: 8.0.414, 10.0.100
+  .NET: 10.0.100
   CMake: 4.1.0
   C/C++ compiler: Clang 17.0.0
 `
@@ -128,7 +128,7 @@ func TestRunHandlesMissingFailingAndMalformedProbesIndependently(t *testing.T) {
 	}
 	var out bytes.Buffer
 	Run(&out, Options{Version: "v1.0.0", GOOS: "linux", GOARCH: "amd64", ClipboardAvailable: func() bool { return false }, Runner: runner, Environment: []string{}})
-	for _, want := range []string{"Git: unavailable", "Go: unavailable", "Java: 21.0.5", "Maven: not found", "Clipboard: unavailable"} {
+	for _, want := range []string{"Git: unavailable", "Go: unavailable", "Java: 21.0.5", "Maven: not found", "Clipboard command: unavailable"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output missing %q:\n%s", want, out.String())
 		}
@@ -164,7 +164,7 @@ func TestPipUsesSelectedPythonThenFallsBack(t *testing.T) {
 func TestProbeEnvironmentOverridesAreInheritedAndPrivate(t *testing.T) {
 	runner := &fakeRunner{
 		paths:     map[string]string{"npm": "/tools/npm", "dotnet": "/tools/dotnet"},
-		responses: map[string]fakeResponse{"npm --version": {output: "11.0.0"}, "dotnet --list-sdks": {output: "10.0.100 [C:\\Program Files\\dotnet\\sdk]"}},
+		responses: map[string]fakeResponse{"npm --version": {output: "11.0.0"}, "dotnet --version": {output: "10.0.100"}},
 	}
 	base := []string{
 		"PATH=/tools", "SECRET=do-not-print", "NPM_CONFIG_UPDATE_NOTIFIER=true",
@@ -188,8 +188,8 @@ func TestProbeEnvironmentOverridesAreInheritedAndPrivate(t *testing.T) {
 				t.Fatalf("npm environment = %v", call.env)
 			}
 		case "dotnet":
-			if !reflect.DeepEqual(call.args, []string{"--list-sdks"}) {
-				t.Fatalf("dotnet args = %v, want project-independent --list-sdks", call.args)
+			if !reflect.DeepEqual(call.args, []string{"--version"}) {
+				t.Fatalf("dotnet args = %v, want --version", call.args)
 			}
 			for _, want := range []string{"DOTNET_CLI_TELEMETRY_OPTOUT=1", "DOTNET_NOLOGO=1", "DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1"} {
 				if !strings.Contains(env, want) {
@@ -255,7 +255,7 @@ func TestCompilerCandidatesArePlatformAware(t *testing.T) {
 func TestPrintHelpDoesNotRunProbes(t *testing.T) {
 	var out bytes.Buffer
 	PrintHelp(&out)
-	for _, want := range []string{"badger diagnose", "project-independent", "network requests"} {
+	for _, want := range []string{"badger diagnose", "does not analyze project files", "network requests"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("help missing %q:\n%s", want, out.String())
 		}

@@ -105,8 +105,10 @@ func PrintHelp(w io.Writer) {
 Purpose:
   Print local environment information for troubleshooting and bug reports.
 
-The report is project-independent, designed to be shareable, and does not
-perform dependency resolution, updates, builds, tests, or network requests.
+Badger does not analyze project files or infer project requirements. Individual
+tools may apply their normal current-directory selection behavior. The report
+is designed to be shareable and does not perform dependency resolution,
+updates, builds, tests, or network requests.
 `)
 }
 
@@ -148,7 +150,7 @@ func (c collector) collect() []result {
 		{"Badger", strings.TrimPrefix(c.opts.Version, "v")},
 		{"Platform", platformName(c.opts.GOOS) + " " + c.opts.GOARCH},
 		{"Git", c.probe([]string{"git"}, []string{"--version"}, nil, parseGit)},
-		{"Clipboard", available},
+		{"Clipboard command", available},
 		{"Go", c.probe([]string{"go"}, []string{"version"}, nil, parseGo)},
 		{"Java", c.probe([]string{"java"}, []string{"-version"}, nil, parseJava)},
 		{"Maven", c.probe([]string{"mvn"}, []string{"--version"}, nil, prefixedVersion("Apache Maven"))},
@@ -160,11 +162,11 @@ func (c collector) collect() []result {
 	results = append(results, result{"Python", pythonVersion})
 	results = append(results, result{"pip", c.pip(pythonPath)})
 	results = append(results,
-		result{".NET", c.probe([]string{"dotnet"}, []string{"--list-sdks"}, map[string]string{
+		result{".NET", c.probe([]string{"dotnet"}, []string{"--version"}, map[string]string{
 			"DOTNET_CLI_TELEMETRY_OPTOUT":               "1",
 			"DOTNET_NOLOGO":                             "1",
 			"DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE": "1",
-		}, parseDotnetSDKs)},
+		}, parseSimpleVersion)},
 		result{"CMake", c.probe([]string{"cmake"}, []string{"--version"}, nil, prefixedVersion("cmake version"))},
 		result{"C/C++ compiler", c.compiler()},
 	)

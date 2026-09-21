@@ -16,7 +16,6 @@ func TestParsersReturnOnlyNormalizedVersions(t *testing.T) {
 		{name: "java stderr", parse: parseJava, input: "openjdk version \"25.0.2\" 2026-01-01\nOpenJDK Runtime /private/sdk", want: "25.0.2"},
 		{name: "node", parse: parseSimpleVersion, input: "v25.9.0\n", want: "25.9.0"},
 		{name: "pip path", parse: parsePip, input: "pip 25.2 from /Users/private/site-packages (python 3.14)", want: "25.2"},
-		{name: "dotnet SDKs", parse: parseDotnetSDKs, input: "8.0.414 [/usr/local/share/dotnet/sdk]\n10.0.100-preview.7.25380.108 [C:\\Program Files\\dotnet\\sdk]", want: "8.0.414, 10.0.100-preview.7.25380.108"},
 		{name: "compiler", parse: parseCompiler, input: "Apple clang version 17.0.0 (clang-1700.0.13.3)", want: "Clang 17.0.0"},
 	}
 	for _, test := range tests {

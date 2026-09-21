@@ -19,6 +19,7 @@ const (
 	smokeEnv        = "BADGER_CLI_SMOKE"
 	buildTimeout    = 2 * time.Minute
 	commandTimeout  = 20 * time.Second
+	diagnoseTimeout = time.Minute
 	goalMarker      = "SMOKE_GOAL_RENDER_GREETING"
 	trackedMarker   = "SMOKE_TRACKED_GREETING"
 	untrackedMarker = "SMOKE_UNTRACKED_NOTE"
@@ -40,6 +41,7 @@ func TestCLISmoke(t *testing.T) {
 	h := newHarness(t)
 
 	t.Run("version and help", h.testVersionAndHelp)
+	t.Run("diagnose", h.testDiagnose)
 	t.Run("topology", h.testTopology)
 	t.Run("prompt and extract", h.testPromptAndExtract)
 	t.Run("default review context", h.testReviewContext)
@@ -133,8 +135,12 @@ func (h *harness) git(operation string, args ...string) string {
 }
 
 func (h *harness) badger(t *testing.T, operation string, args ...string) string {
+	return h.badgerWithTimeout(t, commandTimeout, operation, args...)
+}
+
+func (h *harness) badgerWithTimeout(t *testing.T, timeout time.Duration, operation string, args ...string) string {
 	t.Helper()
-	stdout, stderr := run(t, commandTimeout, h.repoRoot, h.env, operation, h.badgerPath, args...)
+	stdout, stderr := run(t, timeout, h.repoRoot, h.env, operation, h.badgerPath, args...)
 	if stderr != "" {
 		t.Fatalf("%s unexpectedly wrote to stderr:\n%s", operation, stderr)
 	}
@@ -174,6 +180,29 @@ func (h *harness) testVersionAndHelp(t *testing.T) {
 		"badger api prompt --root <project> --focus <code|design>",
 		"badger api extract --root <project> [--focus <code|design>]",
 		"badger api review-context --root <repository>",
+	)
+}
+
+func (h *harness) testDiagnose(t *testing.T) {
+	output := h.badgerWithTimeout(t, diagnoseTimeout, "run diagnose", "diagnose")
+	assertContains(t, "diagnose output", output,
+		"AI Badger Diagnose",
+		"Badger:",
+		"Platform:",
+		"Git:",
+		"Clipboard command:",
+		"Development tools",
+		"Go:",
+		"Java:",
+		"Maven:",
+		"Gradle:",
+		"Node.js:",
+		"npm:",
+		"Python:",
+		"pip:",
+		".NET:",
+		"CMake:",
+		"C/C++ compiler:",
 	)
 }
 

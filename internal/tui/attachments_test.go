@@ -10,7 +10,23 @@ import (
 
 	"github.com/PVRLabs/aibadger/internal/engine"
 	"github.com/PVRLabs/aibadger/internal/model"
+	"github.com/PVRLabs/aibadger/internal/startup"
 )
+
+func TestCodexStartupTextAttachmentSurvivesConversionAndRemoval(t *testing.T) {
+	const imported = "Codex session abc\n[source bytes≈123; imported bytes=77; older context truncated]\n\nuser: Continue 🦡\n"
+	attachments := startupGoalAttachments([]startup.Attachment{
+		{Type: "text", Source: "existing", Text: "notes"},
+		{Type: "text", Source: "Codex session abc", Text: imported},
+	})
+	if len(attachments) != 2 || attachments[0].Text != "notes" || attachments[1].Source != "Codex session abc" || attachments[1].Text != imported {
+		t.Fatalf("startup conversion = %+v", attachments)
+	}
+	remaining := removeGoalAttachmentAt(attachments, 1)
+	if len(remaining) != 1 || remaining[0].Text != "notes" {
+		t.Fatalf("attachment removal = %+v", remaining)
+	}
+}
 
 func TestCountTextLines(t *testing.T) {
 	tests := []struct {

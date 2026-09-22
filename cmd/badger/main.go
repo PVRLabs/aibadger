@@ -7,11 +7,14 @@ import (
 	"runtime/pprof"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PVRLabs/aibadger/internal/diagnose"
 	"github.com/PVRLabs/aibadger/internal/handoff"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
+	"github.com/PVRLabs/aibadger/internal/sessionimport"
+	"github.com/PVRLabs/aibadger/internal/sessionimport/codex"
 	"github.com/PVRLabs/aibadger/internal/startup"
 	"github.com/PVRLabs/aibadger/pkg/badger"
 )
@@ -26,6 +29,9 @@ type appConfig struct {
 	startupGoal      string
 	literalStartup   bool
 	continueCommand  bool
+	continueAgent    string
+	continueSession  string
+	codexImport      *sessionimport.Conversation
 	handoffContinue  bool
 	showHelp         bool
 	showVersion      bool
@@ -66,12 +72,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: resolving invocation directory: %v\n", err)
 			os.Exit(1)
 		}
-		content, err := handoff.Consume(invocationRoot)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		if err := applyContinueContent(&cfg, content); err != nil {
+		if err := prepareContinue(&cfg, invocationRoot, terminalInteractiveFunc(), codex.Default, func(sessions []sessionimport.Summary) (string, error) {
+			return runCodexPicker(sessions, os.Stdin, os.Stdout, time.Local)
+		}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -116,6 +119,9 @@ func main() {
 	}
 	if cfg.handoffContinue {
 		applyHandoffStartup(&badgerCfg, cfg.startupGoal)
+	}
+	if cfg.codexImport != nil {
+		applyCodexStartup(&badgerCfg, cfg.continueSession, *cfg.codexImport)
 	}
 	if err := badger.Run(badgerCfg); err != nil {
 		fmt.Printf("TUI error: %v\n", err)
@@ -449,10 +455,7 @@ func stripFocusCommand(args []string, cfg *appConfig) []string {
 
 func parseArgs(args []string, cfg *appConfig) error {
 	if cfg.continueCommand {
-		if len(args) > 0 {
-			return fmt.Errorf("continue command does not accept flags or arguments")
-		}
-		return nil
+		return parseContinueArgs(args, cfg)
 	}
 	if len(args) > 0 && args[0] == "version" {
 		cfg.showVersion = true
@@ -674,6 +677,7 @@ func printUsage() {
 Usage:
   badger [design|code|review|followup] [options]
   badger continue
+  badger continue --agent codex [--session <session-id>]
   badger badge
   badger skills install
   badger diagnose
@@ -685,13 +689,15 @@ Interactive focuses:
   code        Prepare context for implementation work.
   review      Review Git changes with optional supporting context.
   followup    Continue an existing AI conversation.
-  continue    Consume .badger-handoff from the invocation directory.
+  continue    Consume .badger-handoff or select a Codex session when absent.
   badge       Launch the TUI with /badge preloaded.
 
 Workspace handoff:
-  badger continue reads one explicit, ephemeral session handoff. The file
-  supports mode: review, mode: design, or mode: handoff and accepts no flags
-  or arguments. See docs/usage.md for the format and mode behavior.
+  badger continue consumes a present .badger-handoff. When absent, it offers
+  recent Codex sessions. --agent codex selects Codex directly; --session
+  requires --agent codex and skips the picker. Imported context is read-only
+  task history, not a restored Codex session. See docs/usage.md for handoff
+  format and mode behavior.
 
 Agent Skills:
   badger skills install installs bundled official skills to ~/.agents/skills/.

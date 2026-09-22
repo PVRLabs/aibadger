@@ -36,7 +36,7 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		Subtitle:                  "Local-first code context for any AI chat",
+		Subtitle:                  brand.Subtitle,
 		Version:                   version.Version,
 		Focus:                     protocol.FocusCode,
 		ScanFrames:                defaultScanFrames(),

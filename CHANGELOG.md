@@ -4,6 +4,23 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.6.1] - 2026-09-21
+
+### Diagnostics
+
+- Added the project-independent `badger diagnose` command for shareable
+  troubleshooting reports covering Badger, platform, clipboard, and common
+  development-tool versions and availability.
+- Diagnostic probes are bounded and local-only: they do not inspect project
+  files, make network requests, resolve dependencies, build, test, update, or
+  install anything.
+
+### Documentation
+
+- Added a bug-report template requesting `badger diagnose` output.
+- Clarified Badger’s repository-context/review scope, project-size guidance,
+  and explicit confirmation requirements before writing changes.
+
 ## [v0.6.0] - 2026-09-17
 
 ### Project topology

@@ -179,3 +179,46 @@ func TestDefaultRejectsUnavailableHome(t *testing.T) {
 		t.Fatalf("relative home source = %+v, %v", s, err)
 	}
 }
+
+func TestDefaultUsesCodexHomeAndFallsBackWhenInvalid(t *testing.T) {
+	root := t.TempDir()
+	codexHome := filepath.Join(root, "codex-home")
+	if err := os.Mkdir(codexHome, 0700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "codex-home-link")
+	if err := os.Symlink(codexHome, link); err != nil {
+		t.Fatal(err)
+	}
+	canonicalHome, err := filepath.EvalSymlinks(codexHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", link)
+	s, err := Default()
+	if err != nil || s.Root != filepath.Join(canonicalHome, "sessions") {
+		t.Fatalf("Codex home source = %+v, %v", s, err)
+	}
+
+	fallbackHome := filepath.Join(root, "fallback-home")
+	if err := os.Mkdir(fallbackHome, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", fallbackHome)
+	t.Setenv("CODEX_HOME", filepath.Join(root, "missing-codex-home"))
+	s, err = Default()
+	if err != nil || s.Root != filepath.Join(fallbackHome, ".codex", "sessions") {
+		t.Fatalf("fallback source = %+v, %v", s, err)
+	}
+
+	file := filepath.Join(root, "not-a-directory")
+	if err := os.WriteFile(file, []byte("file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := sourceFromCodexHome(file); err != nil || ok {
+		t.Fatalf("file Codex home = ok %v, err %v", ok, err)
+	}
+	if _, ok, err := sourceFromCodexHome("relative-codex-home"); err != nil || ok {
+		t.Fatalf("relative Codex home = ok %v, err %v", ok, err)
+	}
+}

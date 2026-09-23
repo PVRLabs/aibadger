@@ -46,8 +46,31 @@ func lowerBudget(requested, ceiling int) int {
 }
 
 func Default() (Source, error) {
+	if codexHome := os.Getenv("CODEX_HOME"); codexHome != "" {
+		if source, ok, err := sourceFromCodexHome(codexHome); err != nil || ok {
+			return source, err
+		}
+	}
 	home, err := os.UserHomeDir()
 	return sourceFromHome(home, err)
+}
+
+func sourceFromCodexHome(home string) (Source, bool, error) {
+	if !filepath.IsAbs(home) {
+		return Source{}, false, nil
+	}
+	info, err := os.Stat(home)
+	if errors.Is(err, os.ErrNotExist) || err == nil && !info.IsDir() {
+		return Source{}, false, nil
+	}
+	if err != nil {
+		return Source{}, false, fmt.Errorf("Codex home directory unavailable: %w", err)
+	}
+	canonical, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		return Source{}, false, fmt.Errorf("resolve Codex home directory: %w", err)
+	}
+	return Source{Root: filepath.Join(canonical, "sessions")}, true, nil
 }
 
 func sourceFromHome(home string, err error) (Source, error) {

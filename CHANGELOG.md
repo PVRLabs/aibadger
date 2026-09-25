@@ -4,6 +4,14 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.7.0] - 2026-09-25
+
+### Session continuation
+
+- Added `badger continue` to import Codex sessions as startup context, with a
+  recent-session picker and direct session ID selection. Work has started on
+  Claude Code session import.
+
 ## [v0.6.1] - 2026-09-21
 
 ### Diagnostics

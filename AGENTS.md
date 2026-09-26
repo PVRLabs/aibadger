@@ -4,8 +4,8 @@
 
 Prefer existing repository patterns and keep changes scoped to the request.
 
-Use `repo-map` to locate related repositories only when work crosses repository
-boundaries.
+Use RepoLink (`repolink`) to locate related repositories only when work
+crosses repository boundaries.
 
 ## Go and verification
 

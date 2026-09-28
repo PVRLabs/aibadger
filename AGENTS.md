@@ -37,3 +37,9 @@ Default builds are development builds. Release builds use the
 `docs/releasing.md` for release-specific details.
 
 When a commit is tied to a named plan, include `Plan: <plan name>`.
+
+## Archived private plans
+
+Move full private historical plans to Projctl under
+`archive/<project-id>/plans/`. Keep a short description and pointer in the
+source archive folder.

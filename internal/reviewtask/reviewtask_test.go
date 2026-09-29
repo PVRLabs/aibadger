@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/PVRLabs/aibadger/internal/scanner"
+	"github.com/PVRLabs/aibadger/internal/testutil"
 )
 
 var (
@@ -1099,6 +1100,7 @@ func buildTask(t *testing.T, repo string, opts Options) Task {
 
 func newGitRepo(t *testing.T) string {
 	t.Helper()
+	testutil.RequireIntegration(t)
 	if _, loaded := parallelRepoTests.LoadOrStore(t.Name(), struct{}{}); !loaded {
 		t.Parallel()
 	}
@@ -1108,6 +1110,7 @@ func newGitRepo(t *testing.T) string {
 
 func newUnbornGitRepo(t *testing.T) string {
 	t.Helper()
+	testutil.RequireIntegration(t)
 	if _, loaded := parallelRepoTests.LoadOrStore(t.Name(), struct{}{}); !loaded {
 		t.Parallel()
 	}
@@ -1173,6 +1176,7 @@ func setFileModTime(t *testing.T, path string, modTime time.Time) {
 
 func runGitCmd(t *testing.T, dir string, args ...string) string {
 	t.Helper()
+	testutil.RequireIntegration(t)
 	gitTestProcesses.Add(1)
 
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)

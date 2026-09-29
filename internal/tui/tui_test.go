@@ -17,6 +17,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/startup"
+	"github.com/PVRLabs/aibadger/internal/testutil"
 	"github.com/PVRLabs/aibadger/internal/version"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
@@ -5193,6 +5194,7 @@ func assertMaxRenderedLineWidth(t *testing.T, rendered string, maxWidth int) {
 
 func newReviewRepo(t *testing.T, updatedLine string) string {
 	t.Helper()
+	testutil.RequireIntegration(t)
 
 	dir := t.TempDir()
 	runReviewGitCmd(t, dir, "init")
@@ -5222,6 +5224,7 @@ func writeReviewFile(t *testing.T, dir, path, contents string) {
 
 func runReviewGitCmd(t *testing.T, dir string, args ...string) string {
 	t.Helper()
+	testutil.RequireIntegration(t)
 
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(),

@@ -30,7 +30,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: go test
+      - name: Unit and Git integration tests
+        env:
+          BADGER_INTEGRATION: "1"
         run: go test ./...
 
       - name: go vet

@@ -15,6 +15,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
+	"github.com/PVRLabs/aibadger/internal/testutil"
 	"github.com/PVRLabs/aibadger/internal/workflow"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
@@ -1123,6 +1124,7 @@ func writeAPIReviewRepo(t *testing.T) string {
 
 func writeAPIReviewRepoAt(t *testing.T, root string) {
 	t.Helper()
+	testutil.RequireIntegration(t)
 	runAPIGit(t, root, "init")
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nconst changed = false\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -1142,6 +1144,7 @@ func runAPICommit(t *testing.T, root string, args ...string) {
 
 func runAPIGit(t *testing.T, root string, args ...string) {
 	t.Helper()
+	testutil.RequireIntegration(t)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {

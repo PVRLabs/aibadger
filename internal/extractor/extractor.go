@@ -71,15 +71,30 @@ func NewExtractor(root string, t *model.ProjectTopology) *Extractor {
 
 // Extract performs the extraction for all commands in parallel.
 func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, error) {
-	var wg sync.WaitGroup
-	results := make([]protocol.ExtractionResult, len(commands))
-	errs := make([]error, len(commands))
 	fileRequested := make(map[string]bool, len(commands))
 	for _, cmd := range commands {
 		if cmd.Type == "FILE" {
 			fileRequested[cmd.Path] = true
 		}
 	}
+	// Apply the same exact-path precedence before starting work. The first FILE
+	// wins even if it fails or is excluded; later duplicates cannot replace it.
+	effective := make([]Command, 0, len(commands))
+	emittedFile := make(map[string]bool, len(commands))
+	for _, cmd := range commands {
+		if fileRequested[cmd.Path] {
+			if cmd.Type != "FILE" || emittedFile[cmd.Path] {
+				continue
+			}
+			emittedFile[cmd.Path] = true
+		}
+		effective = append(effective, cmd)
+	}
+	commands = effective
+
+	var wg sync.WaitGroup
+	results := make([]protocol.ExtractionResult, len(commands))
+	errs := make([]error, len(commands))
 
 	for i, cmd := range commands {
 		wg.Add(1)
@@ -102,20 +117,10 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 	wg.Wait()
 
 	extracted := make([]protocol.ExtractionResult, 0, len(commands))
-	emittedFile := make(map[string]bool, len(commands))
 	failures := make([]string, 0)
 	excludedFailures := make([]string, 0)
 	excluded := 0
 	for i, result := range results {
-		if fileRequested[commands[i].Path] {
-			if commands[i].Type != "FILE" {
-				continue
-			}
-			if emittedFile[commands[i].Path] {
-				continue
-			}
-			emittedFile[commands[i].Path] = true
-		}
 		if errs[i] != nil {
 			if errors.Is(errs[i], errPrompt2Excluded) {
 				excluded++

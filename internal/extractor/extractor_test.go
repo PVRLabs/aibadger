@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"os"
@@ -1644,5 +1645,49 @@ func TestExtractAllowsExternalContextNearRelativeToContextRoot(t *testing.T) {
 	}
 	if !strings.Contains(results[0].Content, "sidecar-boundary") {
 		t.Fatalf("content = %q, want extracted external span near anchor", results[0].Content)
+	}
+}
+
+func TestExtractFilePrecedencePreservesFailuresAndOrder(t *testing.T) {
+	for _, external := range []bool{false, true} {
+		t.Run(fmt.Sprintf("external=%t", external), func(t *testing.T) {
+			root, files := t.TempDir(), t.TempDir()
+			e := NewExtractor(root, nil)
+			prefix := ""
+			if external {
+				e.ExternalContext = []model.ExternalContext{{Path: "../context", AbsPath: files}}
+				prefix = "../context/"
+			} else {
+				files = root
+			}
+			for _, name := range []string{"first.txt", "second.txt", ".env"} {
+				if err := os.WriteFile(filepath.Join(files, name), []byte(name+"\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			results, err := e.Extract([]Command{
+				{Type: "CLASS", Path: prefix + "second.txt", Pattern: "missing"},
+				{Type: "FILE", Path: prefix + "first.txt"},
+				{Type: "NEAR", Path: prefix + "missing.txt", Pattern: "missing"},
+				{Type: "FILE", Path: prefix + "missing.txt"},
+				{Type: "FILE", Path: prefix + "missing.txt"},
+				{Type: "FILE", Path: prefix + "second.txt"},
+				{Type: "FILE", Path: prefix + "first.txt"},
+				{Type: "FILE", Path: prefix + ".env"},
+				{Type: "FILE", Path: prefix + ".env"},
+			})
+			var extractionErr *ExtractionError
+			wantFailures, wantExcluded := 1, 1
+			if external {
+				// External resolution does not expose the sensitive dotfile match.
+				wantFailures, wantExcluded = 2, 0
+			}
+			if !errors.As(err, &extractionErr) || !extractionErr.CanProceed || len(extractionErr.Failures) != wantFailures || len(extractionErr.Excluded) != wantExcluded {
+				t.Fatalf("error = %#v", err)
+			}
+			if len(results) != 2 || results[0].Content != "first.txt\n" || results[1].Content != "second.txt\n" || !results[0].FullFile || !results[1].FullFile {
+				t.Fatalf("results = %#v", results)
+			}
+		})
 	}
 }

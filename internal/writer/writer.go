@@ -1,7 +1,6 @@
 package writer
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,7 +56,7 @@ func ParseAIResponseDetailed(input string) ParseResult {
 		}
 
 		if inBlock {
-			// Get the raw line from the scanner to preserve intentional indentation
+			// Use the raw line to preserve intentional indentation
 			if line == "--- End File ---" && !(isMarkdownPath(currentPath) && inMarkdownFence) {
 				updates = append(updates, FileUpdate{
 					Path:    currentPath,
@@ -118,6 +117,10 @@ func ParseAIResponseDetailed(input string) ParseResult {
 		textContent.WriteString("\n")
 	}
 
+	if inBlock {
+		errs = append(errs, fmt.Errorf("write file %q: unterminated file block", currentPath))
+	}
+
 	return ParseResult{
 		Updates: updates,
 		Text:    strings.TrimSpace(textContent.String()),
@@ -126,10 +129,16 @@ func ParseAIResponseDetailed(input string) ParseResult {
 }
 
 func scanLines(input string) []string {
-	var lines []string
-	scanner := bufio.NewScanner(strings.NewReader(input))
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+	if input == "" {
+		return nil
+	}
+	lines := strings.Split(input, "\n")
+	// Match ScanLines: omit the terminal empty token and strip one trailing CR.
+	if strings.HasSuffix(input, "\n") {
+		lines = lines[:len(lines)-1]
+	}
+	for i := range lines {
+		lines[i] = strings.TrimSuffix(lines[i], "\r")
 	}
 	return lines
 }

@@ -714,3 +714,40 @@ func TestParseAIResponse_PreservedIndentation(t *testing.T) {
 		t.Fatalf("indentation not preserved: %q", updates[0].Content)
 	}
 }
+
+func TestParseAIResponseDetailedLongLine(t *testing.T) {
+	line := "\t  " + strings.Repeat("x", 70*1024) + "  "
+	result := ParseAIResponseDetailed("--- File: large.txt ---\n" + line + "\n--- End File ---\n--- File: next.txt ---\nok\n--- End File ---")
+	if len(result.Errors) != 0 || len(result.Updates) != 2 {
+		t.Fatalf("updates = %d, errors = %v", len(result.Updates), result.Errors)
+	}
+	if result.Updates[0].Content != line+"\n" || result.Updates[1].Content != "ok\n" {
+		t.Fatal("file content changed or later file was lost")
+	}
+}
+
+func TestParseAIResponseDetailedUnterminatedBlock(t *testing.T) {
+	result := ParseAIResponseDetailed("--- File: complete.txt ---\nok\n--- End File ---\n--- File: incomplete.md ---\n```\n--- End File ---")
+	if len(result.Updates) != 1 || result.Updates[0].Path != "complete.txt" {
+		t.Fatalf("updates = %#v", result.Updates)
+	}
+	if len(result.Errors) != 1 || !strings.Contains(result.Errors[0].Error(), "incomplete.md") || !strings.Contains(result.Errors[0].Error(), "unterminated") {
+		t.Fatalf("errors = %v", result.Errors)
+	}
+}
+
+func TestParseAIResponseDetailedLineEndings(t *testing.T) {
+	for _, input := range []string{
+		"--- File: test.txt ---\r\n\t content  \r\n\r\n--- End File ---\r\nnotes\r",
+		"--- File: test.txt ---\n\t content  \n\n--- End File ---\nnotes",
+		"notes\n--- File: test.txt ---\n\t content  \n\n--- End File ---",
+	} {
+		result := ParseAIResponseDetailed(input)
+		if len(result.Errors) != 0 || len(result.Updates) != 1 {
+			t.Fatalf("updates = %#v, errors = %v", result.Updates, result.Errors)
+		}
+		if result.Updates[0].Content != "\t content  \n\n" || result.Text != "notes" {
+			t.Fatalf("result = %#v", result)
+		}
+	}
+}

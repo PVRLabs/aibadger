@@ -48,14 +48,6 @@ func (m Model) reviewAttachmentDisplaySummary() string {
 	return ""
 }
 
-func promptOnePrivacyText(focus protocol.Focus) string {
-	return promptOnePrivacyTextWithPaths(focus, nil)
-}
-
-func promptOnePrivacyTextWithPaths(focus protocol.Focus, sensitivePaths []string) string {
-	return promptOnePrivacyTextWithAttachment(focus, sensitivePaths, false)
-}
-
 func promptOnePrivacyTextWithAttachment(focus protocol.Focus, sensitivePaths []string, reviewAttachment bool) string {
 	if protocol.NormalizeFocus(focus) == protocol.FocusReview || reviewAttachment {
 		privacy := "Privacy: Includes Git changes and may include eligible current working-tree file contents."

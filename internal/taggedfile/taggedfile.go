@@ -1015,10 +1015,3 @@ func dirSuffix(path string, isDir bool) string {
 	}
 	return path
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

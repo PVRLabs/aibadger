@@ -18,6 +18,7 @@ import (
 const pickerMaxHeight = 24
 
 type codexPickerModel struct {
+	agent          string
 	sessions       []sessionimport.Summary
 	location       *time.Location
 	width, height  int
@@ -26,18 +27,23 @@ type codexPickerModel struct {
 }
 
 func newCodexPickerModel(sessions []sessionimport.Summary, location *time.Location) codexPickerModel {
-	return codexPickerModel{sessions: sessions, location: location, width: 80, height: pickerMaxHeight}
+	return codexPickerModel{agent: "Codex", sessions: sessions, location: location, width: 80, height: pickerMaxHeight}
 }
 
 func runCodexPicker(sessions []sessionimport.Summary, input io.Reader, output io.Writer, location *time.Location) (string, error) {
+	return runSessionPicker("Codex", sessions, input, output, location)
+}
+
+func runSessionPicker(agent string, sessions []sessionimport.Summary, input io.Reader, output io.Writer, location *time.Location) (string, error) {
 	model := newCodexPickerModel(sessions, location)
+	model.agent = agent
 	result, err := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(input), tea.WithOutput(output)).Run()
 	if err != nil {
 		return "", err
 	}
 	final, ok := result.(codexPickerModel)
 	if !ok || final.canceled || !final.done {
-		return "", fmt.Errorf("Codex session selection canceled")
+		return "", fmt.Errorf("%s session selection canceled", agent)
 	}
 	return final.sessions[final.selected].ID, nil
 }
@@ -124,7 +130,7 @@ func (m codexPickerModel) View() string {
 			clip(brand.HeaderLine("( o.o )", brand.Subtitle)),
 			clip(brand.HeaderLine(" > ^ <", "Pipeline: [Map] → Extract → "+workflow.PipelineFinalLabel)),
 			clip(brand.HeaderRule),
-			"", clip("Choose a Codex session"), "",
+			"", clip("Choose a "+m.agent+" session"), "",
 		)
 	} else if height > 0 {
 		lines = append(lines, clip(brand.VersionedName(version.Version)))

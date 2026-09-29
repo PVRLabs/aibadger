@@ -122,7 +122,7 @@ The handoff file is ephemeral and may contain sensitive conversation context.
 Do not commit it. Badger removes a valid file before starting the workflow;
 invalid files are reported and left in place so they can be corrected.
 
-### Continue from a Codex session
+### Continue from a local agent session
 
 From the project directory, use one of these forms:
 
@@ -130,17 +130,20 @@ From the project directory, use one of these forms:
 badger continue
 badger continue --agent codex
 badger continue --agent codex --session <session-id>
+badger continue --agent claude
+badger continue --agent claude --session <session-id>
 ```
 
 If `.badger-handoff` exists, plain `badger continue` uses it as described
 above, including reporting an invalid handoff. If the file is absent, Badger
 offers recent Codex sessions. `--agent codex` goes straight to that picker;
-`--session` requires `--agent codex` and selects the given ID directly, even
+`--agent claude` opens a picker for local Claude Code sessions. `--session`
+requires `--agent codex` or `--agent claude` and selects the given ID directly, even
 when it is older than the picker's recent window. Selection without an
 interactive terminal requires `--session`.
 
 The picker shows local timestamps, short labels, and repository associations.
-Sessions from the current repository appear first when Codex recorded a
+Sessions from the current repository appear first when the agent recorded a
 reliable working directory, then newest first within each group. Use Up/Down
 to move, Enter to select, or Esc/q to cancel. Nothing is selected automatically.
 
@@ -148,8 +151,10 @@ Badger imports bounded conversation text as a removable startup attachment
 and seeds an editable continuation goal. It also prepares current repository
 context through its usual workflow. The attachment shows when older context
 was truncated. This transfers useful task history into a normal web chat; it
-does not restore Codex's session, tool state, or approvals. Codex session files
-are read only, and explicit Codex selection leaves `.badger-handoff` untouched.
+does not restore the agent's session, tool state, or approvals. Session files
+are read only, and explicit agent selection leaves `.badger-handoff` untouched.
+Claude Code transcripts are discovered under `~/.claude/projects` by default,
+or under `CLAUDE_CONFIG_DIR/projects` when that variable is set.
 
 ## Install the official Agent Skills
 

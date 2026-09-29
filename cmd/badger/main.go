@@ -14,6 +14,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/sessionimport"
+	"github.com/PVRLabs/aibadger/internal/sessionimport/claude"
 	"github.com/PVRLabs/aibadger/internal/sessionimport/codex"
 	"github.com/PVRLabs/aibadger/internal/startup"
 	"github.com/PVRLabs/aibadger/pkg/badger"
@@ -32,6 +33,7 @@ type appConfig struct {
 	continueAgent    string
 	continueSession  string
 	codexImport      *sessionimport.Conversation
+	claudeImport     *sessionimport.Conversation
 	handoffContinue  bool
 	showHelp         bool
 	showVersion      bool
@@ -72,8 +74,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: resolving invocation directory: %v\n", err)
 			os.Exit(1)
 		}
-		if err := prepareContinue(&cfg, invocationRoot, terminalInteractiveFunc(), codex.Default, func(sessions []sessionimport.Summary) (string, error) {
-			return runCodexPicker(sessions, os.Stdin, os.Stdout, time.Local)
+		if err := prepareContinueWithSources(&cfg, invocationRoot, terminalInteractiveFunc(), codex.Default, claude.Default, func(sessions []sessionimport.Summary) (string, error) {
+			agent := "Codex"
+			if cfg.continueAgent == "claude" {
+				agent = "Claude"
+			}
+			return runSessionPicker(agent, sessions, os.Stdin, os.Stdout, time.Local)
 		}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -122,6 +128,9 @@ func main() {
 	}
 	if cfg.codexImport != nil {
 		applyCodexStartup(&badgerCfg, cfg.continueSession, *cfg.codexImport)
+	}
+	if cfg.claudeImport != nil {
+		applyClaudeStartup(&badgerCfg, cfg.continueSession, *cfg.claudeImport)
 	}
 	if err := badger.Run(badgerCfg); err != nil {
 		fmt.Printf("TUI error: %v\n", err)
@@ -678,6 +687,7 @@ Usage:
   badger [design|code|review|followup] [options]
   badger continue
   badger continue --agent codex [--session <session-id>]
+  badger continue --agent claude [--session <session-id>]
   badger badge
   badger skills install
   badger diagnose
@@ -689,14 +699,14 @@ Interactive focuses:
   code        Prepare context for implementation work.
   review      Review Git changes with optional supporting context.
   followup    Continue an existing AI conversation.
-  continue    Consume .badger-handoff or select a Codex session when absent.
+  continue    Consume .badger-handoff or select a local agent session.
   badge       Launch the TUI with /badge preloaded.
 
 Workspace handoff:
   badger continue consumes a present .badger-handoff. When absent, it offers
-  recent Codex sessions. --agent codex selects Codex directly; --session
-  requires --agent codex and skips the picker. Imported context is read-only
-  task history, not a restored Codex session. See docs/usage.md for handoff
+  recent Codex sessions. --agent codex or --agent claude selects that agent's
+  sessions directly; --session requires --agent and skips the picker. Imported
+  context is read-only task history, not a restored agent session. See docs/usage.md for handoff
   format and mode behavior.
 
 Agent Skills:

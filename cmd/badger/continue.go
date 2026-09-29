@@ -11,12 +11,14 @@ import (
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/sessionimport"
+	"github.com/PVRLabs/aibadger/internal/sessionimport/claude"
 	"github.com/PVRLabs/aibadger/internal/sessionimport/codex"
 	"github.com/PVRLabs/aibadger/internal/startup"
 	"github.com/PVRLabs/aibadger/pkg/badger"
 )
 
 const codexContinueGoal = "Continue this task using the attached Codex session context."
+const claudeContinueGoal = "Continue this task using the attached Claude session context."
 
 func parseContinueArgs(args []string, cfg *appConfig) error {
 	if len(args) == 0 {
@@ -59,19 +61,23 @@ func parseContinueArgs(args []string, cfg *appConfig) error {
 			cfg.continueSession = value
 		}
 	}
-	if cfg.continueSession != "" && cfg.continueAgent != "codex" {
-		return fmt.Errorf("continue --session requires --agent codex")
+	if cfg.continueSession != "" && cfg.continueAgent != "codex" && cfg.continueAgent != "claude" {
+		return fmt.Errorf("continue --session requires --agent codex or claude")
 	}
-	if seenAgent && cfg.continueAgent != "codex" {
+	if seenAgent && cfg.continueAgent != "codex" && cfg.continueAgent != "claude" {
 		return fmt.Errorf("unsupported continue agent %q", cfg.continueAgent)
 	}
-	if cfg.continueSession != "" && !codex.ValidID(cfg.continueSession) {
-		return fmt.Errorf("invalid Codex session ID %q", cfg.continueSession)
+	if cfg.continueSession != "" && ((cfg.continueAgent == "codex" && !codex.ValidID(cfg.continueSession)) || (cfg.continueAgent == "claude" && !claude.ValidID(cfg.continueSession))) {
+		return fmt.Errorf("invalid %s session ID %q", cfg.continueAgent, cfg.continueSession)
 	}
 	return nil
 }
 
 func prepareContinue(cfg *appConfig, root string, interactive bool, newSource func() (codex.Source, error), choose func([]sessionimport.Summary) (string, error)) error {
+	return prepareContinueWithSources(cfg, root, interactive, newSource, claude.Default, choose)
+}
+
+func prepareContinueWithSources(cfg *appConfig, root string, interactive bool, newCodex func() (codex.Source, error), newClaude func() (claude.Source, error), choose func([]sessionimport.Summary) (string, error)) error {
 	if cfg.continueAgent == "" {
 		// A present but malformed or unreadable handoff stays on the existing
 		// consumer path. A race after this check also returns its current error.
@@ -88,12 +94,29 @@ func prepareContinue(cfg *appConfig, root string, interactive bool, newSource fu
 		}
 	}
 	id := cfg.continueSession
-	if id == "" && !interactive {
-		return fmt.Errorf("Codex session selection requires an interactive terminal; use --agent codex --session <session-id>")
+	agent := cfg.continueAgent
+	if agent == "" {
+		agent = "codex"
 	}
-	source, err := newSource()
-	if err != nil {
-		return err
+	if id == "" && !interactive {
+		return fmt.Errorf("%s session selection requires an interactive terminal; use --agent %s --session <session-id>", agent, agent)
+	}
+	var source interface {
+		List(string) ([]sessionimport.Summary, error)
+		Extract(string, sessionimport.Limits) (sessionimport.Conversation, error)
+	}
+	if agent == "claude" {
+		s, err := newClaude()
+		if err != nil {
+			return err
+		}
+		source = s
+	} else {
+		s, err := newCodex()
+		if err != nil {
+			return err
+		}
+		source = s
 	}
 	if id == "" {
 		projectRoot := ""
@@ -105,7 +128,7 @@ func prepareContinue(cfg *appConfig, root string, interactive bool, newSource fu
 			return err
 		}
 		if len(sessions) == 0 {
-			return fmt.Errorf("no recent Codex sessions found")
+			return fmt.Errorf("no recent %s sessions found", agent)
 		}
 		id, err = choose(sessions)
 		if err != nil {
@@ -114,13 +137,21 @@ func prepareContinue(cfg *appConfig, root string, interactive bool, newSource fu
 	}
 	conversation, err := source.Extract(id, sessionimport.Limits{})
 	if err != nil {
-		return fmt.Errorf("importing Codex session %s: %w", id, err)
+		return fmt.Errorf("importing %s session %s: %w", agent, id, err)
 	}
 	cfg.continueSession = id
-	cfg.codexImport = &conversation
+	if agent == "claude" {
+		cfg.claudeImport = &conversation
+	} else {
+		cfg.codexImport = &conversation
+	}
 	cfg.focus = protocol.FocusDesign
 	cfg.focusExplicit = true
-	cfg.startupGoal = codexContinueGoal
+	if agent == "claude" {
+		cfg.startupGoal = claudeContinueGoal
+	} else {
+		cfg.startupGoal = codexContinueGoal
+	}
 	cfg.literalStartup = true
 	return nil
 }
@@ -130,14 +161,22 @@ func applyCodexStartup(cfg *badger.Config, id string, conversation sessionimport
 }
 
 func applyCodexStartupWithBuilder(cfg *badger.Config, id string, conversation sessionimport.Conversation, buildReview reviewContextBuilder) {
-	applyHandoffStartupWithBuilder(cfg, codexContinueGoal, buildReview)
+	applySessionStartupWithBuilder(cfg, "Codex", codexContinueGoal, id, conversation, buildReview)
+}
+
+func applyClaudeStartup(cfg *badger.Config, id string, conversation sessionimport.Conversation) {
+	applySessionStartupWithBuilder(cfg, "Claude", claudeContinueGoal, id, conversation, reviewtask.BuildInteractiveContext)
+}
+
+func applySessionStartupWithBuilder(cfg *badger.Config, agent, goal, id string, conversation sessionimport.Conversation, buildReview reviewContextBuilder) {
+	applyHandoffStartupWithBuilder(cfg, goal, buildReview)
 	if cfg.Startup.Status.Severity == "warning" {
-		cfg.Startup.Status.Text = "Codex session loaded, but current Git context could not be prepared. Edit the goal and continue."
+		cfg.Startup.Status.Text = agent + " session loaded, but current Git context could not be prepared. Edit the goal and continue."
 	} else {
-		cfg.Startup.Status = startup.Status{Text: "Codex session loaded. Edit the goal before submitting.", Severity: "success"}
+		cfg.Startup.Status = startup.Status{Text: agent + " session loaded. Edit the goal before submitting.", Severity: "success"}
 	}
 	cfg.Startup.Attachments = append(cfg.Startup.Attachments, startup.Attachment{
-		Type: "text", Source: "Codex session " + id, Text: conversation.Text,
+		Type: "text", Source: agent + " session " + id, Text: conversation.Text,
 		SizeBytes: int64(len(conversation.Text)),
 	})
 }

@@ -97,3 +97,15 @@ func TestCodexPickerCancellationAndVerySmallTerminal(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudePickerRequiresExplicitSelectionAndShowsAssociation(t *testing.T) {
+	m := newCodexPickerModel(pickerSessions(2), time.UTC)
+	m.agent = "Claude"
+	if m.done || !strings.Contains(m.View(), "Choose a Claude session") || !strings.Contains(m.View(), "[current repo]") {
+		t.Fatalf("initial Claude picker = %+v\n%s", m, m.View())
+	}
+	m = updatePicker(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if !m.canceled || m.done {
+		t.Fatalf("canceled picker = %+v", m)
+	}
+}

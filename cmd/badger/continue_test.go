@@ -14,6 +14,7 @@ import (
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/sessionimport"
+	"github.com/PVRLabs/aibadger/internal/sessionimport/claude"
 	"github.com/PVRLabs/aibadger/internal/sessionimport/codex"
 	"github.com/PVRLabs/aibadger/internal/startup"
 	"github.com/PVRLabs/aibadger/pkg/badger"
@@ -51,6 +52,9 @@ func TestContinueArgumentForms(t *testing.T) {
 		{args: []string{"continue"}},
 		{args: []string{"continue", "--agent", "codex"}, agent: "codex"},
 		{args: []string{"continue", "--agent=codex", "--session=" + continueIDA}, agent: "codex", id: continueIDA},
+		{args: []string{"continue", "--agent", "claude"}, agent: "claude"},
+		{args: []string{"continue", "--agent=claude", "--session=" + continueIDA}, agent: "claude", id: continueIDA},
+		{args: []string{"continue", "--agent", "claude", "--session", "../file"}, fail: true},
 		{args: []string{"continue", "--session", continueIDA}, fail: true},
 		{args: []string{"continue", "--agent", "other"}, fail: true},
 		{args: []string{"continue", "--agent", "codex", "--session", "../file"}, fail: true},
@@ -62,6 +66,52 @@ func TestContinueArgumentForms(t *testing.T) {
 		if (cfg.parseErr != nil) != tt.fail || (!tt.fail && (cfg.continueAgent != tt.agent || cfg.continueSession != tt.id)) {
 			t.Errorf("loadConfig(%v) = %+v", tt.args, cfg)
 		}
+	}
+}
+
+func TestClaudeContinuePickerDirectAndStartup(t *testing.T) {
+	root := t.TempDir()
+	project := filepath.Join(root, "current")
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	storage := filepath.Join(root, "claude", "projects", "project")
+	if err := os.MkdirAll(storage, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(storage, continueIDA+".jsonl")
+	data := fmt.Sprintf("{\"type\":\"user\",\"sessionId\":%q,\"timestamp\":\"2026-09-28T12:00:00Z\",\"cwd\":%q,\"message\":{\"role\":\"user\",\"content\":\"Fix Claude import\"}}\n", continueIDA, project)
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	newClaude := func() (claude.Source, error) { return claude.Source{Root: filepath.Dir(storage)}, nil }
+	newCodex := func() (codex.Source, error) { return codex.Source{}, errors.New("Codex should not be opened") }
+	cfg := loadConfig([]string{"continue", "--agent", "claude"})
+	called := false
+	err := prepareContinueWithSources(&cfg, project, true, newCodex, newClaude, func(items []sessionimport.Summary) (string, error) {
+		called = true
+		if len(items) != 1 || items[0].Label != "Fix Claude import" || !items[0].ProjectMatch {
+			t.Fatalf("picker items=%+v", items)
+		}
+		return items[0].ID, nil
+	})
+	if err != nil || !called || cfg.claudeImport == nil || cfg.codexImport != nil || !strings.Contains(cfg.claudeImport.Text, "Fix Claude import") {
+		t.Fatalf("route=%+v err=%v", cfg, err)
+	}
+	badgerCfg := badger.DefaultConfig()
+	badgerCfg.Root = project
+	applyClaudeStartup(&badgerCfg, cfg.continueSession, *cfg.claudeImport)
+	if badgerCfg.Startup.Goal != claudeContinueGoal || len(badgerCfg.Startup.Attachments) == 0 || badgerCfg.Startup.Attachments[len(badgerCfg.Startup.Attachments)-1].Source != "Claude session "+continueIDA {
+		t.Fatalf("startup=%+v", badgerCfg.Startup)
+	}
+	cfg = loadConfig([]string{"continue", "--agent", "claude", "--session", continueIDA})
+	err = prepareContinueWithSources(&cfg, project, false, newCodex, newClaude, func([]sessionimport.Summary) (string, error) { t.Fatal("picker called for direct ID"); return "", nil })
+	if err != nil || cfg.claudeImport == nil {
+		t.Fatalf("direct=%+v err=%v", cfg, err)
+	}
+	cfg = loadConfig([]string{"continue", "--agent", "claude"})
+	if err := prepareContinueWithSources(&cfg, project, false, newCodex, newClaude, nil); err == nil || !strings.Contains(err.Error(), "interactive terminal") {
+		t.Fatalf("noninteractive=%v", err)
 	}
 }
 

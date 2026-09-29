@@ -4,6 +4,15 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.7.1] - 2026-09-29
+
+### Session continuation
+
+- Added Claude Code session import to `badger continue`, with a recent-session
+  picker or direct session ID selection. Imported conversation context is
+  bounded and read-only, and Claude’s config directory can be set with
+  `CLAUDE_CONFIG_DIR`.
+
 ## [v0.7.0] - 2026-09-25
 
 ### Session continuation

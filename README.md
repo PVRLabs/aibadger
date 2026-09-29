@@ -2,22 +2,20 @@
 
 # AI Badger — Local AI Coding Context Tool
 
-**Local-first codebase context extraction for any AI chat (Claude, ChatGPT, Grok, DeepSeek, etc.).**
+**Get a second opinion on your code changes using the AI chat you already use.**
 
-Get **precise, token-efficient context** on demand without uploading your entire repo or wasting tokens on irrelevant files.
+Badger is a local-first repository-context bridge for reviews, design questions, and coding-agent workflows. It prepares focused context locally; you control what you share with your AI chat.
 
 [![Release](https://img.shields.io/github/v/release/PVRLabs/aibadger)](https://github.com/PVRLabs/aibadger/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Homebrew](https://img.shields.io/badge/Homebrew-available-brightgreen)](https://github.com/PVRLabs/homebrew-tap)
 [![skills.sh](https://skills.sh/b/PVRLabs/aibadger)](https://skills.sh/PVRLabs/aibadger)
 
-**No cloud • No API keys • No telemetry • Fully local**
+**Local processing • No automatic uploads • No API keys • No telemetry**
 
 [▶ Try Interactive Demo](https://pvrlabs.xyz/aibadger/demo.html) • [Install](#install)
 
 [![AI Badger Interactive Demo](assets/demo.gif)](https://pvrlabs.xyz/aibadger/demo.html)
-
-**Map → Extract → Review/Apply:** A local repository-context and review tool (a context bridge) that prepares focused context for any AI chat or coding-agent workflow.
 
 ## How it works
 
@@ -35,13 +33,14 @@ Badger fetches those files and builds a second prompt.
 
 ↳ You copy it → paste into AI → review its response in Badger → confirm any writes
 
-✓ Fully local — nothing leaves your machine until you copy it  
+✓ Context is prepared locally — your AI provider receives what you paste
+
 ✓ You control every paste and every write
 
 ## Why AI Badger?
 
 - **Universal compatibility** — Works with any AI chat interface or local model
-- **Local-first codebase context tool** — Complete privacy, no uploads
+- **User-controlled sharing** — Nothing is uploaded automatically
 - **Token & cost efficient** — Send only relevant context instead of repeatedly feeding the whole repository to cloud models
 - **Precise & lightweight** — Built in Go, fast, minimal overhead
 - **Specialized modes** — `review` and `design` for common workflows
@@ -70,6 +69,13 @@ guide](skills/README.md) for installation, usage, and details.
 
 ## Quick Start
 
+For an independent review of your Git changes:
+
+- **VS Code:** With the optional [companion extension](https://marketplace.visualstudio.com/items?itemName=pvrlabs.ai-badger), open Source Control and choose **AI Badger: Copy All Changes for Review**, then paste the request into your AI chat. This direct review does not require the CLI.
+- **CLI:** Run `badger review` in your project root, copy the prepared review request, and paste it into your AI chat.
+
+For deeper repository or design questions, use Map → Extract:
+
 1. Run `badger` in your project root. Interactive sessions start in Design focus.
 2. Type your goal (or leave the editor empty and press Enter to explore the project).
 3. Copy **Prompt 1** → paste into your AI chat.
@@ -79,7 +85,6 @@ guide](skills/README.md) for installation, usage, and details.
 
 ### Specialized Modes
 - `badger code` — explicitly start in Code focus
-- `badger review` — Git changes and bounded supporting context for immediate findings
 - `badger design` — explicitly start in Design focus with an empty editor
 
 Full usage: [docs/usage.md](docs/usage.md)

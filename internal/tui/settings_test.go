@@ -104,12 +104,12 @@ func TestResolveSettingsLimitsInvalidNumbersAreIndependentAndStable(t *testing.T
 	cfg := DefaultConfig()
 	got, warnings := resolveSettingsLimits(cfg, &SettingsLimits{
 		MaxFilesPerDirectory: -1, MaxContextFileBytes: 512*1024 + 1,
-		MaxPromptTwoBytes: 256 * 1024, MaxTopologyPromptBytes: 1,
+		MaxPromptTwoBytes: 768 * 1024, MaxTopologyPromptBytes: 1,
 	})
 	if got.MaxFilesPerDirectory != cfg.MaxFilesPerDirectory || got.MaxContextFileBytes != cfg.MaxContextFileBytes || got.MaxTopologyPromptBytes != cfg.MaxTopologyPromptBytes {
 		t.Fatalf("invalid values changed config: %#v", got)
 	}
-	if got.MaxPromptTwoBytes != 256*1024 {
+	if got.MaxPromptTwoBytes != 768*1024 {
 		t.Fatalf("valid sibling MaxPromptTwoBytes = %d", got.MaxPromptTwoBytes)
 	}
 	if len(warnings) != 3 || !strings.Contains(warnings[0], "max_files_per_directory") || !strings.Contains(warnings[1], "max_context_file_bytes") || !strings.Contains(warnings[2], "max_topology_prompt_bytes") {

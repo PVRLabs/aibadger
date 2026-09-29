@@ -20,11 +20,13 @@ const (
 	// including topology, task content, and constraints.
 	MaxTopologyPromptBytes           = 512 * 1024
 	MaxTopologyPromptBytesUpperBound = 2 * 1024 * 1024
+	// MaxContextPayloadBytes is the shared default for extracted code and review payloads.
+	MaxContextPayloadBytes = 512 * 1024
 	// MaxPromptTwoBytes is the target maximum for the serialized Prompt 2.
 	// Badger enforces it by dropping extracted context blocks. If the
 	// non-droppable prompt framing, topology, task, and instructions alone
 	// exceed the target, they remain intact and the final output may exceed it.
-	MaxPromptTwoBytes           = 192 * 1024
+	MaxPromptTwoBytes           = MaxContextPayloadBytes
 	MaxPromptTwoBytesUpperBound = 1024 * 1024
 	// MaxFilesPerDirectory caps the number of files processed per directory in
 	// the generic detector. Prevents hangs on directories like C:\Windows\System32.

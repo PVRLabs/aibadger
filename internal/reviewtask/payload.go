@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	maxInitialReviewPayloadBytes    = 512 * 1024
+	maxInitialReviewPayloadBytes    = defaults.MaxContextPayloadBytes
 	maxInitialReviewFileBytes       = 64 * 1024
 	maxRepositoryLabelBytes         = 128
 	minimumInteractiveTopologyBytes = 40 * 1024

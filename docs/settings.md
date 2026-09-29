@@ -34,7 +34,7 @@ Badger's normal value. Accepted inclusive ranges are:
 |---|---:|---:|
 | `max_files_per_directory` | 250 | 250–5,000 |
 | `max_context_file_bytes` | 50 KiB | 50–512 KiB |
-| `max_prompt_two_bytes` | 192 KiB | 192 KiB–1 MiB |
+| `max_prompt_two_bytes` | 512 KiB | 512 KiB–1 MiB |
 | `max_topology_prompt_bytes` | 512 KiB | 512 KiB–2 MiB |
 
 - An out-of-range number is ignored individually and produces a startup

@@ -1,0 +1,13 @@
+task,task_slug,task_name,repetition,comparison,baseline_workflow,candidate_workflow,baseline_outcome,candidate_outcome,baseline_schedule_position,candidate_schedule_position,baseline_coding_tokens,candidate_coding_tokens,baseline_coding_duration_seconds,candidate_coding_duration_seconds,included_in_efficiency_comparison,coding_token_change_percent,coding_duration_change_percent,exclusion_reason
+1,title-length,Title length,1,B vs A,A,B,success,success,1,2,137155,86992,47.354797524167225,49.635495136957616,true,-36.573949181582876,4.8161912457263645,
+1,title-length,Title length,1,C vs B,B,C,success,success,2,3,86992,64070,49.635495136957616,31.06073742499575,true,-26.34954938385139,-37.42232783355769,
+1,title-length,Title length,2,B vs A,A,B,success,success,12,11,62318,127691,26.874235281022266,39.92757717194036,true,104.90227542604065,48.571956576327025,
+1,title-length,Title length,2,C vs B,B,C,success,success,11,10,127691,86889,39.92757717194036,33.21980675822124,true,-31.953700730670132,-16.799843338436006,
+2,pinned-notes,Pinned notes,1,B vs A,A,B,success,success,6,4,115123,170628,47.240208671893924,178.22588824597187,true,48.21364974852984,277.27582764046787,
+2,pinned-notes,Pinned notes,1,C vs B,B,C,success,success,4,5,170628,382320,178.22588824597187,115.20822175801732,true,124.06639004149378,-35.35831248094724,
+2,pinned-notes,Pinned notes,2,B vs A,A,B,validation_failure,success,13,15,89626,187589,34.80108167021535,96.37488473486155,false,,,Direct coding run failed independent validation. Efficiency comparisons include only pairs with two successful recorded outcomes.
+2,pinned-notes,Pinned notes,2,C vs B,B,C,success,success,15,14,187589,238709,96.37488473486155,81.3011182709597,true,27.251064827895032,-15.640762119064034,
+3,unchanged-saves,Unchanged save,1,B vs A,A,B,success,success,8,9,109620,168957,46.53652761410922,76.61644216999412,true,54.129720853858785,64.63721317007996,
+3,unchanged-saves,Unchanged save,1,C vs B,B,C,success,success,9,7,168957,153849,76.61644216999412,214.85034700483084,true,-8.941920133525095,180.42328894381149,
+3,unchanged-saves,Unchanged save,2,B vs A,A,B,success,incomplete,17,16,162859,257462,55.23096905788407,,false,,,Generic-planning coding run was interrupted and is incomplete. Its coding duration is unavailable.
+3,unchanged-saves,Unchanged save,2,C vs B,B,C,incomplete,success,16,18,257462,156582,,72.34480450698175,false,,,Generic-planning coding run was interrupted and is incomplete. Its coding duration is unavailable.

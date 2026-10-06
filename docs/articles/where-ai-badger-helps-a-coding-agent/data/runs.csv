@@ -1,0 +1,19 @@
+task,task_slug,task_name,repetition,workflow,schedule_position,outcome,coding_tokens,input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,coding_duration_seconds,independent_validation,app_tests
+1,title-length,Title length,1,A,1,success,137155,135401,107520,1754,248,47.354797524167225,pass,pass
+1,title-length,Title length,1,B,2,success,86992,85598,59904,1394,114,49.635495136957616,pass,pass
+1,title-length,Title length,1,C,3,success,64070,62949,52992,1121,179,31.06073742499575,pass,fail
+1,title-length,Title length,2,A,12,success,62318,61360,41216,958,0,26.874235281022266,pass,pass
+1,title-length,Title length,2,B,11,success,127691,126073,102912,1618,230,39.92757717194036,pass,pass
+1,title-length,Title length,2,C,10,success,86889,85731,66304,1158,83,33.21980675822124,pass,pass
+2,pinned-notes,Pinned notes,1,A,6,success,115123,113286,79104,1837,260,47.240208671893924,pass,pass
+2,pinned-notes,Pinned notes,1,B,4,success,170628,168080,137728,2548,0,178.22588824597187,pass,pass
+2,pinned-notes,Pinned notes,1,C,5,success,382320,378049,351232,4271,312,115.20822175801732,pass,fail
+2,pinned-notes,Pinned notes,2,A,13,validation_failure,89626,88335,75264,1291,0,34.80108167021535,fail,fail
+2,pinned-notes,Pinned notes,2,B,15,success,187589,184546,154112,3043,626,96.37488473486155,pass,pass
+2,pinned-notes,Pinned notes,2,C,14,success,238709,235444,213504,3265,295,81.3011182709597,pass,pass
+3,unchanged-saves,Unchanged save,1,A,8,success,109620,108006,95232,1614,321,46.53652761410922,pass,fail
+3,unchanged-saves,Unchanged save,1,B,9,success,168957,165641,133376,3316,492,76.61644216999412,pass,pass
+3,unchanged-saves,Unchanged save,1,C,7,success,153849,151708,131584,2141,195,214.85034700483084,pass,pass
+3,unchanged-saves,Unchanged save,2,A,17,success,162859,160732,119808,2127,432,55.23096905788407,pass,fail
+3,unchanged-saves,Unchanged save,2,B,16,incomplete,257462,252420,227840,5042,777,,pass,pass
+3,unchanged-saves,Unchanged save,2,C,18,success,156582,153361,135680,3221,387,72.34480450698175,pass,pass

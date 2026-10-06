@@ -1,5 +1,7 @@
 # Can AI Badger Reduce Local Coding Agent Token Usage?
 
+> **Update:** An [18-run follow-up](../where-ai-badger-helps-a-coding-agent/index.md) found that total coding-agent tokens depend on the task, so the single-run savings below did not hold in general. Badger repository context lowered uncached input in all six observed pairs, including one interrupted run (−30.8% across the five usable pairs). Every Badger-context implementation passed the independent checks.
+
 In this single dogfooding experiment, using a compact handoff produced by AI Badger's `/design` mode plus an external compression step reduced OpenCode's active tokens by 32.1%, reasoning tokens by 85.6%, and runtime by 54.5% compared with sending the feature prompt directly.
 
 Including cache reads, total token movement dropped by 63.2%.

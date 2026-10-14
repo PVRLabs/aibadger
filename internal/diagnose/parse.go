@@ -74,8 +74,13 @@ func prefixedVersion(prefix string) func(string) (string, bool) {
 
 func afterPrefix(output, prefix string) (string, bool) {
 	for _, line := range lines(output) {
+		line = strings.TrimSpace(line)
 		if strings.HasPrefix(strings.ToLower(line), strings.ToLower(prefix)) {
-			value := versionPattern.FindString(strings.TrimPrefix(line, prefix))
+			rest := line[len(prefix):]
+			if rest == "" || (rest[0] != ' ' && rest[0] != '\t') {
+				continue
+			}
+			value := versionPattern.FindString(rest)
 			return value, value != ""
 		}
 	}

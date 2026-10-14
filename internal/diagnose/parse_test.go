@@ -10,6 +10,8 @@ func TestParsersReturnOnlyNormalizedVersions(t *testing.T) {
 		want  string
 	}{
 		{name: "git", parse: parseGit, input: "git version 2.51.0.windows.1", want: "2.51.0.windows.1"},
+		{name: "git surrounding whitespace", parse: parseGit, input: "  Git Version\t2.51.0\r\n", want: "2.51.0"},
+		{name: "maven surrounding whitespace", parse: prefixedVersion("Apache Maven"), input: "\tApache Maven 3.9.11  \n", want: "3.9.11"},
 		{name: "go", parse: parseGo, input: "go version go1.27.1 linux/amd64", want: "1.27.1"},
 		{name: "go release candidate", parse: parseGo, input: "go version go1.28rc1 linux/amd64", want: "1.28rc1"},
 		{name: "go beta", parse: parseGo, input: "go version go1.29beta2 linux/amd64", want: "1.29beta2"},
@@ -25,6 +27,14 @@ func TestParsersReturnOnlyNormalizedVersions(t *testing.T) {
 				t.Fatalf("parse(%q) = %q, %v; want %q, true", test.input, got, ok, test.want)
 			}
 		})
+	}
+}
+
+func TestPrefixedVersionRejectsSimilarToolNames(t *testing.T) {
+	for _, input := range []string{"pip-warning 25.2", "pip3 25.2", "pip", "pip\n"} {
+		if got, ok := parsePip(input); ok {
+			t.Fatalf("parsePip(%q) = %q, true; want rejection", input, got)
+		}
 	}
 }
 

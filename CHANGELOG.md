@@ -4,6 +4,37 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+### Offline Codebase Map
+
+- Added `badger map [path]` to generate a portable, offline HTML report of a
+  codebase, with folder sizes based on nonblank source lines, language
+  breakdowns, file details, search, and folder exploration.
+- Reports include dark and light themes and copyable tasks for starting focused
+  work in Badger. Generation requires no Git repository or provider setup;
+  reports contain relative paths and aggregate metadata rather than source
+  contents.
+- Generation skips dependency, build, and cache trees, does not follow symlinks,
+  and enforces scan and report limits. Successful regeneration replaces the
+  existing report; failed generation preserves it. The CLI prints a command
+  for opening the report on macOS, Linux, or Windows.
+
+### Context and response handling
+
+- Aligned default code-context and review-payload limits at 512 KiB, with
+  consistent trimming for code context and review continuation.
+- Fixed AI response parsing to preserve file content with lines longer than
+  64 KiB and report unterminated file blocks instead of silently dropping them.
+- Avoided redundant extraction when repeated requests target the same complete
+  file or request excerpts already covered by a full-file request.
+
+### Minor polish
+
+- Improved diagnostic version parsing to accept surrounding whitespace and
+  reject similarly named tool prefixes.
+- Updated `go-runewidth` from v0.0.19 to v0.0.30 for Unicode display-width fixes.
+- Added a Codebase Map guide and a follow-up article comparing where Badger
+  context helps coding agents.
+
 ## [v0.7.1] - 2026-09-29
 
 ### Session continuation

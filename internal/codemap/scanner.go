@@ -134,6 +134,15 @@ func scanProjectWithLimits(rootPath string, limits scanLimits) (*directory, erro
 }
 
 func scanProjectWithReadDir(rootPath string, limits scanLimits, readDir func(*os.File, int) ([]os.DirEntry, error)) (*directory, error) {
+	return scanProjectWithReportExclusion(rootPath, limits, readDir, "")
+}
+
+// Exclude only the report being replaced, never a filename pattern or all HTML.
+func scanProjectExcludingReport(rootPath, reportPath string) (*directory, error) {
+	return scanProjectWithReportExclusion(rootPath, scanLimits{maxDirectoryDepth, maxDirectories, maxSourceFiles, maxSourceBytes}, (*os.File).ReadDir, reportPath)
+}
+
+func scanProjectWithReportExclusion(rootPath string, limits scanLimits, readDir func(*os.File, int) ([]os.DirEntry, error), reportPath string) (*directory, error) {
 	absRoot, err := filepath.Abs(rootPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve source directory %q: %w", rootPath, err)
@@ -155,6 +164,11 @@ func scanProjectWithReadDir(rootPath string, limits scanLimits, readDir func(*os
 	if limits.directories < 1 {
 		return nil, fmt.Errorf("directory limit (%d) exceeded at %s", limits.directories, absRoot)
 	}
+	var reportInfo os.FileInfo
+	if reportPath != "" {
+		reportPath = filepath.Clean(reportPath)
+		reportInfo, _ = os.Lstat(reportPath)
+	}
 	sourceFiles := 0
 	err = walkSourceTree(absRoot, 0, limits.depth, readDir, func(path string, entry classifiedEntry) error {
 		if entry.isDir {
@@ -170,6 +184,24 @@ func scanProjectWithReadDir(rootPath string, limits scanLimits, readDir func(*os
 			}
 			directories[path] = newDirectory(entry.name, filepath.ToSlash(rel))
 			return nil
+		}
+		// Exclusion precedes file/byte quotas and line reading. SameFile handles
+		// case/path aliases; matching the parent prevents excluding hard links
+		// elsewhere in the tree merely because they share the report's inode.
+		if reportPath != "" {
+			if path == reportPath {
+				return nil
+			}
+			if reportInfo != nil && strings.EqualFold(entry.name, filepath.Base(reportPath)) {
+				candidate, candidateErr := os.Lstat(path)
+				if candidateErr == nil && os.SameFile(candidate, reportInfo) {
+					parent, parentErr := os.Stat(filepath.Dir(path))
+					reportParent, reportParentErr := os.Stat(filepath.Dir(reportPath))
+					if parentErr == nil && reportParentErr == nil && os.SameFile(parent, reportParent) {
+						return nil
+					}
+				}
+			}
 		}
 		language := entry.language
 		if language == "" {

@@ -91,12 +91,10 @@ Full usage: [docs/usage.md](docs/usage.md)
 
 ## Offline Codebase Map
 
-Run `badger map /path/to/project` to generate `badger-codemap-<repo_name>.html`
-in your current directory, then open it directly from disk. The offline map
-shows raw nonblank source-line concentration, including comments; area does not
-measure complexity or recommended AI context size. Generation is local and bounded;
-failures preserve an existing report. See [usage](docs/usage.md#offline-codebase-map)
-or `badger map --help`.
+Run `badger map` to generate a local, offline HTML map of your codebase.
+Explore folders and see where source lines are concentrated.
+
+[Live demo](https://pvrlabs.xyz/aibadger/codemap/) · [Guide](docs/codemap.md)
 
 ## Learn More
 

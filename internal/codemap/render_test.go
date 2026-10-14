@@ -127,13 +127,13 @@ func TestPageStandaloneAssets(t *testing.T) {
 			t.Errorf("unexpected runtime/network dependency %q", forbidden)
 		}
 	}
-	if strings.Count(pageTemplate, "https://") != 1 || !strings.Contains(pageTemplate, `link.href = "https://github.com/PVRLabs/aibadger#quick-start"`) {
-		t.Fatal("only the explicit-action Quick Start link may refer to the network")
+	if strings.Count(pageTemplate, "https://") != 4 || !strings.Contains(pageTemplate, `link.href = "https://github.com/PVRLabs/aibadger#quick-start"`) {
+		t.Fatal("only explicit-action Quick Start, product and GitHub links may refer to the network")
 	}
 	if strings.Count(pageTemplate, dataMarker) != 1 {
 		t.Fatal("expected one metadata marker")
 	}
-	for _, fragment := range []string{`value="2" selected`, "prefers-reduced-motion", "No subfolders with nonblank source lines", "Generated locally · Nothing uploaded"} {
+	for _, fragment := range []string{`value="2" selected`, "prefers-reduced-motion", "No subfolders with nonblank source lines", "Generated locally · Nothing uploaded", `<a class="brand" href="https://pvrlabs.xyz/aibadger" target="_blank" rel="noopener noreferrer">AI Badger</a>`, `href="https://pvrlabs.xyz/aibadger" target="_blank" rel="noopener noreferrer">AI Badger</a>`, `href="https://github.com/PVRLabs/aibadger" target="_blank" rel="noopener noreferrer">Star us on GitHub ↗</a>`} {
 		if !strings.Contains(pageTemplate, fragment) {
 			t.Errorf("missing page contract %q", fragment)
 		}

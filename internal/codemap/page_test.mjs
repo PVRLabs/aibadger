@@ -175,6 +175,8 @@ test('tile labels progressively disappear; activation selects or explores', () =
   assert.match(tile(89,47).innerHTML, /&lt;src&gt;/);
   assert.equal(tile(63,29).innerHTML, '');
   const active = tile(200,90);
+  assert.equal(active.title, undefined);
+  assert.match(active.attributes["aria-label"], /25 lines/);
   active.events.keydown({key:'Enter',preventDefault() {}});
   assert.equal(inspected,node); assert.equal(explored,undefined);
   active.events.keydown({key:'Enter',shiftKey:true,preventDefault() {}});
@@ -186,6 +188,43 @@ test('tile labels progressively disappear; activation selects or explores', () =
   assert.equal(explored,undefined);
   direct.events.keydown({key:'Enter',shiftKey:true,preventDefault() {}});
   assert.equal(inspected,node); assert.equal(explored,undefined);
+});
+
+test('spacious terminal tiles show exact totals and current-view shares without expanding nested labels', () => {
+  const node = {name:'<leaf>',path:'leaf',lines:7600,files:55,children:[],languages:{Python:{lines:5700},Go:{lines:1900}}};
+  const context = vm.createContext({node,focus:{lines:10000},selected:{path:'.'},visibleTiles:new Map(),
+    document:{createElement:element},map:{appendChild() {}},showTooltip() {},hideTooltip() {}});
+  vm.runInContext(helpers + sizing + language + functions('percent','selectNode') + functions('tileKey','renderChildren'),context);
+  const tile = (w,h,depth=0,direct=false) => vm.runInContext(`makeTile({node,direct:${direct}},{x:0,y:0,w:${w},h:${h}},${depth},158)`,context);
+  const large=tile(600,400);
+  assert.match(large.innerHTML,/&lt;leaf&gt;.*7,600 nonblank lines · 55 files.*76% of lines in this view.*Python 75%.*Go 25%/);
+  assert.doesNotMatch(tile(299,400).innerHTML,/tile-share/);
+  assert.doesNotMatch(tile(600,199).innerHTML,/tile-share/);
+  assert.doesNotMatch(tile(600,400,1).innerHTML,/tile-share/);
+  node.children=[{lines:1}];
+  assert.doesNotMatch(tile(600,400).innerHTML,/tile-share/);
+  node.owner={path:'owner'}; node.lines=2500; node.files=10; node.languages={Python:{lines:2500}};
+  assert.match(tile(600,400,0,true).innerHTML,/2,500 nonblank lines · 10 files.*25% of lines in this view.*Python 100%/);
+});
+
+test('folder tile Explore control navigates with one click and excludes direct or cramped regions', () => {
+  const node=folder('leaf',{Go:{lines:25,files:1}});
+  let added=[],explored,stopped=false;
+  const context=vm.createContext({node,selected:{path:'.'},visibleTiles:new Map(),
+    document:{createElement:element},map:{appendChild(el) {added.push(el);}},
+    showTooltip() {},hideTooltip() {},focusOn(value) {explored=value;}});
+  vm.runInContext(helpers+sizing+language+functions('tileKey','renderChildren'),context);
+  const tile=(w,h,direct=false) => {added=[];vm.runInContext(`makeTile({node,direct:${direct}},{x:10,y:20,w:${w},h:${h}},0,158)`,context);};
+  tile(200,90);
+  assert.equal(added.length,2);
+  const button=added[1];
+  assert.equal(button.textContent,'Explore →');
+  assert.equal(button.attributes['aria-label'],'Explore folder leaf');
+  button.events.click({stopPropagation() {stopped=true;}});
+  assert.equal(explored,node);assert.equal(stopped,true);
+  tile(179,90);assert.equal(added.length,1);
+  tile(200,69);assert.equal(added.length,1);
+  node.owner={path:'.'};tile(200,90,true);assert.equal(added.length,1);
 });
 
 test('direct-region selection cannot collide with unusual real folder paths and survives redraw', () => {

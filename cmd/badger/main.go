@@ -693,7 +693,7 @@ Usage:
   badger badge
   badger skills install
   badger diagnose
-  badger map <path>
+  badger map [path]
   badger api <command> --help
   badger version
 
@@ -719,7 +719,7 @@ Troubleshooting:
   diagnose    Print environment information for troubleshooting and bug reports.
 
 Codebase Map:
-  map <path>  Generate an offline HTML map in the current directory.
+  map [path]  Generate an offline HTML map; defaults to the current directory.
   Run badger map --help for naming, metrics, and limits.
 
 Review options:

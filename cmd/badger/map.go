@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/codemap"
@@ -17,25 +18,44 @@ func runMapCommandWithGenerator(args []string, stdout io.Writer, generate func(s
 		_, err := io.WriteString(stdout, mapHelp)
 		return err
 	}
-	if len(args) != 1 || args[0] == "" {
-		return fmt.Errorf("badger map requires exactly one directory path; usage: badger map <path> (see badger map --help)")
+	if len(args) > 1 || (len(args) == 1 && args[0] == "") {
+		return fmt.Errorf("badger map accepts at most one directory path; usage: badger map [path] (see badger map --help)")
 	}
-	if strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("unknown badger map option %q; use ./ for a directory name beginning with '-'; see badger map --help", args[0])
+	path := "."
+	if len(args) == 1 {
+		path = args[0]
 	}
-	path, err := generate(args[0])
+	if strings.HasPrefix(path, "-") {
+		return fmt.Errorf("unknown badger map option %q; use ./ for a directory name beginning with '-'; see badger map --help", path)
+	}
+	path, err := generate(path)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(stdout, path)
+	_, err = fmt.Fprintf(stdout, "Generated codebase map HTML report.\nUse the following command to open:\n%s\n", mapOpenCommand(path, runtime.GOOS))
 	return err
 }
 
-const mapHelp = `Usage: badger map <path>
+// The Windows command is explicitly for PowerShell; POSIX commands quote all
+// path characters literally, including apostrophes and shell substitutions.
+func mapOpenCommand(path, goos string) string {
+	if goos == "windows" {
+		return "PowerShell:\nInvoke-Item -LiteralPath '" + strings.ReplaceAll(path, "'", "''") + "'"
+	}
+	quoted := "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
+	if goos == "darwin" {
+		return "open -- " + quoted
+	}
+	return "xdg-open " + quoted
+}
+
+const mapHelp = `Usage: badger map [path]
 
 Generate a local, offline Codebase Map from one directory (no Git required).
+Defaults to the current directory when path is omitted.
 Write badger-codemap-<repo_name>.html in the caller's current directory and
-print its absolute path after publication. Open the file directly from disk.
+print a success message and an OS-specific command to open the report.
+Run the printed command to open the file directly from disk.
 Unusual basenames are normalized for portable filenames. Successful generation
 replaces an existing regular report; failures preserve it. No confirmation prompt.
 

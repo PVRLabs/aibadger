@@ -43,11 +43,17 @@ button { cursor:pointer; }
 button:disabled { opacity:.4; cursor:default; }
 button:focus-visible,input:focus-visible,select:focus-visible,.tile:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 header { padding:18px 28px; display:flex; align-items:center; justify-content:space-between; gap:24px; background:var(--panel); border-bottom:1px solid var(--line); }
-.brand { color:var(--accent); font-size:20px; font-weight:700; letter-spacing:-.65px; }
+.brand { color:var(--accent); font-size:20px; font-weight:700; letter-spacing:-.65px; text-decoration:none; }
+.brand:hover { text-decoration:underline; text-underline-offset:4px; }
+.brand:focus-visible { outline:2px solid var(--accent); outline-offset:4px; border-radius:2px; }
 .brand-line { display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; }
 .feature-name { padding-left:16px; border-left:1px solid var(--line); font-size:14px; font-weight:550; color:var(--text); }
 .page-footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px 20px; padding:16px 2px 0; font-size:11px; color:var(--muted); }
 .footer-brand { color:var(--accent); }
+.page-footer a { color:var(--accent); text-decoration:none; }
+.page-footer a:hover { text-decoration:underline; text-underline-offset:3px; }
+.page-footer a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.footer-links { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; }
 .subtitle { color:var(--muted); font-size:12px; margin-top:4px; }
 .header-actions { display:flex; align-items:center; gap:12px; }
 #theme-toggle { padding:9px 12px; }
@@ -100,6 +106,16 @@ main { display:grid; grid-template-columns:minmax(0,1fr) 310px; background:var(-
 .language-chip { display:block; min-width:0; padding:1px 5px; border-radius:4px; font-size:10px; line-height:16px; color:#f5f7f6; background:transparent; border:1px solid hsl(var(--language-hue) var(--language-saturation) 72% / .45); overflow:hidden; text-overflow:ellipsis; }
 .language-more { flex-shrink:0; font-size:10px; line-height:18px; color:#ffffffcf; }
 .tile-lines { display:block; color:#ffffffdf; font-size:11px; line-height:15px; }
+.tile.spacious > .tile-label { padding:18px 20px; }
+.tile.spacious .tile-name { font-size:18px; line-height:26px; }
+.tile.spacious .tile-lines { margin-top:10px; font-size:14px; line-height:22px; white-space:normal; }
+.tile-share { display:block; margin-top:3px; color:#ffffffdf; font-size:13px; line-height:20px; }
+.tile.spacious .tile-languages { margin-top:12px; }
+.tile.spacious .language-chip { font-size:12px; }
+.tile.has-explore .tile-name { padding-right:72px; }
+.tile-explore { position:absolute; z-index:2; padding:3px 5px; border:0; border-radius:3px; background:transparent; color:white; font:inherit; font-size:11px; line-height:18px; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.tile-explore:hover { background:#ffffff18; }
+.tile-explore:focus-visible { outline:2px solid var(--selection); outline-offset:1px; }
 .tile.tiny .tile-label { display:none; }
 #details { min-width:0; padding:22px; border-left:1px solid var(--line); max-height:max(490px,calc(100vh - 290px)); overflow:auto; }
 .eyebrow { color:var(--muted); font-size:10px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; }
@@ -146,7 +162,7 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
 </head>
 <body>
 <header>
-  <div><div class="brand-line"><div class="brand">AI Badger</div><div class="feature-name">Codebase Map</div></div><div class="subtitle">A closer look at where your code lives.</div></div>
+  <div><div class="brand-line"><a class="brand" href="https://pvrlabs.xyz/aibadger" target="_blank" rel="noopener noreferrer">AI Badger</a><div class="feature-name">Codebase Map</div></div><div class="subtitle">A closer look at where your code lives.</div></div>
   <div class="header-actions"><div class="search"><input id="search" type="search" placeholder="Find a folder…" aria-label="Find a folder" autocomplete="off" aria-controls="search-results"><div id="search-results" aria-label="Matching folders"></div></div><button id="theme-toggle" class="control" type="button" aria-label="Switch to light mode">☀ Light mode</button></div>
 </header>
 <div class="workspace">
@@ -158,10 +174,10 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
     <div id="repository-stats" aria-label="Repository totals"></div>
   </div>
   <main>
-    <section id="map-wrap"><div id="map" aria-label="Directory treemap"></div><div class="map-caption"><span id="area-caption">Area = nonblank lines, including comments · Color = folder group</span><span>Click to inspect · Double-click to explore</span></div></section>
+    <section id="map-wrap"><div id="map" aria-label="Directory treemap"></div><div class="map-caption"><span id="area-caption">Area = nonblank lines, including comments · Color = folder group</span><span>Click to inspect · Double-click to explore folder</span></div></section>
     <aside id="details" aria-label="Folder details"></aside>
   </main>
-  <footer class="page-footer"><span class="footer-brand">AI Badger · Codebase Map</span><span>Generated locally · Nothing uploaded</span></footer>
+  <footer class="page-footer"><span class="footer-brand"><a href="https://pvrlabs.xyz/aibadger" target="_blank" rel="noopener noreferrer">AI Badger</a> · Codebase Map</span><span class="footer-links"><span>Generated locally · Nothing uploaded</span><a href="https://github.com/PVRLabs/aibadger" target="_blank" rel="noopener noreferrer">Star us on GitHub ↗</a></span></footer>
 </div>
 <div id="tooltip"></div>
 <script id="map-data" type="application/json">__BADGER_MAP_DATA__</script>
@@ -298,6 +314,10 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
   function tileKey(node) {
     return JSON.stringify([node.owner ? node.owner.path : node.path, Boolean(node.owner)]);
   }
+  function spaciousTileSummary(node) {
+    return '<span class="tile-lines">' + formatNumber(node.lines) + ' nonblank lines · ' + formatNumber(node.files) + ' files</span>' +
+      '<span class="tile-share">' + percent(node.lines, focus.lines) + ' of lines in this view</span>' + languageChips(node, true);
+  }
   function makeTile(item, box, depth, hue) {
     const tile = document.createElement("div");
     tile.className = "tile depth-" + depth + (item.direct ? " direct" : "");
@@ -311,15 +331,17 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
       tile.style.setProperty("--tile-hue", hue);
       tile.style.setProperty("--tile-depth", Math.min(9, depth * 3) + "%");
     }
+    const spacious = depth === 0 && box.w >= 300 && box.h >= 200 &&
+      (item.direct || item.node.children.length === 0);
+    if (spacious) tile.classList.add("spacious");
     if (box.w >= 64 && box.h >= 30) {
-      tile.innerHTML = '<div class="tile-label"><span class="tile-name">' + escapeHTML(item.node.name) + '</span>' + (box.w >= 90 && box.h >= 48 ? '<span class="tile-lines">' + compact(item.node.lines) + ' lines</span>' : '') + (showTileLanguages(item.node, box) ? languageChips(item.node) : '') + '</div>';
+      tile.innerHTML = '<div class="tile-label"><span class="tile-name">' + escapeHTML(item.node.name) + '</span>' + (spacious ? spaciousTileSummary(item.node) : (box.w >= 90 && box.h >= 48 ? '<span class="tile-lines">' + compact(item.node.lines) + ' lines</span>' : '') + (showTileLanguages(item.node, box) ? languageChips(item.node) : '')) + '</div>';
     }
     tile.addEventListener("mousemove", event => showTooltip(event, item.node));
     tile.addEventListener("mouseleave", hideTooltip);
     {
       tile.tabIndex = 0;
       tile.setAttribute("role", "button");
-      tile.title = languageNames(item.node).join(", ");
       tile.setAttribute("aria-label", (item.direct ? item.node.owner.path + ": Files in this folder" : item.node.path) + ", " + formatNumber(item.node.lines) + (item.direct ? " lines. Enter to inspect files." : " lines. Enter to inspect; Shift Enter to explore."));
       tile.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") {
@@ -338,6 +360,22 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
       });
     }
     map.appendChild(tile);
+    if (!item.direct && box.w >= 180 && box.h >= 70) {
+      tile.classList.add("has-explore");
+      const explore = document.createElement("button");
+      explore.className = "tile-explore";
+      explore.type = "button";
+      explore.textContent = "Explore →";
+      explore.setAttribute("aria-label", "Explore folder " + item.node.path);
+      explore.style.left = (box.x + box.w - 76) + "px";
+      explore.style.top = (box.y + (spacious ? 18 : 6)) + "px";
+      explore.addEventListener("click", event => {
+        event.stopPropagation();
+        hideTooltip();
+        focusOn(item.node);
+      });
+      map.appendChild(explore);
+    }
     return tile;
   }
 
@@ -410,10 +448,10 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
     const known = Object.prototype.hasOwnProperty.call(hues, name);
     return '--language-hue:' + (known ? hues[name] : 160) + ';--language-saturation:' + (known ? '36%' : '0%');
   }
-  function languageChips(node) {
+  function languageChips(node, showPercentages = false) {
     const names = languageNames(node);
     return '<span class="tile-languages">' + names.slice(0, 2).map(name =>
-      '<span class="language-chip" style="' + languageStyle(name) + '">' + escapeHTML(name) + '</span>'
+      '<span class="language-chip" style="' + languageStyle(name) + '">' + escapeHTML(name) + (showPercentages ? ' ' + percent(node.languages[name].lines, node.lines) : '') + '</span>'
     ).join("") + (names.length > 2 ? '<span class="language-more">+' + (names.length - 2) + '</span>' : '') + '</span>';
   }
   function languageBar(name, lines, total) {

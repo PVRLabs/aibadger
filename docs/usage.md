@@ -299,14 +299,22 @@ Keep the change small and include any tests that should change.
 
 ## Offline Codebase Map
 
+See the [Codebase Map guide](codemap.md) for a screenshot and explanation of
+folder navigation, metrics, and suggested Badger tasks.
+
 ```bash
+badger map
 badger map /path/to/project
 badger map --help
 ```
 
-Supply exactly one directory; Git and provider configuration are unnecessary.
+Omit the path to map the current directory, or supply one directory.
+Git and provider configuration are unnecessary.
 The command writes `badger-codemap-<repo_name>.html` in the caller's current
-working directory and prints its absolute path after successful publication.
+working directory and prints `Generated codebase map HTML report.`, then `Use the following command to open:`,
+followed by an OS-specific open command
+containing the absolute report path
+after successful publication.
 Unusual basenames are normalized for portable filenames. Open the HTML directly
 from disk: no server, upload, CDN, font download, or frontend runtime is needed.
 The command does not launch a browser. Running it authorizes report creation or

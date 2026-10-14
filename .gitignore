@@ -6,4 +6,5 @@ out.txt
 /badger-release
 *.test
 /bin/badger
+/badger-codemap-aibadger.html
 .agent-logs/

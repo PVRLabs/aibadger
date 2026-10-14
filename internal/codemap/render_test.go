@@ -122,10 +122,13 @@ func TestRenderStringChunks(t *testing.T) {
 }
 
 func TestPageStandaloneAssets(t *testing.T) {
-	for _, forbidden := range []string{"src=", "@import", "url(", "fetch(", "XMLHttpRequest", "https://", "http://", "__BADGER_MAP_DATA____BADGER_MAP_DATA__"} {
+	for _, forbidden := range []string{"src=", "@import", "url(", "fetch(", "XMLHttpRequest", "__BADGER_MAP_DATA____BADGER_MAP_DATA__"} {
 		if strings.Contains(pageTemplate, forbidden) {
 			t.Errorf("unexpected runtime/network dependency %q", forbidden)
 		}
+	}
+	if strings.Count(pageTemplate, "https://") != 1 || !strings.Contains(pageTemplate, `link.href = "https://github.com/PVRLabs/aibadger#quick-start"`) {
+		t.Fatal("only the explicit-action Quick Start link may refer to the network")
 	}
 	if strings.Count(pageTemplate, dataMarker) != 1 {
 		t.Fatal("expected one metadata marker")

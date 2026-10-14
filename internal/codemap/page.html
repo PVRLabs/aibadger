@@ -122,6 +122,22 @@ main { display:grid; grid-template-columns:minmax(0,1fr) 310px; background:var(-
 .child-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .substat { display:block; color:var(--muted); font-size:11px; font-weight:400; }
 #tooltip { position:fixed; z-index:100; display:none; max-width:320px; padding:10px 13px; border-radius:8px; color:white; background:var(--tooltip); box-shadow:0 5px 20px var(--shadow); pointer-events:none; font-size:12px; overflow-wrap:anywhere; }
+.folder-heading { display:flex; align-items:center; gap:8px; }
+.folder-heading h2 { min-width:0; }
+.copy-path { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; width:30px; height:30px; padding:6px; border:0; background:transparent; color:var(--muted); }
+.copy-path:hover { color:var(--accent); }
+.copy-status:empty { display:none; }
+.badger-help { margin-top:20px; border-top:1px solid var(--line); padding-top:16px; font-size:12px; }
+.badger-help summary { cursor:pointer; font-weight:600; }
+.badger-help p,.badger-help ol { color:var(--muted); }
+.badger-help ol { padding-left:20px; }
+.badger-help li { margin:6px 0; }
+.badger-help a { color:var(--accent); }
+.copy-fragment { margin:12px 0; }
+.copy-fragment label { display:block; margin-bottom:6px; font-weight:600; }
+.copy-fragment textarea,.copy-fallback { display:block; width:100%; resize:vertical; border:1px solid var(--line); border-radius:6px; padding:9px; background:var(--input); color:var(--text); font:12px/1.6 var(--font-code); margin-bottom:6px; }
+.copy-status { color:var(--muted); font-size:11px; min-height:1.5em; margin-top:6px; }
+summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .empty { padding:12px; color:var(--muted); font-size:12px; }
 @media(max-width:1100px) { .toolbar { flex-wrap:wrap; } #repository-stats { order:3; flex-basis:100%; margin:4px 0 0; padding:12px 0 0; border-left:0; border-top:1px solid var(--line); text-align:left; } }
 @media(max-width:900px) { header { padding:16px; } .workspace { padding:16px; } main { grid-template-columns:minmax(0,1fr) 270px; } .depth-label { display:none; } }
@@ -407,6 +423,105 @@ main { display:grid; grid-template-columns:minmax(0,1fr) 310px; background:var(-
   function directLanguageRows(node) {
     return languageNames(node).map(name => '<div class="stat-row"><div class="stat-heading"><span>' + escapeHTML(name) + '</span><span class="stat-value">' + formatNumber(node.languages[name].lines) + ' lines</span></div>' + languageBar(name, node.languages[name].lines, node.lines) + '</div>').join("");
   }
+  function taskFragments(node) {
+    const scope = node.path === "." ? "this repository" : "the folder " + JSON.stringify(node.path);
+    return [
+      {label: "Explore · paste into Badger’s goal editor", text: "Explain how " + scope + " works. Start with its responsibilities, entry points, and the files most relevant to understanding it. Include related code elsewhere when needed."},
+      {label: "Change · replace the bracketed task, then paste into Badger’s goal editor", text: "In " + scope + ", I want to [describe the change]. Identify the smallest relevant set of files and tests, including dependencies outside this folder when needed."}
+    ];
+  }
+  function workflowFragments(node) {
+    const tasks = taskFragments(node);
+    return [
+      {label:"Design / exploration · run from the repository root", text:"badger", command:true},
+      tasks[0],
+      {label:"Code / implementation · run from the repository root", text:"badger code", command:true},
+      tasks[1]
+    ];
+  }
+  async function copyText(text, status, field) {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+      status.textContent = "Copied.";
+    } catch (_) {
+      // Local HTML clipboard access varies by browser. Keep a selectable fallback.
+      let fallback = field;
+      if (!fallback) {
+        fallback = status.parentElement.querySelector(".copy-fallback");
+        if (!fallback) {
+          fallback = document.createElement("textarea");
+          fallback.className = "copy-fallback";
+          fallback.readOnly = true;
+          fallback.setAttribute("aria-label", "Folder path to copy");
+          status.before(fallback);
+        }
+        fallback.value = text;
+      }
+      fallback.focus();
+      fallback.select();
+      status.textContent = "Text selected. Press Ctrl+C or ⌘C to copy.";
+    }
+  }
+  function addBadgerActions(node) {
+    const heading = details.querySelector("h2");
+    const row = document.createElement("div");
+    row.className = "folder-heading";
+    heading.before(row);
+    row.appendChild(heading);
+    const copy = document.createElement("button");
+    copy.className = "control copy-path";
+    copy.title = "Copy path";
+    copy.setAttribute("aria-label", "Copy path");
+    copy.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>';
+    copy.type = "button";
+    row.appendChild(copy);
+    const status = document.createElement("div");
+    status.className = "copy-status";
+    status.setAttribute("role", "status");
+    row.after(status);
+    copy.addEventListener("click", () => copyText(node.path, status));
+
+    const help = document.createElement("details");
+    help.className = "badger-help";
+    help.innerHTML = '<summary>Work on this folder with Badger</summary>' +
+      '<p>Badger prepares code context for your AI chat. Use this folder as a starting point for a question or change.</p>' +
+      '<ol><li>Run <code>badger</code> in this repository’s root. For implementation work, run <code>badger code</code>.</li>' +
+      '<li>Paste a task below into Badger’s goal editor. Copy the generated <strong>Prompt 1</strong> into your AI chat.</li>' +
+      '<li>When the AI requests files, paste its response back into Badger. Copy <strong>Prompt 2</strong> back to the same chat.</li></ol>' +
+      '<p>Folder size helps you explore; your task may involve code elsewhere. These task fragments guide the question; they do not restrict file access.</p>';
+    const fragments = workflowFragments(node);
+    fragments.forEach((fragment, index) => {
+      const block = document.createElement("div");
+      block.className = "copy-fragment";
+      const label = document.createElement("label");
+      label.htmlFor = "badger-fragment-" + index;
+      label.textContent = fragment.label;
+      const field = document.createElement("textarea");
+      field.id = label.htmlFor;
+      field.rows = fragment.command ? 1 : 5;
+      field.readOnly = true;
+      field.value = fragment.text;
+      const button = document.createElement("button");
+      button.className = "control";
+      button.type = "button";
+      button.textContent = fragment.command ? "Copy command" : "Copy task";
+      button.setAttribute("aria-label", "Copy " + fragment.label);
+      const feedback = document.createElement("div");
+      feedback.className = "copy-status";
+      feedback.setAttribute("role", "status");
+      button.addEventListener("click", () => copyText(fragment.text, feedback, field));
+      block.append(label, field, button, feedback);
+      help.appendChild(block);
+    });
+    const link = document.createElement("a");
+    link.href = "https://github.com/PVRLabs/aibadger#quick-start";
+    link.textContent = "Getting started with Badger ↗";
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    help.appendChild(link);
+    details.querySelector(".focus-button").after(help);
+  }
   function shareHTML(node) {
     return '<p class="share">' + percent(node.lines, root.lines) + ' of project lines' +
       (focus !== root ? '<br>' + percent(node.lines, focus.lines) + ' of lines in the current view' : '') + '</p>';
@@ -419,6 +534,7 @@ main { display:grid; grid-template-columns:minmax(0,1fr) 310px; background:var(-
       details.querySelector(".file-list").insertAdjacentHTML("beforebegin", '<div class="section-title">Languages</div>' + directLanguageRows(selected));
       details.querySelector(".focus-button").addEventListener("click", () => focusOn(owner));
       details.querySelector(".summary").insertAdjacentHTML("afterend", shareHTML(selected));
+      addBadgerActions(owner);
       return;
     }
     const languages = Object.entries(selected.languages || {}).sort((a, b) => b[1].lines - a[1].lines || a[0].localeCompare(b[0]));
@@ -437,6 +553,7 @@ main { display:grid; grid-template-columns:minmax(0,1fr) 310px; background:var(-
       '<div class="section-title">Languages <span class="substat">Nonblank lines by language</span></div><div class="language-list">' + languageRows + '</div>' +
       '<div class="section-title">Subfolders <span class="substat">Largest first · Select to explore</span></div><div class="child-list">' + childRows + '</div>' +
       (selected.directFiles ? '<div class="file-list"></div>' : '');
+    addBadgerActions(selected);
     if (selected.directFiles) renderFileList(details.querySelector(".file-list"), selected);
     details.querySelector(".focus-button").addEventListener("click", () => focusOn(selected));
     details.querySelectorAll(".child-row").forEach(row => row.addEventListener("click", () => focusOn(byPath.get(row.dataset.path))));

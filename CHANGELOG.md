@@ -4,6 +4,8 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.8.0] - 2026-10-14
+
 ### Offline Codebase Map
 
 - Added `badger map [path]` to generate a portable, offline HTML report of a

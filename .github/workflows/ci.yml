@@ -51,7 +51,6 @@ jobs:
         run: BADGER_CLI_SMOKE=1 go test ./tests/cli -run '^TestCLISmoke$' -count=1
 
   platform-smoke:
-    if: ${{ inputs.platform_smoke }}
     name: CLI smoke (${{ matrix.os }})
     strategy:
       fail-fast: false

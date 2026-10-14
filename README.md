@@ -89,6 +89,15 @@ For deeper repository or design questions, use Map → Extract:
 
 Full usage: [docs/usage.md](docs/usage.md)
 
+## Offline Codebase Map
+
+Run `badger map /path/to/project` to generate `badger-codemap-<repo_name>.html`
+in your current directory, then open it directly from disk. The offline map
+shows raw nonblank source-line concentration, including comments; area does not
+measure complexity or recommended AI context size. Generation is local and bounded;
+failures preserve an existing report. See [usage](docs/usage.md#offline-codebase-map)
+or `badger map --help`.
+
 ## Learn More
 
 - [Usage Examples & Walkthrough](docs/usage.md)

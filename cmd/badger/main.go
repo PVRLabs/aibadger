@@ -142,6 +142,8 @@ func dispatchEarlyCommand(args []string, stdout, stderr io.Writer) (bool, error)
 		return false, nil
 	}
 	switch args[0] {
+	case "map":
+		return true, runMapCommand(args[1:], stdout)
 	case "api":
 		return true, runAPI(args[1:], stdout, stderr)
 	case "skills":
@@ -691,6 +693,7 @@ Usage:
   badger badge
   badger skills install
   badger diagnose
+  badger map <path>
   badger api <command> --help
   badger version
 
@@ -714,6 +717,10 @@ Agent Skills:
 
 Troubleshooting:
   diagnose    Print environment information for troubleshooting and bug reports.
+
+Codebase Map:
+  map <path>  Generate an offline HTML map in the current directory.
+  Run badger map --help for naming, metrics, and limits.
 
 Review options:
   badger review [--staged | --branch <ref> | --commit <sha>]

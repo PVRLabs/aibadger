@@ -297,6 +297,46 @@ Add validation so empty project names are rejected before saving.
 Keep the change small and include any tests that should change.
 ```
 
+## Offline Codebase Map
+
+See the [Codebase Map guide](codemap.md) for a screenshot and explanation of
+folder navigation, metrics, and suggested Badger tasks.
+
+```bash
+badger map
+badger map /path/to/project
+badger map --help
+```
+
+Omit the path to map the current directory, or supply one directory.
+Git and provider configuration are unnecessary.
+The command writes `badger-codemap-<repo_name>.html` in the caller's current
+working directory and prints `Generated codebase map HTML report.`, then `Use the following command to open:`,
+followed by an OS-specific open command
+containing the absolute report path
+after successful publication.
+Unusual basenames are normalized for portable filenames. Open the HTML directly
+from disk: no server, upload, CDN, font download, or frontend runtime is needed.
+The command does not launch a browser. Running it authorizes report creation or
+replacement without another prompt; existing non-regular output paths are rejected.
+
+Area represents recursive raw nonblank physical source lines, including comments,
+not complexity or recommended AI context size. Recognized source includes Markdown;
+generic `.txt` files do not count. Dependency/build/cache trees are excluded,
+`bin` remains eligible, and symlinks are not followed (a symlink root is rejected).
+Reports contain relative paths, aggregate metadata and bounded filename lists,
+not source contents. Explore folders, search, inspect direct files and language
+totals, or copy a folder path and suggested task for Badger. The standalone map
+is separate from the interactive Map → Extract → Apply workflow.
+
+Generation stops on invalid/unreadable inputs, no recognized nonblank lines,
+or a hard limit: depth 50 below root, 20,000 directories including root,
+100,000 recognized source files, 50 MiB per source file, or 20 MiB complete HTML.
+Failures preserve an existing report and clean up staged output. Successful
+reports replace existing regular reports atomically. When the destination lies
+inside the source, that report is excluded from scanning so regeneration does
+not count its own previous output. Limits have no command-line overrides.
+
 ## Commands
 
 - `/help`: show the interactive command reference.

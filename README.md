@@ -89,6 +89,13 @@ For deeper repository or design questions, use Map → Extract:
 
 Full usage: [docs/usage.md](docs/usage.md)
 
+## Offline Codebase Map
+
+Run `badger map` to generate a local, offline HTML map of your codebase.
+Explore folders and see where source lines are concentrated.
+
+[Live demo](https://pvrlabs.xyz/aibadger/codemap/) · [Guide](docs/codemap.md)
+
 ## Learn More
 
 - [Usage Examples & Walkthrough](docs/usage.md)

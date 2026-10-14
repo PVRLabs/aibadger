@@ -577,6 +577,8 @@ func TestPrintUsageIncludesPublicEntrypoints(t *testing.T) {
 		"badger badge",
 		"badger continue",
 		"badger skills install",
+		"badger map [path]",
+		"Codebase Map:",
 		"badger diagnose",
 		"diagnose    Print environment information for troubleshooting and bug reports.",
 		"~/.agents/skills/",

@@ -15,6 +15,7 @@ Notable user-facing changes to Badger are documented here.
   work in Badger. Generation requires no Git repository or provider setup;
   reports contain relative paths and aggregate metadata rather than source
   contents.
+- Try the [live Codebase Map demo](https://pvrlabs.xyz/aibadger/codemap/).
 - Generation skips dependency, build, and cache trees, does not follow symlinks,
   and enforces scan and report limits. Successful regeneration replaces the
   existing report; failed generation preserves it. The CLI prints a command

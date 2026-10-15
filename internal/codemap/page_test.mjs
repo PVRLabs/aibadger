@@ -400,15 +400,16 @@ test('Shift+Enter, Explore, and subfolder navigation focus the newly rendered de
 
 const guide = functions('taskFragments', 'shareHTML');
 
-test('guide pairs exact exploration/change tasks with Design/Code commands and safely quoted folder scopes', () => {
+test('guide pairs exact exploration/review tasks with default Design and Review commands and safely quoted folder scopes', () => {
   for (const path of ['.', 'src/core', 'src/a "quoted" folder', 'src/</textarea><script>bad()</script>\n日本語']) {
     const fragments=vm.runInNewContext(guide+'\nworkflowFragments({path})',{path});
     const scope=path==='.' ? 'this repository' : 'the folder '+JSON.stringify(path);
     assert.equal(fragments.length,4);
+    assert.match(fragments[0].label,/Design.*default/);
     assert.equal(fragments[0].text,'badger'); assert.equal(fragments[0].command,true);
     assert.equal(fragments[1].text,`Explain how ${scope} works. Start with its responsibilities, entry points, and the files most relevant to understanding it. Include related code elsewhere when needed.`);
-    assert.equal(fragments[2].text,'badger code'); assert.equal(fragments[2].command,true);
-    assert.equal(fragments[3].text,`In ${scope}, I want to [describe the change]. Identify the smallest relevant set of files and tests, including dependencies outside this folder when needed.`);
+    assert.equal(fragments[2].text,'badger review'); assert.equal(fragments[2].command,true);
+    assert.equal(fragments[3].text,`Review changes affecting ${scope} for bugs, regressions, and missing tests. Include related code elsewhere when needed.`);
     for (const fragment of fragments) assert.doesNotMatch(fragment.text,/FILE:|PREFIX:/);
   }
 });
@@ -480,8 +481,11 @@ test('guide is collapsed below Explore; path/task values use safe DOM properties
   assert.equal(details.children.indexOf(help),details.children.indexOf(explore)+1);
   assert.match(help.innerHTML,/<summary>Work on this folder with Badger<\/summary>/);
   assert.match(help.innerHTML,/goal editor.*Prompt 1.*AI chat/);
-  assert.match(help.innerHTML,/requests files.*back into Badger.*Prompt 2.*same chat/);
-  assert.match(help.innerHTML,/do not restrict file access/);
+  assert.match(help.innerHTML,/If the AI requests files, paste the requested file list back into the Badger TUI to generate <strong>Prompt 2/);
+  const reviewNote=help.querySelector('.review-scope-note');
+  assert.match(reviewNote.textContent,/Review checks Git changes across the repository/);
+  assert.equal(help.children.indexOf(reviewNote),help.children.indexOf(help.querySelectorAll('.copy-fragment')[3])+1);
+  assert.doesNotMatch(help.innerHTML,/badger code|implementation work/);
   assert.ok(!help.innerHTML.includes(path));
   const heading=details.querySelector('.folder-heading');
   assert.equal(heading.children[0].tagName,'h2');
@@ -494,7 +498,7 @@ test('guide is collapsed below Explore; path/task values use safe DOM properties
     assert.equal(field.readOnly,true); assert.equal(labels[index].htmlFor,field.id);
     assert.equal(field.innerHTML,''); assert.match(buttons[index].attributes['aria-label'],/^Copy /);
   });
-  assert.equal(fields[0].value,'badger'); assert.equal(fields[2].value,'badger code');
+  assert.equal(fields[0].value,'badger'); assert.equal(fields[2].value,'badger review');
   assert.ok(fields[1].value.includes(JSON.stringify(path)));
   help.querySelectorAll('.copy-status').forEach(status=>assert.equal(status.attributes.role,'status'));
   const link=help.querySelector('a');
@@ -527,7 +531,7 @@ test('root/direct selections copy the containing folder and all four individual 
         await buttons[i].events.click();
         assert.equal(copied[i+1],fields[i].value); assert.equal(statuses[i].textContent,'Copied.');
       }
-      assert.equal(fields[0].value,'badger'); assert.equal(fields[2].value,'badger code');
+      assert.equal(fields[0].value,'badger'); assert.equal(fields[2].value,'badger review');
       assert.ok(fields[1].value.includes(path==='.' ? 'this repository' : JSON.stringify(path)));
       assert.ok(!fields[1].value.includes('::direct'));
     }

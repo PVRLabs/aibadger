@@ -66,14 +66,22 @@ up to 20 entries and can expand to the largest 50.
 ## Start a focused Badger task
 
 Expand **Work on this folder with Badger** in the details panel to copy a startup
-command and an exploration or implementation task. Run `badger` or `badger code`
-from the repository root, then paste the task into Badger's goal editor.
-Follow the guide to exchange Prompt 1, file requests, and Prompt 2 with your AI chat.
+command and a Design / exploration or Review task. Run `badger` for Design
+(the default) or `badger review` to review Git changes from the repository root,
+then paste the task into Badger's goal editor.
+Copy Prompt 1 into your AI chat. The review may finish with findings from that
+initial prompt. Only if the AI requests files, paste its response into Badger
+and copy Prompt 2 back to the same chat for additional context.
 
-The selected folder is a starting point. Related files elsewhere may still be
-needed, and the report itself contains metadata rather than source context.
+The selected folder is a starting point. Review includes repository-wide Git
+changes unless separately restricted; selecting a folder in the map only guides
+review attention. Related files elsewhere may still be needed, and the report
+itself contains metadata rather than source context.
 The standalone report is separate from Badger's interactive Map → Extract → Apply
 workflow. See the [Quick Start](../README.md#quick-start) for the full workflow.
+
+Prefer working in your IDE? Use the [Badger VS Code companion](https://marketplace.visualstudio.com/items?itemName=pvrlabs.ai-badger).
+See the [VS Code review walkthrough](https://pvrlabs.xyz/articles/reviewing-ai-generated-code-vscode-aibadger.html) for an example.
 
 ## Local generation and limits
 

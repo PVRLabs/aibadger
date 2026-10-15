@@ -465,15 +465,15 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
     const scope = node.path === "." ? "this repository" : "the folder " + JSON.stringify(node.path);
     return [
       {label: "Explore · paste into Badger’s goal editor", text: "Explain how " + scope + " works. Start with its responsibilities, entry points, and the files most relevant to understanding it. Include related code elsewhere when needed."},
-      {label: "Change · replace the bracketed task, then paste into Badger’s goal editor", text: "In " + scope + ", I want to [describe the change]. Identify the smallest relevant set of files and tests, including dependencies outside this folder when needed."}
+      {label: "Review · paste into Badger’s goal editor", text: "Review changes affecting " + scope + " for bugs, regressions, and missing tests. Include related code elsewhere when needed."}
     ];
   }
   function workflowFragments(node) {
     const tasks = taskFragments(node);
     return [
-      {label:"Design / exploration · run from the repository root", text:"badger", command:true},
+      {label:"Design / exploration (default) · run from the repository root", text:"badger", command:true},
       tasks[0],
-      {label:"Code / implementation · run from the repository root", text:"badger code", command:true},
+      {label:"Review Git changes · run from the repository root", text:"badger review", command:true},
       tasks[1]
     ];
   }
@@ -523,11 +523,7 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
     const help = document.createElement("details");
     help.className = "badger-help";
     help.innerHTML = '<summary>Work on this folder with Badger</summary>' +
-      '<p>Badger prepares code context for your AI chat. Use this folder as a starting point for a question or change.</p>' +
-      '<ol><li>Run <code>badger</code> in this repository’s root. For implementation work, run <code>badger code</code>.</li>' +
-      '<li>Paste a task below into Badger’s goal editor. Copy the generated <strong>Prompt 1</strong> into your AI chat.</li>' +
-      '<li>When the AI requests files, paste its response back into Badger. Copy <strong>Prompt 2</strong> back to the same chat.</li></ol>' +
-      '<p>Folder size helps you explore; your task may involve code elsewhere. These task fragments guide the question; they do not restrict file access.</p>';
+      '<p>Run a command below from the repository root, paste its task into Badger’s goal editor, then copy <strong>Prompt 1</strong> into your AI chat. If the AI requests files, paste the requested file list back into the Badger TUI to generate <strong>Prompt 2</strong>.</p>';
     const fragments = workflowFragments(node);
     fragments.forEach((fragment, index) => {
       const block = document.createElement("div");
@@ -551,6 +547,12 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
       button.addEventListener("click", () => copyText(fragment.text, feedback, field));
       block.append(label, field, button, feedback);
       help.appendChild(block);
+      if (index === fragments.length - 1) {
+        const note = document.createElement("p");
+        note.className = "review-scope-note";
+        note.textContent = "Review checks Git changes across the repository; this task focuses on the selected folder.";
+        help.appendChild(note);
+      }
     });
     const link = document.createElement("a");
     link.href = "https://github.com/PVRLabs/aibadger#quick-start";

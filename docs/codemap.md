@@ -83,6 +83,58 @@ workflow. See the [Quick Start](../README.md#quick-start) for the full workflow.
 Prefer working in your IDE? Use the [Badger VS Code companion](https://marketplace.visualstudio.com/items?itemName=pvrlabs.ai-badger).
 See the [VS Code review walkthrough](https://pvrlabs.xyz/articles/reviewing-ai-generated-code-vscode-aibadger.html) for an example.
 
+## Supported languages and extensions
+
+Codemap recognizes source files by extension, without parsing their contents.
+Extension matching is case-insensitive, so `.GO` and `.go` both count as Go.
+
+| Language | Extensions |
+| --- | --- |
+| C | `.c` |
+| C# | `.cs` |
+| C++ | `.cc`, `.cpp`, `.cxx`, `.hh`, `.hpp`, `.hxx` |
+| C/C++ | `.h` |
+| CSS | `.css` |
+| Clojure | `.clj` |
+| ClojureScript | `.cljs` |
+| Dart | `.dart` |
+| Elixir | `.ex`, `.exs` |
+| Erlang | `.erl`, `.hrl` |
+| F# | `.fs`, `.fsx` |
+| Go | `.go` |
+| Groovy | `.groovy`, `.gradle` |
+| HTML | `.html`, `.htm` |
+| Haskell | `.hs`, `.lhs` |
+| Java | `.java` |
+| JavaScript | `.js`, `.mjs`, `.cjs`, `.jsx` |
+| Kotlin | `.kt`, `.kts` |
+| Lua | `.lua` |
+| Markdown | `.md`, `.markdown`, `.mdx` |
+| Objective-C | `.m` |
+| Objective-C++ | `.mm` |
+| PHP | `.php` |
+| Perl | `.pl`, `.pm` |
+| Protocol Buffers | `.proto` |
+| Python | `.py`, `.pyw` |
+| R | `.r` |
+| Ruby | `.rb` |
+| Rust | `.rs` |
+| SCSS | `.scss` |
+| SQL | `.sql` |
+| Sass | `.sass` |
+| Scala | `.scala`, `.sc` |
+| Shell | `.sh`, `.bash`, `.zsh`, `.fish` |
+| Solidity | `.sol` |
+| Svelte | `.svelte` |
+| Swift | `.swift` |
+| Terraform | `.tf` |
+| TypeScript | `.ts`, `.mts`, `.cts`, `.tsx` |
+| Visual Basic | `.vb` |
+| Vue | `.vue` |
+| Zig | `.zig` |
+
+Generic `.txt` files and unknown extensions do not count.
+
 ## Local generation and limits
 
 Generation and normal report use stay local. The HTML embeds relative paths,
@@ -91,9 +143,7 @@ There are no external scripts, fonts, uploads, or automatic browser launches.
 Documentation and product links open only when you choose them. Share the report
 only if you intend to share its folder names, filenames, and counts.
 
-Recognized source includes Markdown, JSX, and TSX; generic `.txt` and unknown
-extensions do not count. Dependency, build, cache, VCS, and editor directories
-are skipped. Directories named `bin` remain eligible. Symlinks are not followed,
+Dependency, build, cache, VCS, and editor directories are skipped. Directories named `bin` remain eligible. Symlinks are not followed,
 and a supplied symlink root is rejected. Blank recognized files count toward file
 totals even when their folders have no visible map area.
 

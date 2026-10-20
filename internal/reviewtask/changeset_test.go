@@ -391,3 +391,90 @@ func changeSummaries(changes []Change) []string {
 	}
 	return result
 }
+
+func TestExcludePatternContract(t *testing.T) {
+	for _, tc := range []struct {
+		pattern, path string
+		want          bool
+	}{
+		{"*.csv", "data/nested/backfill.csv", true},
+		{"*.csv", "data.csv.go", false},
+		{"archive/**", "archive/deep/file.go", true},
+		{"archive/**", "other/archive/file.go", false},
+		{"archive/**", "archive-file.go", false},
+		{"archive/**/*.go", "archive/app.go", true},
+		{"archive/**/*.go", "archive/pkg/app.go", true},
+		{"archive/*.go", "archive/pkg/app.go", false},
+		{"**/test?.[ch]", "pkg/test1.c", true},
+		{"**/test?.[ch]", "test1.h", true},
+		{"literal\\*.go", "pkg/literal*.go", true},
+	} {
+		t.Run(tc.pattern+"/"+tc.path, func(t *testing.T) {
+			if err := ValidateExcludePatterns([]string{tc.pattern}); err != nil {
+				t.Fatal(err)
+			}
+			if got := matchesExclusions([]string{tc.pattern}, tc.path); got != tc.want {
+				t.Fatalf("match = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	for _, pattern := range []string{"", "[", "a/[", "foo\\", "/archive/**", "../*.csv", "a//b", "a/./b", "a/**x", "a\nb"} {
+		if err := ValidateExcludePatterns([]string{pattern}); err == nil || !strings.Contains(err.Error(), "invalid --exclude pattern") {
+			t.Errorf("pattern %q: %v", pattern, err)
+		}
+	}
+}
+
+func TestAssembleExclusionsBeforePatchesAcrossModes(t *testing.T) {
+	for _, mode := range []Mode{ModeDefault, ModeStaged, ModeBranch, ModeCommit} {
+		t.Run(mode.String(), func(t *testing.T) {
+			opts := Options{Mode: mode, ExcludePatterns: []string{"*.csv", "archive/**", "*.csv"}}
+			if mode == ModeBranch || mode == ModeCommit {
+				opts.Ref = "main"
+			}
+			metadata := []changeMetadata{
+				{path: "nested/data.csv", kind: ChangeModified},
+				{path: "moved.go", previousPath: "archive/old.go", kind: ChangeRenamed},
+				{path: "new.csv", previousPath: "old.go", kind: ChangeRenamed},
+				{path: "keep.go", kind: ChangeModified},
+			}
+			var built []string
+			set, err := assembleChangeSet(t.TempDir(), opts, nil, metadata, []string{"new/data.csv", "scratch.go"}, 3,
+				func(_ string, _ []string, item changeMetadata) (string, bool, error) {
+					built = append(built, item.path)
+					return "complete patch\n+last line", false, nil
+				})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(built, []string{"keep.go"}) || len(set.Changes) != 1 || set.Changes[0].Patch != "complete patch\n+last line" {
+				t.Fatalf("built=%v changes=%+v", built, set.Changes)
+			}
+			if !set.ExcludedChanges || !reflect.DeepEqual(set.ExcludePatterns, opts.ExcludePatterns) || !reflect.DeepEqual(set.UntrackedPaths, []string{"scratch.go"}) || set.UntrackedOmitted != 3 {
+				t.Fatalf("set=%+v", set)
+			}
+		})
+	}
+}
+
+func TestExclusionsWithoutMatchesDoNotMarkPartial(t *testing.T) {
+	set, err := assembleChangeSet(t.TempDir(), Options{ExcludePatterns: []string{"*.csv"}}, nil, []changeMetadata{{path: "app.go"}}, nil, 0,
+		func(string, []string, changeMetadata) (string, bool, error) { return "patch", false, nil })
+	if err != nil || set.ExcludedChanges {
+		t.Fatalf("set=%+v error=%v", set, err)
+	}
+}
+
+func TestDefaultDiscoveredUntrackedExclusions(t *testing.T) {
+	repo := newGitRepo(t)
+	var discoveryCalls, patchCalls int
+	set, err := buildChangeSet(repo, Options{ExcludePatterns: []string{"*.csv", "archive/**"}},
+		func(string, []string, changeMetadata) (string, bool, error) { patchCalls++; return "", false, nil },
+		func(string) ([]string, int, error) {
+			discoveryCalls++
+			return []string{"data/nested.csv", "archive/note.go", "scratch.go"}, 4, nil
+		})
+	if err != nil || discoveryCalls != 1 || patchCalls != 0 || !set.ExcludedChanges || set.UntrackedOmitted != 4 || !reflect.DeepEqual(set.UntrackedPaths, []string{"scratch.go"}) {
+		t.Fatalf("set=%+v error=%v discoveries=%d patches=%d", set, err, discoveryCalls, patchCalls)
+	}
+}

@@ -5637,3 +5637,31 @@ func TestNonReviewEscBehaviorIsUnchanged(t *testing.T) {
 		t.Fatalf("non-Review Esc = called %v state %v status %q cmd %v", called, got.state, got.status.text, cmd)
 	}
 }
+
+func TestReviewRefreshRetainsExclusions(t *testing.T) {
+	for _, mode := range []reviewtask.Mode{reviewtask.ModeDefault, reviewtask.ModeStaged, reviewtask.ModeBranch, reviewtask.ModeCommit} {
+		t.Run(mode.String(), func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Focus = protocol.FocusReview
+			cfg.Startup = startup.Context{
+				ReviewMode: mode.String(), ReviewRef: "main",
+				ReviewExcludePatterns: []string{"*.csv", "archive/**", "*.csv"},
+				Attachments:           []startup.Attachment{{Type: "review context", Text: "old", ReviewGenerated: true}},
+			}
+			m := NewModel(t.TempDir(), cfg)
+			m.prepareReviewContext = func(_ string, opts reviewtask.Options) (startup.Context, error) {
+				if opts.Mode != mode || opts.Ref != "main" || strings.Join(opts.ExcludePatterns, ",") != "*.csv,archive/**,*.csv" {
+					t.Fatalf("refresh options=%+v", opts)
+				}
+				return startup.Context{Attachments: []startup.Attachment{{Type: "review context", Text: "Review scope: partial (excluded: *.csv, archive/**, *.csv)\nnew patch", ReviewGenerated: true}}}, nil
+			}
+			for i := 0; i < 2; i++ {
+				next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlR})
+				m = next.(Model)
+				if len(m.goalAttachments) != 1 || strings.Count(m.goalAttachments[0].Text, "Review scope:") != 1 {
+					t.Fatalf("attachments=%+v", m.goalAttachments)
+				}
+			}
+		})
+	}
+}

@@ -924,3 +924,57 @@ func TestRunAPIGoalUsesInputFile(t *testing.T) {
 		t.Fatalf("runAPI() diagnostics = %q, want empty", diagnostics.String())
 	}
 }
+
+func TestReviewExcludeParsingAndStartup(t *testing.T) {
+	for _, modeArgs := range [][]string{nil, {"--staged"}, {"--branch", "main"}, {"--commit=abc"}} {
+		args := append([]string{"review"}, modeArgs...)
+		args = append(args, "--exclude", "*.csv", "--exclude=archive/**", "--exclude", "*.csv", "focus on code")
+		app := loadConfig(args)
+		if app.parseErr != nil {
+			t.Fatal(app.parseErr)
+		}
+		if strings.Join(app.reviewExcludePatterns, ",") != "*.csv,archive/**,*.csv" || app.reviewExtraFocus != "focus on code" {
+			t.Fatalf("config=%+v", app)
+		}
+		cfg := badger.DefaultConfig()
+		err := applyReviewStartupWithBuilder(&cfg, app, func(_ string, opts reviewtask.Options) (startup.Context, error) {
+			if strings.Join(opts.ExcludePatterns, ",") != "*.csv,archive/**,*.csv" || opts.Mode != app.reviewMode || opts.Ref != app.reviewRef {
+				t.Fatalf("options=%+v", opts)
+			}
+			return startup.Context{ReviewExcludePatterns: opts.ExcludePatterns}, nil
+		})
+		if err != nil || len(cfg.Startup.ReviewExcludePatterns) != 3 {
+			t.Fatalf("startup=%+v error=%v", cfg.Startup, err)
+		}
+	}
+	for _, args := range [][]string{{"review", "--exclude"}, {"review", "--exclude="}, {"review", "--exclude", "["}, {"code", "--exclude", "*.csv"}, {"--exclude", "*.csv"}} {
+		if cfg := loadConfig(args); cfg.parseErr == nil {
+			t.Errorf("accepted %v", args)
+		}
+	}
+	if _, err := parseAPIConfig([]string{"review-context", "--root", "/repo", "--exclude", "*.csv"}); err == nil {
+		t.Fatal("stable API accepted --exclude")
+	}
+}
+
+func TestReviewExcludeRejectsOptionAsSeparateValue(t *testing.T) {
+	for _, option := range []string{"--staged", "--branch", "--commit", "--exclude", "--", "-h"} {
+		cfg := loadConfig([]string{"review", "--exclude", option})
+		if cfg.parseErr == nil || !strings.Contains(cfg.parseErr.Error(), "flag needs an argument: --exclude") {
+			t.Errorf("--exclude %s: error = %v, want missing argument", option, cfg.parseErr)
+		}
+	}
+	cfg := loadConfig([]string{"review", "--exclude=--staged", "--staged"})
+	if cfg.parseErr != nil || cfg.reviewMode != reviewtask.ModeStaged || strings.Join(cfg.reviewExcludePatterns, ",") != "--staged" {
+		t.Fatalf("equals-form config = %+v", cfg)
+	}
+}
+
+func TestReviewExcludeHelp(t *testing.T) {
+	text := captureStdout(t, printUsage)
+	for _, want := range []string{"[--exclude <pattern>]...", "basenames at any depth", "root-relative", "Ctrl+R retains patterns"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("help missing %q", want)
+		}
+	}
+}

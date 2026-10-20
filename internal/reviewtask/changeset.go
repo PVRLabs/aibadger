@@ -36,6 +36,8 @@ type ChangeSet struct {
 	Mode             Mode
 	Ref              string
 	SelectedPaths    []string
+	ExcludePatterns  []string
+	ExcludedChanges  bool
 	Changes          []Change
 	UntrackedPaths   []string
 	UntrackedOmitted int
@@ -122,6 +124,26 @@ func assembleChangeSet(repoRoot string, opts Options, baseArgs []string, metadat
 		metadata = filtered
 	}
 
+	excluded := false
+	kept := make([]changeMetadata, 0, len(metadata))
+	for _, item := range metadata {
+		if matchesExclusions(opts.ExcludePatterns, item.path) || (item.previousPath != "" && matchesExclusions(opts.ExcludePatterns, item.previousPath)) {
+			excluded = true
+			continue
+		}
+		kept = append(kept, item)
+	}
+	metadata = kept
+	keptUntracked := make([]string, 0, len(untrackedPaths))
+	for _, path := range untrackedPaths {
+		if matchesExclusions(opts.ExcludePatterns, path) {
+			excluded = true
+			continue
+		}
+		keptUntracked = append(keptUntracked, path)
+	}
+	untrackedPaths = keptUntracked
+
 	sort.Slice(metadata, func(i, j int) bool {
 		if metadata[i].path != metadata[j].path {
 			return metadata[i].path < metadata[j].path
@@ -140,6 +162,8 @@ func assembleChangeSet(repoRoot string, opts Options, baseArgs []string, metadat
 		Mode:             opts.Mode,
 		Ref:              strings.TrimSpace(opts.Ref),
 		SelectedPaths:    append([]string(nil), selected...),
+		ExcludePatterns:  append([]string(nil), opts.ExcludePatterns...),
+		ExcludedChanges:  excluded,
 		Changes:          changes,
 		UntrackedPaths:   untrackedPaths,
 		UntrackedOmitted: untrackedOmitted,

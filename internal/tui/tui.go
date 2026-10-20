@@ -745,10 +745,11 @@ func reviewOptionsFromStartup(ctx startup.Context) reviewtask.Options {
 		mode = reviewtask.ModeCommit
 	}
 	return reviewtask.Options{
-		Mode:          mode,
-		Ref:           strings.TrimSpace(ctx.ReviewRef),
-		ExtraFocus:    ctx.ReviewExtraFocus,
-		SelectedPaths: append([]string(nil), ctx.ReviewSelectedPaths...),
+		Mode:            mode,
+		Ref:             strings.TrimSpace(ctx.ReviewRef),
+		ExtraFocus:      ctx.ReviewExtraFocus,
+		SelectedPaths:   append([]string(nil), ctx.ReviewSelectedPaths...),
+		ExcludePatterns: append([]string(nil), ctx.ReviewExcludePatterns...),
 	}
 }
 

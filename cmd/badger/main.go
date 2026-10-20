@@ -21,24 +21,25 @@ import (
 )
 
 type appConfig struct {
-	showBadge        bool
-	focus            protocol.Focus
-	focusExplicit    bool
-	reviewMode       reviewtask.Mode
-	reviewRef        string
-	reviewExtraFocus string
-	startupGoal      string
-	literalStartup   bool
-	continueCommand  bool
-	continueAgent    string
-	continueSession  string
-	codexImport      *sessionimport.Conversation
-	claudeImport     *sessionimport.Conversation
-	handoffContinue  bool
-	showHelp         bool
-	showVersion      bool
-	cpuprofile       string // Profile mode: CPU profile output path
-	parseErr         error
+	showBadge             bool
+	focus                 protocol.Focus
+	focusExplicit         bool
+	reviewMode            reviewtask.Mode
+	reviewRef             string
+	reviewExtraFocus      string
+	reviewExcludePatterns []string
+	startupGoal           string
+	literalStartup        bool
+	continueCommand       bool
+	continueAgent         string
+	continueSession       string
+	codexImport           *sessionimport.Conversation
+	claudeImport          *sessionimport.Conversation
+	handoffContinue       bool
+	showHelp              bool
+	showVersion           bool
+	cpuprofile            string // Profile mode: CPU profile output path
+	parseErr              error
 }
 
 func main() {
@@ -510,6 +511,15 @@ func parseArgs(args []string, cfg *appConfig) error {
 					return err
 				}
 				cfg.cpuprofile = value
+			case arg == "--exclude" || strings.HasPrefix(arg, "--exclude="):
+				if arg == "--exclude" && i+1 < len(args) && strings.HasPrefix(args[i+1], "-") {
+					return fmt.Errorf("flag needs an argument: --exclude (use --exclude=<pattern> for patterns beginning with -)")
+				}
+				value, err := nextValue("exclude")
+				if err != nil {
+					return err
+				}
+				cfg.reviewExcludePatterns = append(cfg.reviewExcludePatterns, value)
 			case arg == "--staged":
 				if reviewModeSet {
 					return fmt.Errorf("review flags --staged, --branch, and --commit are mutually exclusive")
@@ -561,6 +571,14 @@ func parseArgs(args []string, cfg *appConfig) error {
 		positional = append(positional, arg)
 	}
 
+	if len(cfg.reviewExcludePatterns) > 0 {
+		if cfg.focus != protocol.FocusReview {
+			return fmt.Errorf("--exclude is only valid for review")
+		}
+		if err := reviewtask.ValidateExcludePatterns(cfg.reviewExcludePatterns); err != nil {
+			return err
+		}
+	}
 	if cfg.focus == protocol.FocusReview && len(positional) > 0 {
 		cfg.reviewExtraFocus = strings.TrimSpace(strings.Join(positional, " "))
 	}
@@ -667,10 +685,11 @@ func applyHandoffStartupWithBuilder(cfg *badger.Config, body string, buildReview
 
 func applyReviewStartupWithBuilder(cfg *badger.Config, app appConfig, buildReview reviewContextBuilder) error {
 	ctx, err := buildReview(cfg.Root, reviewtask.Options{
-		Mode:           app.reviewMode,
-		Ref:            app.reviewRef,
-		ExtraFocus:     app.reviewExtraFocus,
-		MaxPromptBytes: cfg.MaxTopologyPromptBytes,
+		Mode:            app.reviewMode,
+		Ref:             app.reviewRef,
+		ExtraFocus:      app.reviewExtraFocus,
+		ExcludePatterns: append([]string(nil), app.reviewExcludePatterns...),
+		MaxPromptBytes:  cfg.MaxTopologyPromptBytes,
 	})
 	if err != nil {
 		return err
@@ -724,7 +743,12 @@ Codebase Map:
 
 Review options:
   badger review [--staged | --branch <ref> | --commit <sha>]
-                [extra guidance]
+                [--exclude <pattern>]... [extra guidance]
+  --exclude        Omit matching changes (repeatable; quote shell globs).
+                   No slash: match basenames at any depth. With slash: root-relative.
+                   *, ?, [class] match within a component; ** as a whole component
+                   matches zero or more directories. Renames match either path.
+                   Excluded changes will not be reviewed; Ctrl+R retains patterns.
 
 Stable API:
   badger api topology --root <project>

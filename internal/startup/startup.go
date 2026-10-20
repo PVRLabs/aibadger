@@ -12,10 +12,11 @@ type Context struct {
 	// ReviewMode, ReviewRef, and ReviewExtraFocus preserve the review scope
 	// used to prepare this context so an interactive session can refresh it.
 	// They are optional metadata and do not affect non-review startup flows.
-	ReviewMode          string
-	ReviewRef           string
-	ReviewExtraFocus    string
-	ReviewSelectedPaths []string
+	ReviewMode            string
+	ReviewRef             string
+	ReviewExtraFocus      string
+	ReviewSelectedPaths   []string
+	ReviewExcludePatterns []string
 }
 
 // Attachment is a goal attachment prepared before the TUI starts.

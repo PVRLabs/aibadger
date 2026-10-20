@@ -101,6 +101,7 @@ type PayloadFailure string
 const (
 	PayloadFailureNone              PayloadFailure = ""
 	PayloadFailureNoChanges         PayloadFailure = "no_changes"
+	PayloadFailureExcludedAll       PayloadFailure = "excluded_all"
 	PayloadFailureMandatoryOverflow PayloadFailure = "mandatory_overflow"
 	PayloadFailureTopologyScan      PayloadFailure = "topology_scan"
 )
@@ -133,8 +134,9 @@ type InitialReviewPayload struct {
 // InitialReviewResult returns either a complete payload or a typed failure.
 // Typed failures never contain a partial prompt.
 type InitialReviewResult struct {
-	Payload InitialReviewPayload
-	Failure PayloadFailure
+	Payload  InitialReviewPayload
+	Failure  PayloadFailure
+	Overflow *PayloadOverflow
 }
 
 type reviewPayloadLimits struct {
@@ -189,7 +191,9 @@ func BuildInteractiveContext(root string, opts Options) (startup.Context, error)
 	if err != nil {
 		legacy, legacyErr := Build(root, opts)
 		if legacyErr == nil && legacy.FailureClassification == FailureNotGit {
-			return legacy.StartupContext(), nil
+			ctx := legacy.StartupContext()
+			ctx.ReviewExcludePatterns = append([]string(nil), opts.ExcludePatterns...)
+			return ctx, nil
 		}
 		return startup.Context{}, err
 	}
@@ -200,9 +204,13 @@ func BuildInteractiveContext(root string, opts Options) (startup.Context, error)
 		if err != nil {
 			return startup.Context{}, err
 		}
-		return legacy.StartupContext(), nil
+		ctx := legacy.StartupContext()
+		ctx.ReviewExcludePatterns = append([]string(nil), opts.ExcludePatterns...)
+		return ctx, nil
+	case PayloadFailureExcludedAll:
+		return startup.Context{}, errors.New("No reviewable changes remain after applying --exclude patterns.")
 	case PayloadFailureMandatoryOverflow:
-		return startup.Context{}, errors.New("review prompt could not be prepared: mandatory review context exceeds the payload limit")
+		return startup.Context{}, errors.New(result.Overflow.Message(opts))
 	case PayloadFailureTopologyScan:
 		return startup.Context{}, errors.New("review prompt could not be prepared: could not scan project topology")
 	case PayloadFailureNone:
@@ -257,11 +265,12 @@ func initialPayloadStartupContext(payload InitialReviewPayload) startup.Context 
 	contextPrompt := repositoryMarker(payload.RepositoryLabel) + renderReviewContext(payload.ChangeSet, payload.Files, payload.MaxFileBytes)
 	additions, deletions := reviewPatchStats(payload.ChangeSet.Changes)
 	return startup.Context{
-		ReviewMode:          payload.ChangeSet.Mode.String(),
-		ReviewRef:           payload.ChangeSet.Ref,
-		ReviewExtraFocus:    payload.Guidance,
-		ReviewSelectedPaths: append([]string(nil), payload.ChangeSet.SelectedPaths...),
-		Goal:                buildReviewInstruction(payload.Guidance),
+		ReviewMode:            payload.ChangeSet.Mode.String(),
+		ReviewRef:             payload.ChangeSet.Ref,
+		ReviewExtraFocus:      payload.Guidance,
+		ReviewSelectedPaths:   append([]string(nil), payload.ChangeSet.SelectedPaths...),
+		ReviewExcludePatterns: append([]string(nil), payload.ChangeSet.ExcludePatterns...),
+		Goal:                  buildReviewInstruction(payload.Guidance),
 		Attachments: []startup.Attachment{{
 			Type:            "review context",
 			Source:          "review context",
@@ -353,6 +362,9 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 	label := repositoryLabel(root)
 	set = omitSensitiveUntrackedPaths(set)
 	if len(set.Changes) == 0 && len(set.UntrackedPaths) == 0 {
+		if set.ExcludedChanges {
+			return InitialReviewResult{Failure: PayloadFailureExcludedAll}
+		}
 		return InitialReviewResult{Failure: PayloadFailureNoChanges}
 	}
 	files := make([]FileContext, 0, len(set.Changes)+len(set.UntrackedPaths))
@@ -366,8 +378,8 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		}
 		files = append(files, FileContext{Path: path, Status: status, Untracked: true})
 	}
-	if !suppressFileStatusesToFit(set, guidance, files, limits, "", includeReviewInstructions, label) {
-		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
+	if fits, renderedBytes := suppressFileStatusesToFit(set, guidance, files, limits, "", includeReviewInstructions, label); !fits {
+		return mandatoryOverflow(set, renderedBytes, limits.maxPayloadBytes)
 	}
 	topology := ""
 	if includeTopology {
@@ -379,7 +391,7 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		// mandatory review payload so an exactly-filled topology remains valid.
 		topologyBudget := limits.maxPayloadBytes - len(mandatory) - 1
 		if topologyBudget < 1 {
-			return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
+			return mandatoryOverflow(set, len(mandatory), limits.maxPayloadBytes)
 		}
 		s := scanner.NewScanner(root)
 		s.MaxFilesPerDirectory = maxFilesPerDirectory
@@ -396,8 +408,8 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 	// block. This is the smallest truthful provisional prompt, so it cannot
 	// reject a review merely because a status may disappear after a successful
 	// read.
-	if len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, label)) > limits.maxPayloadBytes {
-		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
+	if renderedBytes := len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, label)); renderedBytes > limits.maxPayloadBytes {
+		return mandatoryOverflow(set, renderedBytes, limits.maxPayloadBytes)
 	}
 
 	for i := range files {
@@ -464,12 +476,12 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 			break
 		}
 		if !removed {
-			return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
+			return mandatoryOverflow(set, len(prompt), limits.maxPayloadBytes)
 		}
 		prompt = renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, label)
 	}
 	if len(prompt) > limits.maxPayloadBytes {
-		return InitialReviewResult{Failure: PayloadFailureMandatoryOverflow}
+		return mandatoryOverflow(set, len(prompt), limits.maxPayloadBytes)
 	}
 	return InitialReviewResult{Payload: InitialReviewPayload{ChangeSet: set, Guidance: guidance, Files: files, RepositoryLabel: label, MaxFileBytes: limits.maxFileBytes, Prompt: prompt}}
 }
@@ -488,17 +500,20 @@ func omitSensitiveUntrackedPaths(set ChangeSet) ChangeSet {
 	return set
 }
 
-func suppressFileStatusesToFit(set ChangeSet, guidance string, files []FileContext, limits reviewPayloadLimits, topology string, includeReviewInstructions bool, labels ...string) bool {
+func suppressFileStatusesToFit(set ChangeSet, guidance string, files []FileContext, limits reviewPayloadLimits, topology string, includeReviewInstructions bool, labels ...string) (bool, int) {
 	renderedBytes := len(renderReviewPayload(set, guidance, files, limits.maxFileBytes, topology, includeReviewInstructions, labels...))
 	if renderedBytes <= limits.maxPayloadBytes {
-		return true
+		return true, renderedBytes
 	}
 	statusBytes := len(renderFileContextStatus(files, limits.maxFileBytes))
 	// When the complete status block disappears, renderReviewContext also
 	// trims the leading separator newline before the mandatory diff/path body.
-	const statusBodySeparatorBytes = 1
+	statusBodySeparatorBytes := 1
+	if set.ExcludedChanges {
+		statusBodySeparatorBytes = 0
+	}
 	if statusBytes == 0 || renderedBytes-statusBytes-statusBodySeparatorBytes > limits.maxPayloadBytes {
-		return false
+		return false, renderedBytes
 	}
 
 	activeStatuses := 0
@@ -520,10 +535,10 @@ func suppressFileStatusesToFit(set ChangeSet, guidance string, files []FileConte
 			removedBytes += len("[FILE CONTEXT STATUS]\n") + statusBodySeparatorBytes
 		}
 		if renderedBytes-removedBytes <= limits.maxPayloadBytes {
-			return true
+			return true, renderedBytes - removedBytes
 		}
 	}
-	return false
+	return false, renderedBytes - removedBytes
 }
 
 func initialContextStatus(change Change) ContextStatus {
@@ -585,6 +600,9 @@ func renderReviewPayload(set ChangeSet, guidance string, files []FileContext, ma
 
 func renderReviewContext(set ChangeSet, files []FileContext, maxFileBytes int) string {
 	var out strings.Builder
+	if set.ExcludedChanges {
+		out.WriteString("Review scope: partial (excluded: " + strings.Join(set.ExcludePatterns, ", ") + ")\n")
+	}
 	if status := renderFileContextStatus(files, maxFileBytes); status != "" {
 		out.WriteString(status)
 	}

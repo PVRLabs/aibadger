@@ -389,7 +389,7 @@ func TestStatusSuppressionRejectsOversizedMandatoryDiffWithoutStatusRetries(t *t
 		set.Changes = append(set.Changes, Change{Path: path, Kind: ChangeAdded, Patch: strings.Repeat("mandatory diff bytes", 8)})
 		files = append(files, FileContext{Path: path, Status: ContextAddedPatch})
 	}
-	if suppressFileStatusesToFit(set, "", files, reviewPayloadLimits{maxPayloadBytes: 1024, maxFileBytes: 1024}, "", true) {
+	if fits, _ := suppressFileStatusesToFit(set, "", files, reviewPayloadLimits{maxPayloadBytes: 1024, maxFileBytes: 1024}, "", true); fits {
 		t.Fatal("status suppression accepted an oversized authoritative diff")
 	}
 	for _, file := range files {
@@ -651,7 +651,7 @@ func TestBuildInteractiveContextKeepsFallbackAndRejectsMandatoryOverflow(t *test
 
 	repo := newGitRepo(t)
 	writeTrackedFile(t, repo, "app.go", "package main\n// changed\n")
-	if _, err := BuildInteractiveContext(repo, Options{Mode: ModeDefault, MaxPayloadBytes: 1}); err == nil || !strings.Contains(err.Error(), "mandatory review context") {
+	if _, err := BuildInteractiveContext(repo, Options{Mode: ModeDefault, MaxPayloadBytes: 1}); err == nil || !strings.Contains(err.Error(), "complete Git changes exceed") {
 		t.Fatalf("BuildInteractiveContext(overflow) error = %v, want mandatory overflow", err)
 	}
 }
@@ -707,4 +707,117 @@ func payloadStatuses(files []FileContext) map[string]ContextStatus {
 		result[file.Path] = file.Status
 	}
 	return result
+}
+
+func TestPartialScopeRenderingAndBudget(t *testing.T) {
+	set := ChangeSet{Mode: ModeBranch, Ref: "main", ExcludedChanges: true, ExcludePatterns: []string{"*.csv", "archive/**", "*.csv"}, Changes: []Change{{Path: "a.go", Kind: ChangeModified, Patch: "+complete"}}}
+	const scope = "Review scope: partial (excluded: *.csv, archive/**, *.csv)"
+	limits := reviewPayloadLimits{maxPayloadBytes: 10000, maxFileBytes: 100}
+	reader := func(string, int) ([]byte, stableFileOutcome) { return nil, stableFileUnavailable }
+	result := buildInitialReviewPayload("/unused", set, "", limits, reader)
+	if result.Failure != PayloadFailureNone || strings.Count(result.Payload.Prompt, scope) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	ctx := initialPayloadStartupContext(result.Payload)
+	if strings.Count(ctx.Attachments[0].Text, scope) != 1 || ctx.Attachments[0].SizeBytes != int64(len(ctx.Attachments[0].Text)) || !reflect.DeepEqual(ctx.ReviewExcludePatterns, set.ExcludePatterns) {
+		t.Fatalf("context=%+v", ctx)
+	}
+	// Status suppression may remove status lines, but must retain the scope line.
+	minimum := renderInitialReviewPromptForLabel(repositoryLabel("/unused"), set, "", nil, 100)
+	limits.maxPayloadBytes = len(minimum)
+	got := buildInitialReviewPayload("/unused", set, "", limits, reader)
+	if got.Failure != PayloadFailureNone || got.Payload.Prompt != minimum {
+		t.Fatalf("exact budget result=%+v want=%q", got, minimum)
+	}
+	limits.maxPayloadBytes--
+	got = buildInitialReviewPayload("/unused", set, "", limits, reader)
+	if got.Failure != PayloadFailureMandatoryOverflow || got.Payload.Prompt != "" {
+		t.Fatalf("under budget result=%+v", got)
+	}
+	set.ExcludedChanges = false
+	if text := renderReviewContext(set, nil, 100); strings.Contains(text, "Review scope:") {
+		t.Fatalf("nonpartial context=%q", text)
+	}
+}
+
+func TestExclusionEmptyDistinguishedFromClean(t *testing.T) {
+	reader := func(string, int) ([]byte, stableFileOutcome) { t.Fatal("unexpected read"); return nil, stableFileOK }
+	got := buildInitialReviewPayload("/unused", ChangeSet{ExcludedChanges: true}, "", defaultReviewPayloadLimits, reader)
+	if got.Failure != PayloadFailureExcludedAll || got.Payload.Prompt != "" {
+		t.Fatalf("result=%+v", got)
+	}
+	got = buildInitialReviewPayload("/unused", ChangeSet{ExcludePatterns: []string{"*.csv"}}, "", defaultReviewPayloadLimits, reader)
+	if got.Failure != PayloadFailureNoChanges {
+		t.Fatalf("clean result=%+v", got)
+	}
+}
+
+func TestOverflowReportsRenderedBytesAndTopPatches(t *testing.T) {
+	set := ChangeSet{Changes: []Change{
+		{Path: "z.go", Kind: ChangeAdded, Patch: "éé"},
+		{Path: "a.go", Kind: ChangeAdded, Patch: "1234"},
+		{Path: "largest.go", Kind: ChangeAdded, Patch: "123456789"},
+		{Path: "third.go", Kind: ChangeAdded, Patch: "12345"},
+		{Path: "tiny.go", Kind: ChangeAdded, Patch: "1"},
+		{Path: "second.go", Kind: ChangeAdded, Patch: "12345678"},
+	}}
+	files := make([]FileContext, 0, len(set.Changes))
+	for _, c := range set.Changes {
+		files = append(files, FileContext{Path: c.Path, Status: initialContextStatus(c)})
+	}
+	wantBytes := len(renderInitialReviewPromptForLabel(repositoryLabel("/unused"), set, "", files, 100))
+	got := buildInitialReviewPayload("/unused", set, "", reviewPayloadLimits{maxPayloadBytes: 1, maxFileBytes: 100}, func(string, int) ([]byte, stableFileOutcome) { t.Fatal("unexpected read"); return nil, stableFileOK })
+	if got.Failure != PayloadFailureMandatoryOverflow || got.Payload.Prompt != "" || got.Overflow.PayloadBytes != wantBytes || got.Overflow.LimitBytes != 1 {
+		t.Fatalf("result=%+v overflow=%+v want bytes=%d", got, got.Overflow, wantBytes)
+	}
+	want := []PatchContributor{{Path: "largest.go", Bytes: 9}, {Path: "second.go", Bytes: 8}, {Path: "third.go", Bytes: 5}, {Path: "a.go", Bytes: 4}, {Path: "z.go", Bytes: 4}}
+	if !reflect.DeepEqual(got.Overflow.LargestPatches, want) {
+		t.Fatalf("contributors=%+v", got.Overflow.LargestPatches)
+	}
+	for _, mode := range []Mode{ModeDefault, ModeStaged, ModeBranch, ModeCommit} {
+		opts := Options{Mode: mode, Ref: "main", ExcludePatterns: []string{"*.csv"}}
+		message := got.Overflow.Message(opts)
+		for _, text := range []string{fmt.Sprintf("Payload size at failure:    %d bytes", wantBytes), "Effective payload limit:    1 bytes", "patch bytes only", "--exclude '<pattern>'", "Excluded changes will not be reviewed."} {
+			if !strings.Contains(message, text) {
+				t.Fatalf("message missing %q: %s", text, message)
+			}
+		}
+		if mode == ModeStaged && !strings.Contains(message, "badger review --staged") || mode == ModeBranch && !strings.Contains(message, "badger review --branch 'main'") || mode == ModeCommit && !strings.Contains(message, "badger review --commit 'main'") {
+			t.Fatalf("scope missing: %s", message)
+		}
+	}
+	few := mandatoryOverflow(oneModifiedChangeSet("é.go", "é"), 50, 10)
+	if len(few.Overflow.LargestPatches) != 1 || few.Overflow.LargestPatches[0].Bytes != 2 {
+		t.Fatalf("few=%+v", few.Overflow)
+	}
+}
+
+func TestInteractiveOverflowDiagnosticsDescribeFinalAttempt(t *testing.T) {
+	const maxPrompt = 64 * 1024
+	opts := Options{MaxPayloadBytes: InteractivePayloadBudget(maxPrompt)}
+	set := oneModifiedChangeSet("large.csv", strings.Repeat("é", maxPrompt))
+	root := t.TempDir()
+	first := buildReviewPayloadFromChangeSet(root, set, opts, false)
+	got := buildInteractivePayloadFromChangeSet(root, set, opts, maxPrompt, false)
+	if got.Failure != PayloadFailureMandatoryOverflow || got.Payload.Prompt != "" || got.Overflow.LimitBytes != maximumInteractivePayloadBudget(maxPrompt) || got.Overflow.PayloadBytes != first.Overflow.PayloadBytes {
+		t.Fatalf("result=%+v overflow=%+v", got, got.Overflow)
+	}
+	explicit := buildInteractivePayloadFromChangeSet(root, set, opts, maxPrompt, true)
+	if explicit.Overflow.LimitBytes != opts.MaxPayloadBytes {
+		t.Fatalf("explicit overflow=%+v", explicit.Overflow)
+	}
+}
+
+func TestInteractiveExclusionsEmptyAndCleanFallback(t *testing.T) {
+	repo := newGitRepo(t)
+	patterns := []string{"*.go"}
+	ctx, err := BuildInteractiveContext(repo, Options{ExcludePatterns: patterns})
+	if err != nil || len(ctx.Attachments) != 0 || !strings.Contains(ctx.Goal, "Paste the diff below") || !reflect.DeepEqual(ctx.ReviewExcludePatterns, patterns) {
+		t.Fatalf("clean context=%+v error=%v", ctx, err)
+	}
+	writeTrackedFile(t, repo, "app.go", "package main\n// modified\n")
+	ctx, err = BuildInteractiveContext(repo, Options{ExcludePatterns: patterns})
+	if err == nil || err.Error() != "No reviewable changes remain after applying --exclude patterns." || len(ctx.Attachments) != 0 || ctx.Goal != "" {
+		t.Fatalf("exclusion-empty context=%+v error=%v", ctx, err)
+	}
 }

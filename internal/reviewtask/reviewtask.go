@@ -65,6 +65,8 @@ type Options struct {
 	// SelectedPaths narrows default working-tree review to literal,
 	// repository-relative changed paths. Other modes reject selected paths.
 	SelectedPaths []string
+	// ExcludePatterns filters repository-relative changes in every mode.
+	ExcludePatterns []string
 	// MaxPayloadBytes and MaxFileBytes override the initial review-context
 	// defaults when positive. Negative values are invalid.
 	MaxPayloadBytes int
@@ -256,6 +258,9 @@ func build(root string, opts Options, discoverUntracked untrackedDiscoverer) (Ta
 }
 
 func validateOptions(opts Options) error {
+	if err := ValidateExcludePatterns(opts.ExcludePatterns); err != nil {
+		return err
+	}
 	if opts.MaxPayloadBytes < 0 || opts.MaxFileBytes < 0 {
 		return errors.New("review context byte limits cannot be negative")
 	}

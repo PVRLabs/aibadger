@@ -372,10 +372,42 @@ badger review --branch <ref>         # changes since branching off <ref>
 badger review --commit <sha>         # a single commit
 ```
 
-Flags are mutually exclusive. When `--staged`, `--branch`, or `--commit` is used, working-tree untracked files are excluded.
+The diff-source flags are mutually exclusive. When `--staged`, `--branch`, or `--commit` is used, working-tree untracked files are excluded.
 The fenced Git diff follows the selected mode and is authoritative. Optional
 complete supporting files are read from the current checkout, so they can be
 newer than a staged, branch, or commit diff.
+
+For large backfills or other changes you want to leave out, repeat `--exclude`
+in any of these interactive review modes:
+
+```bash
+badger review --exclude '*.csv' --exclude 'archive/**'
+badger review --staged --exclude '*.csv'
+badger review --branch main --exclude '*.csv'
+badger review --commit HEAD --exclude '*.csv'
+```
+
+Quote patterns so your shell passes them unchanged. Patterns without `/` match
+basenames at any depth (`*.csv` includes `data/backfill.csv`). Patterns containing
+`/` match repository-relative paths from the root (`archive/**` includes all
+its descendants). Within a path component, `*`, `?`, and `[class]` use Go's
+`path.Match` rules, including backslash escapes. A whole `**` component matches
+zero or more path components; embedded `**`, empty components, `.`/`..`
+components, absolute paths, control characters, and malformed globs are rejected.
+Matching is case-sensitive. Renames are excluded if either endpoint matches.
+Default-mode discovered untracked candidates follow the same exclusions and
+retain the existing discovery bounds.
+
+Excluded changes will not be reviewed. Included Git patches stay complete.
+Only when patterns remove changes, the context includes one compact scope line,
+for example `Review scope: partial (excluded: *.csv, archive/**)`. Patterns are
+shown in argument order, including repeats. Removing all reviewable changes
+returns an explicit error; an ordinarily clean repository keeps its editable
+fallback. If the complete Git changes exceed the payload limit, Badger reports
+the rendered payload size at failure, the effective limit, and up to five
+largest tracked patches in bytes, then suggests a narrower review. Patch sizes
+exclude other payload framing and supporting context. `--exclude` is an
+interactive review option; the stable API flags are unchanged.
 
 ### Deep Review API
 
@@ -445,7 +477,10 @@ While in Review focus on the home screen, press **Ctrl+R** to refresh the
 generated review attachment; it also works while the attachment list has focus.
 If the refresh leaves no attachments, focus returns to the editor. The selected
 review mode/ref is retained; default-mode selected-path reviews also retain
-their selected repository-relative paths.
+their selected repository-relative paths. Exclusion patterns are retained on
+refresh, and the refreshed context reports partial scope when changes are
+excluded. If refresh fails (including when exclusions remove every change),
+the previous generated context remains available and the error is shown.
 
 ## Configuring interactive limits
 

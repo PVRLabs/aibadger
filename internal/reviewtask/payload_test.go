@@ -821,3 +821,67 @@ func TestInteractiveExclusionsEmptyAndCleanFallback(t *testing.T) {
 		t.Fatalf("exclusion-empty context=%+v error=%v", ctx, err)
 	}
 }
+
+func TestFallbackStartupContextRetainsScope(t *testing.T) {
+	for _, mode := range []Mode{ModeDefault, ModeStaged, ModeBranch, ModeCommit} {
+		t.Run(mode.String(), func(t *testing.T) {
+			opts := Options{Mode: mode, Ref: " main ", ExtraFocus: " Check errors. ",
+				SelectedPaths: []string{"app.go"}, ExcludePatterns: []string{"*.csv", "archive/**", "*.csv"}}
+			ctx := fallbackStartupContext(opts, "No reviewable changes were detected. The prompt is editable.")
+			if ctx.ReviewMode != mode.String() || ctx.ReviewRef != "main" || ctx.ReviewExtraFocus != "Check errors." ||
+				!reflect.DeepEqual(ctx.ReviewSelectedPaths, opts.SelectedPaths) || !reflect.DeepEqual(ctx.ReviewExcludePatterns, opts.ExcludePatterns) {
+				t.Fatalf("scope = %+v", ctx)
+			}
+			if len(ctx.Attachments) != 0 || ctx.Status.Severity != "warning" || !strings.Contains(ctx.Goal, "Paste the diff below") || !strings.Contains(ctx.Goal, "Check errors.") || strings.Contains(ctx.Goal, "No reviewable changes") {
+				t.Fatalf("fallback = %+v", ctx)
+			}
+			opts.SelectedPaths[0] = "changed.go"
+			opts.ExcludePatterns[0] = "changed"
+			if ctx.ReviewSelectedPaths[0] != "app.go" || ctx.ReviewExcludePatterns[0] != "*.csv" {
+				t.Fatal("fallback scope aliases caller options")
+			}
+		})
+	}
+}
+
+func TestInteractiveNonGitFallbackRetainsScope(t *testing.T) {
+	for _, opts := range []Options{
+		{ExtraFocus: " Check errors. ", SelectedPaths: []string{"app.go"}, ExcludePatterns: []string{"*.csv"}},
+		{Mode: ModeBranch, Ref: " main ", ExtraFocus: " Check errors. ", ExcludePatterns: []string{"*.csv"}},
+	} {
+		ctx, err := BuildInteractiveContext(t.TempDir(), opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := fallbackStartupContext(opts, "This directory is not a git repository. The prompt is editable.")
+		if !reflect.DeepEqual(ctx, want) {
+			t.Fatalf("context=%+v want=%+v", ctx, want)
+		}
+	}
+}
+
+func TestInteractiveNonGitRejectsInvalidOptions(t *testing.T) {
+	for _, opts := range []Options{{Mode: ModeBranch}, {Mode: ModeStaged, SelectedPaths: []string{"app.go"}}, {ExcludePatterns: []string{"/absolute"}}, {MaxFileBytes: -1}} {
+		if _, err := BuildInteractiveContext(t.TempDir(), opts); err == nil {
+			t.Fatalf("accepted invalid options: %+v", opts)
+		}
+	}
+}
+
+func TestInteractiveCleanModesRetainScope(t *testing.T) {
+	repo := newGitRepo(t)
+	for _, opts := range []Options{
+		{Mode: ModeDefault}, {Mode: ModeStaged}, {Mode: ModeBranch, Ref: "main"},
+	} {
+		opts.ExtraFocus = " Check errors. "
+		opts.ExcludePatterns = []string{"*.csv"}
+		ctx, err := BuildInteractiveContext(repo, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := fallbackStartupContext(opts, "No reviewable changes were detected. The prompt is editable.")
+		if !reflect.DeepEqual(ctx, want) {
+			t.Fatalf("context=%+v want=%+v", ctx, want)
+		}
+	}
+}

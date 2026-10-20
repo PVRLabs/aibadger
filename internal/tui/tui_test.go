@@ -5665,3 +5665,25 @@ func TestReviewRefreshRetainsExclusions(t *testing.T) {
 		})
 	}
 }
+
+func TestReviewRefreshFromFallbackRetainsScope(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Focus = protocol.FocusReview
+	cfg.Startup = startup.Context{
+		ReviewMode: "default", ReviewExtraFocus: "Check errors.",
+		ReviewSelectedPaths: []string{"app.go"}, ReviewExcludePatterns: []string{"*.csv"},
+		Goal: "Editable manual review prompt", Status: startup.Status{Severity: "warning"},
+	}
+	m := NewModel(t.TempDir(), cfg)
+	m.prepareReviewContext = func(_ string, opts reviewtask.Options) (startup.Context, error) {
+		if opts.Mode != reviewtask.ModeDefault || opts.ExtraFocus != "Check errors." || strings.Join(opts.SelectedPaths, ",") != "app.go" || strings.Join(opts.ExcludePatterns, ",") != "*.csv" {
+			t.Fatalf("refresh options=%+v", opts)
+		}
+		return startup.Context{Attachments: []startup.Attachment{{Type: "review context", Text: "new patch", ReviewGenerated: true}}}, nil
+	}
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlR})
+	m = next.(Model)
+	if len(m.goalAttachments) != 1 || m.goalAttachments[0].Text != "new patch" || m.goalInput.Value() != cfg.Startup.Goal {
+		t.Fatalf("refresh attachments=%+v goal=%q", m.goalAttachments, m.goalInput.Value())
+	}
+}

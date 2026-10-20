@@ -189,24 +189,19 @@ func BuildInteractiveContext(root string, opts Options) (startup.Context, error)
 	}
 	set, err := BuildChangeSet(root, opts)
 	if err != nil {
-		legacy, legacyErr := Build(root, opts)
-		if legacyErr == nil && legacy.FailureClassification == FailureNotGit {
-			ctx := legacy.StartupContext()
-			ctx.ReviewExcludePatterns = append([]string(nil), opts.ExcludePatterns...)
-			return ctx, nil
+		if validateOptions(opts) == nil && !isGitRepository(root) {
+			return fallbackStartupContext(opts, "This directory is not a git repository. The prompt is editable."), nil
 		}
 		return startup.Context{}, err
 	}
 	result := buildInteractivePayloadFromChangeSet(root, set, opts, maxPromptBytes, explicitPayloadLimit)
 	switch result.Failure {
 	case PayloadFailureNoChanges:
-		legacy, err := Build(root, opts)
-		if err != nil {
-			return startup.Context{}, err
+		status := "No reviewable changes were detected. The prompt is editable."
+		if set.UntrackedOmitted > 0 {
+			status = fmt.Sprintf("No reviewable changes were available; %s could not be inspected. The prompt is editable.", untrackedFileCount(set.UntrackedOmitted))
 		}
-		ctx := legacy.StartupContext()
-		ctx.ReviewExcludePatterns = append([]string(nil), opts.ExcludePatterns...)
-		return ctx, nil
+		return fallbackStartupContext(opts, status), nil
 	case PayloadFailureExcludedAll:
 		return startup.Context{}, errors.New("No reviewable changes remain after applying --exclude patterns.")
 	case PayloadFailureMandatoryOverflow:
@@ -217,6 +212,20 @@ func BuildInteractiveContext(root string, opts Options) (startup.Context, error)
 		return initialPayloadStartupContext(result.Payload), nil
 	default:
 		return startup.Context{}, fmt.Errorf("review prompt could not be prepared: unknown payload outcome %q", result.Failure)
+	}
+}
+
+// fallbackStartupContext constructs an editable manual prompt without discovering
+// changes again. Retain the requested scope so refresh uses the same options.
+func fallbackStartupContext(opts Options, status string) startup.Context {
+	return startup.Context{
+		ReviewMode:            opts.Mode.String(),
+		ReviewRef:             strings.TrimSpace(opts.Ref),
+		ReviewExtraFocus:      strings.TrimSpace(opts.ExtraFocus),
+		ReviewSelectedPaths:   append([]string(nil), opts.SelectedPaths...),
+		ReviewExcludePatterns: append([]string(nil), opts.ExcludePatterns...),
+		Goal:                  buildFallbackPrompt(strings.TrimSpace(opts.ExtraFocus)),
+		Status:                startup.Status{Text: status, Severity: "warning"},
 	}
 }
 

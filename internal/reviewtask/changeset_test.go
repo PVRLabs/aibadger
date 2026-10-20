@@ -370,13 +370,6 @@ func TestBuildChangeSetBranchAndCommitUseAuthoritativeRevisions(t *testing.T) {
 	}
 }
 
-func TestLegacyBuildDoesNotSilentlyIgnoreSelectedPaths(t *testing.T) {
-	repo := newGitRepo(t)
-	if _, err := Build(repo, Options{Mode: ModeDefault, SelectedPaths: []string{"app.go"}}); err == nil {
-		t.Fatal("Build() error = nil")
-	}
-}
-
 func TestBuildChangeSetRejectsNestedRepositoryDirectory(t *testing.T) {
 	repo := newGitRepo(t)
 	if _, err := BuildChangeSet(filepath.Join(repo, "internal"), Options{Mode: ModeDefault}); err == nil {

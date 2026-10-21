@@ -103,6 +103,24 @@ function functions(first, next) {
 const helpers = functions('formatNumber', 'hueFor');
 const language = functions('languageStyle', 'taskFragments');
 
+test('additional source and configuration languages have fixed styles and unknown names stay gray', () => {
+  const hues = {
+    COBOL:45, Ada:150, JCL:30, SystemVerilog:195, VHDL:225,
+    Fortran:275, 'PL/I':310, RPG:350, 'IBM CL':175, ABAP:205,
+    JSON:50, YAML:345, TOML:15, XML:35, INI:130,
+    Config:160, Properties:80,
+  };
+  const context = vm.createContext({});
+  vm.runInContext(functions('languageStyle', 'languageChips'), context);
+  for (const [name, hue] of Object.entries(hues)) {
+    context.name = name;
+    assert.equal(vm.runInContext('languageStyle(name)', context),
+      `--language-hue:${hue};--language-saturation:36%`, name);
+  }
+  assert.equal(vm.runInContext('languageStyle("unknown")', context),
+    '--language-hue:160;--language-saturation:0%');
+});
+
 test('complete embedded script has valid JavaScript syntax', () => {
   const script = source.slice(source.indexOf('<script>') + '<script>'.length, source.indexOf('</script>', source.indexOf('<script>')));
   assert.doesNotThrow(() => new vm.Script(script));

@@ -37,6 +37,63 @@ func TestReportFilename(t *testing.T) {
 	}
 }
 
+func TestGenerateCOBOLReportAccounting(t *testing.T) {
+	for _, mixed := range []bool{false, true} {
+		name := "COBOL-only"
+		if mixed {
+			name = "mixed languages"
+		}
+		t.Run(name, func(t *testing.T) {
+			source, caller := t.TempDir(), t.TempDir()
+			writeTestFile(t, source, "programs/MAIN.CBL", "       IDENTIFICATION DIVISION.\n\n       PROGRAM-ID. MAIN.\n")
+			writeTestFile(t, source, "programs/copybooks/record.cpy", "       01 RECORD-DATA PIC X.\n \t\n")
+			writeTestFile(t, source, "programs/copybooks/blank.CPY", " \n")
+			wantLines, wantFiles, wantLanguages := 3, 3, 1
+			if mixed {
+				writeTestFile(t, source, "main.go", "package main\n")
+				wantLines++
+				wantFiles++
+				wantLanguages++
+			}
+			t.Chdir(caller)
+			path, err := Generate(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			page, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, data, ok := strings.Cut(string(page), `<script id="map-data" type="application/json">`)
+			if !ok {
+				t.Fatal("report data missing")
+			}
+			data, _, _ = strings.Cut(data, "</script>")
+			var root directory
+			if err := json.Unmarshal([]byte(data), &root); err != nil {
+				t.Fatal(err)
+			}
+			if root.Lines != wantLines || root.Files != wantFiles || len(root.Languages) != wantLanguages || root.Languages["COBOL"] != (languageStats{Lines: 3, Files: 3}) {
+				t.Fatalf("report totals: %+v", root)
+			}
+			if mixed && root.Languages["Go"] != (languageStats{Lines: 1, Files: 1}) {
+				t.Fatalf("mixed report languages: %v", root.Languages)
+			}
+			if len(root.Children) != 1 {
+				t.Fatalf("report folders: %v", root.Children)
+			}
+			programs := root.Children[0]
+			if programs.Path != "programs" || programs.Lines != 3 || programs.Files != 3 || programs.DirectLines != 2 || programs.DirectFiles != 1 || programs.DirectByLang["COBOL"] != (languageStats{Lines: 2, Files: 1}) || len(programs.Children) != 1 {
+				t.Fatalf("program folder accounting: %+v", programs)
+			}
+			copies := programs.Children[0]
+			if copies.Path != "programs/copybooks" || copies.Lines != 1 || copies.Files != 2 || copies.DirectByLang["COBOL"] != (languageStats{Lines: 1, Files: 2}) || len(copies.FileList) != 2 || copies.FileList[0] != (sourceFile{Name: "record.cpy", Lines: 1}) || copies.FileList[1] != (sourceFile{Name: "blank.CPY", Lines: 0}) {
+				t.Fatalf("copybook folder accounting: %+v", copies)
+			}
+		})
+	}
+}
+
 func assertOnlyReport(t *testing.T, caller, destination, content string) {
 	t.Helper()
 	entries, err := os.ReadDir(caller)

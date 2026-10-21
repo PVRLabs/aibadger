@@ -12,7 +12,24 @@ import (
 
 func TestLanguageContract(t *testing.T) {
 	groups := map[string]string{
-		"Go": "go", "Java": "java", "Kotlin": "kt kts", "JavaScript": "js mjs cjs jsx",
+		"Ada":           "ads adb ada",
+		"JCL":           "jcl",
+		"SystemVerilog": "sv svh",
+		"VHDL":          "vhd vhdl",
+		"Fortran":       "f77 f90 f95 f03 f08 fpp ftn",
+		"PL/I":          "pli pl1",
+		"RPG":           "rpgle sqlrpgle rpgleinc sqlrpg",
+		"IBM CL":        "clle clp clp38",
+		"ABAP":          "abap",
+		"JSON":          "json webmanifest",
+		"YAML":          "yaml yml",
+		"TOML":          "toml",
+		"XML":           "xml",
+		"INI":           "ini",
+		"Config":        "conf",
+		"Properties":    "properties",
+		"COBOL":         "cbl cob cobol ccp cpy",
+		"Go":            "go", "Java": "java", "Kotlin": "kt kts", "JavaScript": "js mjs cjs jsx",
 		"TypeScript": "ts mts cts tsx", "Python": "py pyw", "Rust": "rs", "C": "c", "C/C++": "h",
 		"C++": "cc cpp cxx hh hpp hxx", "C#": "cs", "Swift": "swift", "Objective-C": "m", "Objective-C++": "mm",
 		"Ruby": "rb", "PHP": "php", "Dart": "dart", "Scala": "scala sc", "Shell": "sh bash zsh fish",
@@ -29,7 +46,7 @@ func TestLanguageContract(t *testing.T) {
 		for _, ext := range strings.Fields(list) {
 			extensions++
 			writeTestFile(t, root, "lower."+ext, "source\n")
-			writeTestFile(t, root, "upper."+strings.ToUpper(ext), "source\n")
+			writeTestFile(t, root, "nested/upper."+strings.ToUpper(ext), "source\n")
 			expected[language] = languageStats{Lines: expected[language].Lines + 2, Files: expected[language].Files + 2}
 		}
 	}
@@ -43,8 +60,62 @@ func TestLanguageContract(t *testing.T) {
 	if len(extensionLanguages) != extensions {
 		t.Fatalf("extension table has %d entries, want %d", len(extensionLanguages), extensions)
 	}
-	if !reflect.DeepEqual(got.Languages, expected) || !reflect.DeepEqual(got.DirectByLang, expected) {
-		t.Fatalf("language totals: recursive=%v direct=%v want=%v", got.Languages, got.DirectByLang, expected)
+	assertTotals := func(node *directory) {
+		t.Helper()
+		if node.Lines != extensions*2 || node.Files != extensions*2 || node.DirectLines != extensions || node.DirectFiles != extensions || !reflect.DeepEqual(node.Languages, expected) {
+			t.Fatalf("recursive totals: %+v, want languages=%v", node, expected)
+		}
+		if len(node.Children) != 1 || node.Children[0].Path != "nested" || node.Children[0].Lines != extensions || node.Children[0].Files != extensions {
+			t.Fatalf("nested totals: %+v", node.Children)
+		}
+		for language, total := range expected {
+			want := languageStats{Lines: total.Lines / 2, Files: total.Files / 2}
+			if node.DirectByLang[language] != want || node.Children[0].Languages[language] != want {
+				t.Errorf("%s direct/nested totals: %v / %v, want %v", language, node.DirectByLang[language], node.Children[0].Languages[language], want)
+			}
+		}
+	}
+	assertTotals(got)
+	page, err := renderHTML(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, data, ok := strings.Cut(string(page), `<script id="map-data" type="application/json">`)
+	if !ok {
+		t.Fatal("report data missing")
+	}
+	data, _, _ = strings.Cut(data, "</script>")
+	var decoded directory
+	if err := json.Unmarshal([]byte(data), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	assertTotals(&decoded)
+}
+
+func TestDependencyLockfilesExcludedBeforeQuotas(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"package-lock.json", "pnpm-lock.yaml", "nested/PACKAGE-LOCK.JSON", "nested/PNPM-LOCK.YAML"} {
+		writeTestFile(t, root, name, strings.Repeat("generated\n", 100))
+	}
+	// Ordinary configuration and near matches remain eligible.
+	for _, name := range []string{"config.json", "nested/config.yaml", "custom-package-lock.json", "nested/custom-pnpm-lock.yaml"} {
+		writeTestFile(t, root, name, "{}\n")
+	}
+	// Lockfiles exceed both the remaining file quota and per-file byte limit.
+	got, err := scanProjectWithLimits(root, scanLimits{1, 2, 4, 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Files != 4 || got.Lines != 4 || got.DirectFiles != 2 || got.DirectLines != 2 || len(got.FileList) != 2 || len(got.Children) != 1 {
+		t.Fatalf("root accounting: %+v", got)
+	}
+	want := map[string]languageStats{"JSON": {Lines: 2, Files: 2}, "YAML": {Lines: 2, Files: 2}}
+	if !reflect.DeepEqual(got.Languages, want) {
+		t.Fatalf("language totals: %v, want %v", got.Languages, want)
+	}
+	nested := got.Children[0]
+	if nested.Path != "nested" || nested.Files != 2 || nested.Lines != 2 || len(nested.FileList) != 2 {
+		t.Fatalf("nested accounting: %+v", nested)
 	}
 }
 

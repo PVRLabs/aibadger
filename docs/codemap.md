@@ -88,52 +88,101 @@ See the [VS Code review walkthrough](https://pvrlabs.xyz/articles/reviewing-ai-g
 Codemap recognizes source files by extension, without parsing their contents.
 Extension matching is case-insensitive, so `.GO` and `.go` both count as Go.
 
-| Language | Extensions |
-| --- | --- |
-| C | `.c` |
-| C# | `.cs` |
-| C++ | `.cc`, `.cpp`, `.cxx`, `.hh`, `.hpp`, `.hxx` |
-| C/C++ | `.h` |
-| CSS | `.css` |
-| Clojure | `.clj` |
-| ClojureScript | `.cljs` |
-| Dart | `.dart` |
-| Elixir | `.ex`, `.exs` |
-| Erlang | `.erl`, `.hrl` |
-| F# | `.fs`, `.fsx` |
-| Go | `.go` |
-| Groovy | `.groovy`, `.gradle` |
-| HTML | `.html`, `.htm` |
-| Haskell | `.hs`, `.lhs` |
-| Java | `.java` |
-| JavaScript | `.js`, `.mjs`, `.cjs`, `.jsx` |
-| Kotlin | `.kt`, `.kts` |
-| Lua | `.lua` |
-| Markdown | `.md`, `.markdown`, `.mdx` |
-| Objective-C | `.m` |
-| Objective-C++ | `.mm` |
-| PHP | `.php` |
-| Perl | `.pl`, `.pm` |
-| Protocol Buffers | `.proto` |
-| Python | `.py`, `.pyw` |
-| R | `.r` |
-| Ruby | `.rb` |
-| Rust | `.rs` |
-| SCSS | `.scss` |
-| SQL | `.sql` |
-| Sass | `.sass` |
-| Scala | `.scala`, `.sc` |
-| Shell | `.sh`, `.bash`, `.zsh`, `.fish` |
-| Solidity | `.sol` |
-| Svelte | `.svelte` |
-| Swift | `.swift` |
-| Terraform | `.tf` |
-| TypeScript | `.ts`, `.mts`, `.cts`, `.tsx` |
-| Visual Basic | `.vb` |
-| Vue | `.vue` |
-| Zig | `.zig` |
+Configuration formats also contribute to file counts, nonblank line totals, and
+folder sizes. Web app manifests (`.webmanifest`) are counted as JSON; `.conf`
+files use the Config label.
 
-Generic `.txt` files and unknown extensions do not count.
+| Language | Extensions | Excluded files |
+| --- | --- | --- |
+| ABAP | `.abap` | — |
+| Ada | `.ads`, `.adb`, `.ada` | — |
+| C | `.c` | — |
+| C# | `.cs` | — |
+| C++ | `.cc`, `.cpp`, `.cxx`, `.hh`, `.hpp`, `.hxx` | — |
+| C/C++ | `.h` | — |
+| Clojure | `.clj` | — |
+| ClojureScript | `.cljs` | — |
+| COBOL | `.cbl`, `.cob`, `.cobol`, `.ccp`, `.cpy` | — |
+| Config | `.conf` | — |
+| CSS | `.css` | — |
+| Dart | `.dart` | — |
+| Elixir | `.ex`, `.exs` | — |
+| Erlang | `.erl`, `.hrl` | — |
+| F# | `.fs`, `.fsx` | — |
+| Fortran | `.f77`, `.f90`, `.f95`, `.f03`, `.f08`, `.fpp`, `.ftn` | — |
+| Go | `.go` | — |
+| Groovy | `.groovy`, `.gradle` | — |
+| Haskell | `.hs`, `.lhs` | — |
+| HTML | `.html`, `.htm` | — |
+| IBM CL | `.clle`, `.clp`, `.clp38` | — |
+| INI | `.ini` | — |
+| Java | `.java` | — |
+| JavaScript | `.js`, `.mjs`, `.cjs`, `.jsx` | — |
+| JCL | `.jcl` | — |
+| JSON | `.json`, `.webmanifest` | `package-lock.json` |
+| Kotlin | `.kt`, `.kts` | — |
+| Lua | `.lua` | — |
+| Markdown | `.md`, `.markdown`, `.mdx` | — |
+| Objective-C | `.m` | — |
+| Objective-C++ | `.mm` | — |
+| Perl | `.pl`, `.pm` | — |
+| PHP | `.php` | — |
+| PL/I | `.pli`, `.pl1` | — |
+| Properties | `.properties` | — |
+| Protocol Buffers | `.proto` | — |
+| Python | `.py`, `.pyw` | — |
+| R | `.r` | — |
+| RPG | `.rpgle`, `.sqlrpgle`, `.rpgleinc`, `.sqlrpg` | — |
+| Ruby | `.rb` | — |
+| Rust | `.rs` | — |
+| Sass | `.sass` | — |
+| Scala | `.scala`, `.sc` | — |
+| SCSS | `.scss` | — |
+| Shell | `.sh`, `.bash`, `.zsh`, `.fish` | — |
+| Solidity | `.sol` | — |
+| SQL | `.sql` | — |
+| Svelte | `.svelte` | — |
+| Swift | `.swift` | — |
+| SystemVerilog | `.sv`, `.svh` | — |
+| Terraform | `.tf` | — |
+| TOML | `.toml` | — |
+| TypeScript | `.ts`, `.mts`, `.cts`, `.tsx` | — |
+| VHDL | `.vhd`, `.vhdl` | — |
+| Visual Basic | `.vb` | — |
+| Vue | `.vue` | — |
+| XML | `.xml` | — |
+| YAML | `.yaml`, `.yml` | `pnpm-lock.yaml` |
+| Zig | `.zig` | — |
+
+Excluded filenames in the table are matched by exact basename, case-insensitively
+at any depth, before file quotas and per-file size limits. Ordinary JSON/YAML
+files and names such as `custom-package-lock.json` remain eligible.
+
+## Excluded files and directories
+
+The following entries do not contribute to line totals, file counts, or map area:
+
+- **Unrecognized extensions**, including generic `.txt` files and files without
+  an extension.
+- **Generated dependency lockfiles** listed in the table above.
+- **Skipped directories and their contents**, listed below. Exact directory
+  names are matched case-sensitively at any depth below the supplied root.
+- **Symlinks and other non-regular files**. Symlinks are not followed; a supplied
+  symlink root is rejected.
+- **The destination HTML report**, when it is inside the scanned source tree.
+  Other HTML files, including reports with different filenames, remain eligible.
+
+| Category | Skipped directory names |
+| --- | --- |
+| Version control | `.git`, `.hg`, `.svn` |
+| Editors | `.idea`, `.vscode` |
+| Dependencies and environments | `bower_components`, `node_modules`, `vendor`, `.venv`, `venv`, `.tox`, `.nox` |
+| Build output and coverage | `build`, `coverage`, `dist`, `obj`, `out`, `target` |
+| Framework and tool caches | `.gradle`, `.next`, `.nuxt`, `.svelte-kit`, `.terraform`, `__pycache__` |
+
+Directories named `bin` and near matches such as `build_tools` remain eligible.
+Blank recognized files still count toward file totals, even when their folders
+have no visible map area.
 
 ## Local generation and limits
 
@@ -142,10 +191,6 @@ aggregate metadata, and bounded filename lists; it does not embed source content
 There are no external scripts, fonts, uploads, or automatic browser launches.
 Documentation and product links open only when you choose them. Share the report
 only if you intend to share its folder names, filenames, and counts.
-
-Dependency, build, cache, VCS, and editor directories are skipped. Directories named `bin` remain eligible. Symlinks are not followed,
-and a supplied symlink root is rejected. Blank recognized files count toward file
-totals even when their folders have no visible map area.
 
 Hard limits are depth 50 below root, 20,000 directories including root,
 100,000 recognized files, 50 MiB per source file, and 20 MiB for the complete HTML.

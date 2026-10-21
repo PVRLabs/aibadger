@@ -9,6 +9,7 @@ Badger is a local-first repository-context bridge for reviews, design questions,
 [![Release](https://img.shields.io/github/v/release/PVRLabs/aibadger)](https://github.com/PVRLabs/aibadger/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Homebrew](https://img.shields.io/badge/Homebrew-available-brightgreen)](https://github.com/PVRLabs/homebrew-tap)
+[![VS Code Marketplace](https://img.shields.io/badge/VS_Code-Marketplace-007ACC)](https://marketplace.visualstudio.com/items?itemName=pvrlabs.ai-badger)
 [![skills.sh](https://skills.sh/b/PVRLabs/aibadger)](https://skills.sh/PVRLabs/aibadger)
 
 **Local processing • No automatic uploads • No API keys • No telemetry**

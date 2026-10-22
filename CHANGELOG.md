@@ -4,6 +4,30 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.8.1] - 2026-10-22
+
+### Review
+
+- Added repeatable `--exclude` glob patterns to interactive `badger review` for
+  working-tree, staged, branch, and commit reviews. Refresh retains the patterns
+  and marks the review scope when changes are excluded.
+- Improved oversized-review diagnostics with the rendered payload size, limit,
+  largest tracked patches, and a suggested narrower review.
+
+### Codebase Map
+
+- Expanded file recognition to additional programming and configuration formats,
+  including COBOL, Ada, Fortran, RPG, SystemVerilog, VHDL, JSON, and YAML; large
+  package lockfiles are omitted from map totals.
+- Updated generated folder tasks to pair Design/exploration with Review and
+  clarify how folder selection relates to repository-wide Git changes.
+
+### Privacy and documentation
+
+- Added a source-level audit of CLI network behavior, with reproduction steps
+  and limits around subprocesses, operating-system services, and network-backed
+  filesystems.
+
 ## [v0.8.0] - 2026-10-14
 
 ### Offline Codebase Map

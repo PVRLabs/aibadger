@@ -235,11 +235,13 @@ gh run watch --repo PVRLabs/homebrew-tap "${tap_run_id}" --exit-status
    supports `formula=statlite` for Statlite releases. The tap ships macOS and
    Linux only; Windows is GitHub Releases and the PowerShell installer.
 
-6. Post a structured announcement in the repository's [Announcements
+6. After the release is public and the main distribution paths are updated,
+   publish a structured announcement in the repository's [Announcements
    discussion category](https://github.com/PVRLabs/aibadger/discussions/categories/announcements)
-   after the release is public and the main distribution paths are updated.
-   Use the changelog and release assets as the source of truth. Keep the post
-   focused on user-visible changes and write it in this order:
+   and update the pinned [AI Badger release notes discussion
+   (#22)](https://github.com/PVRLabs/aibadger/discussions/22). Use the changelog
+   and release assets as the source of truth. Keep the announcement focused on
+   user-visible changes and write it in this order:
 
    - Title: `AI Badger ${RELEASE_VERSION}: <two concise release themes>`
    - Short opening paragraph announcing the release and its overall benefit.
@@ -255,6 +257,14 @@ gh run watch --repo PVRLabs/homebrew-tap "${tap_run_id}" --exit-status
    and curl installation instructions. Do not announce unreleased or
    speculative work, and link to the exact `${RELEASE_VERSION}` tag rather
    than a moving `latest` URL when documenting release-specific behavior.
+
+   In discussion #22, add a concise section for `${RELEASE_VERSION}` at the top
+   of the body, newest first, and preserve all earlier release summaries. Include
+   the release date, the major user-visible changes, and links to the exact
+   release and relevant documentation. Update the title to
+   `AI Badger release notes (latest: ${RELEASE_VERSION})` and keep the discussion
+   pinned. This rolling entry complements the standalone announcement; publish
+   both for each release.
 
 The release workflow is manually dispatched from `main`; it is not triggered
 by pushing a tag or publishing a GitHub Release. The Homebrew updater is a
@@ -302,6 +312,8 @@ That should print `badger vX.Y.Z`.
 - The shared public Homebrew tap installs `badger` from GitHub Releases.
 - The curl installer, run with an isolated `HOME`, downloads, verifies, and
   runs the release binary.
+- The standalone release announcement is published and pinned discussion #22
+  contains the new release summary at the top, with prior entries preserved.
 
 ## Manual Fallback
 

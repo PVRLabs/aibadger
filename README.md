@@ -106,6 +106,7 @@ Explore folders and see where source lines are concentrated.
 - [Agent Integrations](docs/agents.md) — Compact repository orientation for coding agents
 - [Limitations & Supported Projects](docs/limitations.md)
 - [Privacy & Safety](docs/privacy.md)
+- [Verify Local-Only Operation](docs/network-verification.md)
 - [Contributing](docs/development.md)
 
 ---

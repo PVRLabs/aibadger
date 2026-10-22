@@ -2,6 +2,9 @@
 
 Badger prepares context locally. Nothing is uploaded automatically. Your AI provider receives what you paste.
 
+For the audited source configurations, findings, reproduction steps, and external-program
+limitations, see [Verify AI Badger's Local-Only Operation](network-verification.md).
+
 ## Guarantees
 
 - All scanning and extraction runs locally.

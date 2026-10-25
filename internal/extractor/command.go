@@ -127,10 +127,19 @@ func parseCommandLine(line string) (Command, bool) {
 	if len(pathAndPattern) > 1 {
 		cmd.Pattern = strings.TrimSpace(pathAndPattern[1])
 	}
+	if cmd.Type == "FILE" {
+		cmd.Path = normalizeFileSelectorPath(cmd.Path)
+	}
 	if cmd.Path == "" {
 		return Command{}, false
 	}
 	return cmd, true
+}
+
+// AI responses sometimes use a trailing backslash as a Markdown hard line break.
+// Remove only one such suffix; internal path separators remain literal.
+func normalizeFileSelectorPath(path string) string {
+	return strings.TrimSpace(strings.TrimSuffix(path, `\`))
 }
 
 func isSupportedCommandType(cmdType string) bool {
@@ -163,6 +172,7 @@ func parseEmbeddedFileCommands(line string) []Command {
 
 		path := strings.TrimSpace(line[start:end])
 		path = strings.TrimRight(path, " \t\r\n.,;:)]}")
+		path = normalizeFileSelectorPath(path)
 		if path == "" {
 			continue
 		}

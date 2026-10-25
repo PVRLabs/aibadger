@@ -7,6 +7,9 @@ PowerShell 5.1 and PowerShell 7, covering:
 - CLI help and agreement between `version` and `--version`.
 - Windows diagnosis, plus numeric version reporting for Maven, Gradle and npm
   batch launchers when installed. Missing batch launchers are explicitly skipped.
+  Native Windows unit tests also exercise synthetic `.cmd`/`.bat` version probes
+  in paths containing spaces, Unicode, and shell metacharacters, independently
+  of the runner's installed tools.
 - API code/design prompts with Unicode UTF-8 input, absolute and relative Windows
   paths, nested directories, and spaces in project/input paths.
 

@@ -80,6 +80,10 @@ jobs:
         if: runner.os == 'Windows'
         run: go test ./internal/codemap -run '^TestWindowsNativeReplacementSucceeds$' -count=1 -timeout=30s -v
 
+      - name: Native Windows diagnose batch probes
+        if: runner.os == 'Windows'
+        run: go test ./internal/diagnose -count=1 -timeout=30s
+
       - name: Windows diagnose, API, Unicode, and path smoke (PowerShell 5.1)
         if: runner.os == 'Windows'
         shell: powershell

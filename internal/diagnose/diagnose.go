@@ -34,7 +34,8 @@ type Options struct {
 	Timeout            time.Duration
 }
 
-// Runner locates and directly invokes local executables without a shell.
+// Runner locates and invokes local tools. The system runner uses a shell only
+// for fixed Windows batch-file version probes.
 type Runner interface {
 	LookPath(name string) (string, error)
 	Run(ctx context.Context, path string, args []string, env []string) (string, error)
@@ -45,12 +46,15 @@ type systemRunner struct{}
 func (systemRunner) LookPath(name string) (string, error) { return exec.LookPath(name) }
 
 func (systemRunner) Run(ctx context.Context, path string, args []string, env []string) (string, error) {
-	cmd := exec.CommandContext(ctx, path, args...)
+	cmd, err := probeCommand(ctx, path, args)
+	if err != nil {
+		return "", err
+	}
 	cmd.Env = env
 	var output limitedBuffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
-	err := cmd.Run()
+	err = cmd.Run()
 	if output.exceeded {
 		return "", errors.New("probe output limit exceeded")
 	}

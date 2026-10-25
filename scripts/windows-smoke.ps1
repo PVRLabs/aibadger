@@ -48,7 +48,13 @@ try {
         $command = Get-Command ($tool[0] + '.cmd'), ($tool[0] + '.bat') -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $command) { Write-Host "SKIP $($tool[0]) batch launcher (not installed)"; continue }
         Check "$($tool[0]) batch launcher diagnose" {
-            Assert ($script:diagnosis -match ('(?m)^\s*' + $tool[1] + ': \d'))
+            $status = [regex]::Match($script:diagnosis, ('(?m)^\s*' + [regex]::Escape($tool[1]) + ': (\d[0-9A-Za-z.+_-]*|unavailable|not found)\r?$'))
+            if (-not $status.Success -or $status.Groups[1].Value -notmatch '^\d') {
+                # Only emit the normalized public status, never raw tool output.
+                $safeStatus = if ($status.Success) { $status.Groups[1].Value } else { 'unrecognized status' }
+                Write-Host "INFO $($tool[0]) diagnose: $safeStatus"
+                throw 'Expected numeric tool version'
+            }
         }
     }
 } finally {

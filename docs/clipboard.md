@@ -1,6 +1,6 @@
 # Clipboard Dependencies
 
-Badger copies text to the system clipboard via a platform-native command.
+Badger copies text to the system clipboard using native Windows clipboard support or a platform command.
 Below are the required tools per platform.
 
 ## Linux
@@ -31,4 +31,5 @@ sudo zypper install xclip
 
 ## Windows
 
-`clip` — built-in, no installation required.
+Badger uses the native Unicode clipboard API; no external tool is required.
+`clip` remains available as a manual shell fallback.

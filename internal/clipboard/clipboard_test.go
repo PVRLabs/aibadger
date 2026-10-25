@@ -140,3 +140,38 @@ func TestAvailableReportsDetectedClipboardWithoutExposingPath(t *testing.T) {
 		t.Fatal("Available() = false, want true")
 	}
 }
+
+func TestWindowsCopyUsesUnicodeWriter(t *testing.T) {
+	withLookPath(t, func(string) (string, error) {
+		t.Fatal("Windows copy searched for a command")
+		return "", errors.New("missing")
+	})
+	text := "ASCII → “prompt” ç ğ ı İ ö ş ü 😀"
+	called := false
+	if err := copyText("windows", text, func(got string) error {
+		called = true
+		if got != text {
+			t.Fatalf("writer received %q, want %q", got, text)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("Unicode writer was not called")
+	}
+	want := errors.New("clipboard busy")
+	if err := copyText("windows", text, func(string) error { return want }); !errors.Is(err, want) {
+		t.Fatalf("error = %v, want %v", err, want)
+	}
+}
+
+func TestWindowsAvailableWithoutClip(t *testing.T) {
+	withLookPath(t, func(string) (string, error) { return "", errors.New("missing") })
+	if !available("windows") {
+		t.Fatal("native Windows clipboard should be available without clip.exe")
+	}
+	if _, ok := pipeCommand("windows"); ok {
+		t.Fatal("manual pipe command should still require clip.exe")
+	}
+}

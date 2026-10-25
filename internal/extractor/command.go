@@ -39,6 +39,7 @@ func (e *Extractor) ParseCommandsDetailed(input string) CommandParseResult {
 // line. Review continuation uses this boundary so ordinary findings are never
 // mistaken for extraction requests merely because they mention FILE: in prose.
 func (e *Extractor) ParseStrictCommandsDetailed(input string) CommandParseResult {
+	input = unwrapSelectorFence(input)
 	var result CommandParseResult
 	scanner := bufio.NewScanner(strings.NewReader(input))
 	// The caller already owns input as a string, so allow one token to span the
@@ -61,7 +62,7 @@ func (e *Extractor) ParseStrictCommandsDetailed(input string) CommandParseResult
 			result.Failures = append(result.Failures, fmt.Sprintf("line %d: %s requires path#pattern", lineNumber, cmd.Type))
 			continue
 		}
-		result.Commands = append(result.Commands, cmd)
+		result.Commands = append(result.Commands, e.unwrapFilePath(cmd))
 	}
 	if err := scanner.Err(); err != nil {
 		result.Failures = append(result.Failures, fmt.Sprintf("reading selector response: %v", err))
@@ -70,12 +71,13 @@ func (e *Extractor) ParseStrictCommandsDetailed(input string) CommandParseResult
 }
 
 func (e *Extractor) parseCommands(input string, reportMalformed bool) CommandParseResult {
+	input = unwrapSelectorFence(input)
 	var result CommandParseResult
 	scanner := bufio.NewScanner(strings.NewReader(input))
 	lineNumber := 0
 	for scanner.Scan() {
 		lineNumber++
-		line := scanner.Text()
+		line := unwrapSelectorLine(scanner.Text())
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
@@ -88,7 +90,7 @@ func (e *Extractor) parseCommands(input string, reportMalformed bool) CommandPar
 				result.Failures = append(result.Failures, fmt.Sprintf("line %d: %s requires path#pattern", lineNumber, cmd.Type))
 				continue
 			}
-			result.Commands = append(result.Commands, cmd)
+			result.Commands = append(result.Commands, e.unwrapFilePath(cmd))
 			continue
 		}
 		embedded := parseEmbeddedFileCommands(line)
@@ -104,7 +106,7 @@ func (e *Extractor) parseCommands(input string, reportMalformed bool) CommandPar
 }
 
 func parseCommandLine(line string) (Command, bool) {
-	line = strings.TrimSpace(line)
+	line = unwrapSelectorLine(line)
 	if line == "" {
 		return Command{}, false
 	}
@@ -134,6 +136,92 @@ func parseCommandLine(line string) (Command, bool) {
 		return Command{}, false
 	}
 	return cmd, true
+}
+
+// Strip presentation prefixes only; prose following a prefix is still rejected
+// by the selector parser. Patterns are never unescaped or rewritten.
+func unwrapSelectorLine(line string) string {
+	line = strings.TrimSpace(line)
+	for {
+		previous := line
+		if strings.HasPrefix(line, "> ") {
+			line = strings.TrimSpace(line[2:])
+		}
+		if len(line) > 2 && strings.ContainsAny(line[:1], "-*+") && (line[1] == ' ' || line[1] == '\t') {
+			line = strings.TrimSpace(line[2:])
+		}
+		i := 0
+		for i < len(line) && line[i] >= '0' && line[i] <= '9' {
+			i++
+		}
+		if i > 0 && i+1 < len(line) && (line[i] == '.' || line[i] == ')') && (line[i+1] == ' ' || line[i+1] == '\t') {
+			line = strings.TrimSpace(line[i+2:])
+		}
+		if line == previous {
+			break
+		}
+	}
+	return unwrapBackticks(line)
+}
+
+func unwrapBackticks(text string) string {
+	n := len(text) - len(strings.TrimLeft(text, "`"))
+	if n > 0 && len(text) > 2*n && strings.HasSuffix(text, strings.Repeat("`", n)) {
+		inner := text[n : len(text)-n]
+		if !strings.HasPrefix(inner, "`") && !strings.HasSuffix(inner, "`") {
+			return strings.TrimSpace(inner)
+		}
+	}
+	return text
+}
+
+// Only a complete selector-only fenced response is treated as presentation.
+// Keep line numbers intact so malformed responses retain useful diagnostics.
+func unwrapSelectorFence(input string) string {
+	lines := strings.Split(input, "\n")
+	first, last := 0, len(lines)-1
+	for first <= last && strings.TrimSpace(lines[first]) == "" {
+		first++
+	}
+	for last > first && strings.TrimSpace(lines[last]) == "" {
+		last--
+	}
+	if first >= last {
+		return input
+	}
+	opening := strings.TrimSpace(lines[first])
+	n := len(opening) - len(strings.TrimLeft(opening, "`"))
+	if n < 3 || strings.TrimSpace(lines[last]) != strings.Repeat("`", n) || strings.Contains(opening[n:], "`") {
+		return input
+	}
+	count := 0
+	for _, line := range lines[first+1 : last] {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		cmd, ok := parseCommandLine(line)
+		if !ok || (cmd.Type != "FILE" && cmd.Pattern == "") {
+			return input
+		}
+		count++
+	}
+	if count == 0 {
+		return input
+	}
+	lines[first], lines[last] = "", ""
+	return strings.Join(lines, "\n")
+}
+
+// Preserve literal backtick filenames. Only use the unwrapped path when it
+// resolves to an existing repository file and the literal path does not.
+func (e *Extractor) unwrapFilePath(cmd Command) Command {
+	if cmd.Type == "FILE" {
+		path := unwrapBackticks(cmd.Path)
+		if path != cmd.Path && e.resolveCommandPath(cmd.Path) == "" && e.resolveCommandPath(path) != "" {
+			cmd.Path = path
+		}
+	}
+	return cmd
 }
 
 // AI responses sometimes use a trailing backslash as a Markdown hard line break.

@@ -69,6 +69,7 @@ jobs:
           cache: true
 
       - name: Build CLI
+        id: build-cli
         run: go build -o bin/badger.exe ./cmd/badger
 
       - name: Version, help, and quick map smoke
@@ -82,6 +83,8 @@ jobs:
 
       - name: Native Windows diagnose batch probes
         if: runner.os == 'Windows'
+        env:
+          BADGER_WINDOWS_INSTALLED_TOOLS: "1"
         run: go test ./internal/diagnose -count=1 -timeout=30s
 
       - name: Windows diagnose, API, Unicode, and path smoke (PowerShell 5.1)
@@ -90,6 +93,6 @@ jobs:
         run: ./scripts/windows-smoke.ps1 -BinaryPath ./bin/badger.exe
 
       - name: Windows diagnose, API, Unicode, and path smoke (PowerShell 7)
-        if: runner.os == 'Windows'
+        if: ${{ runner.os == 'Windows' && !cancelled() && steps.build-cli.outcome == 'success' }}
         shell: pwsh
         run: ./scripts/windows-smoke.ps1 -BinaryPath ./bin/badger.exe

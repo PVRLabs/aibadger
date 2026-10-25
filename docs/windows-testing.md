@@ -9,7 +9,11 @@ PowerShell 5.1 and PowerShell 7, covering:
   batch launchers when installed. Missing batch launchers are explicitly skipped.
   Native Windows unit tests also exercise synthetic `.cmd`/`.bat` version probes
   in paths containing spaces, Unicode, and shell metacharacters, independently
-  of the runner's installed tools.
+  of the runner's installed tools. CI also opts into an installed-npm probe
+  using the same three-second deadline, temporary project directory, environment
+  override, and parser as diagnose. Failures report only execution categories
+  (timeout, exit status, launch/I/O error, or inherited-pipe delay) and counts
+  of numeric/warning/other output lines; raw output and paths are suppressed.
 - API code/design prompts with Unicode UTF-8 input, absolute and relative Windows
   paths, nested directories, and spaces in project/input paths.
 

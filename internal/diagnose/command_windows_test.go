@@ -72,7 +72,8 @@ func TestInstalledNPMVersionProbe(t *testing.T) {
 		t.Fatal("cannot create disposable npm probe directory")
 	}
 	t.Chdir(dir)
-	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	c := collector{opts: defaults(Options{})}
+	ctx, cancel := context.WithTimeout(context.Background(), c.probeDeadline(path))
 	defer cancel()
 	env := mergeEnvironment(os.Environ(), map[string]string{"npm_config_update_notifier": "false"}, "windows")
 	output, err := (systemRunner{}).Run(ctx, path, []string{"--version"}, env)

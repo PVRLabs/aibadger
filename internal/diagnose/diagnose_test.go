@@ -261,3 +261,31 @@ func TestPrintHelpDoesNotRunProbes(t *testing.T) {
 		}
 	}
 }
+
+func TestProbeDeadlinePolicy(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		goos    string
+		path    string
+		timeout time.Duration
+		want    time.Duration
+	}{
+		{"Windows npm cmd", "windows", `C:\Program Files\nodejs\npm.cmd`, 0, 10 * time.Second},
+		{"Windows npm bat case", "windows", `C:\tools\NPM.BAT`, 0, 10 * time.Second},
+		{"Windows npm exe", "windows", `C:\tools\npm.exe`, 0, 10 * time.Second},
+		{"explicit short override", "windows", `C:\tools\npm.cmd`, time.Millisecond, time.Millisecond},
+		{"explicit long override", "windows", `C:\tools\npm.cmd`, time.Minute, time.Minute},
+		{"other Windows batch", "windows", `C:\tools\mvn.cmd`, 0, 3 * time.Second},
+		{"other Windows exe", "windows", `C:\tools\node.exe`, 0, 3 * time.Second},
+		{"Unix npm", "linux", "/tools/npm", 0, 3 * time.Second},
+		{"similar name", "windows", `C:\tools\not-npm.cmd`, 0, 3 * time.Second},
+		{"negative default", "windows", `C:\tools\npm.cmd`, -time.Second, 10 * time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			c := collector{opts: defaults(Options{GOOS: test.goos, Timeout: test.timeout})}
+			if got := c.probeDeadline(test.path); got != test.want {
+				t.Fatalf("deadline = %v, want %v", got, test.want)
+			}
+		})
+	}
+}

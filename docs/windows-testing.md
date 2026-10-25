@@ -10,7 +10,7 @@ PowerShell 5.1 and PowerShell 7, covering:
   Native Windows unit tests also exercise synthetic `.cmd`/`.bat` version probes
   in paths containing spaces, Unicode, and shell metacharacters, independently
   of the runner's installed tools. CI also opts into an installed-npm probe
-  using the same three-second deadline, temporary project directory, environment
+  using the same deadline policy, temporary project directory, environment
   override, and parser as diagnose. Failures report only execution categories
   (timeout, exit status, launch/I/O error, or inherited-pipe delay) and counts
   of numeric/warning/other output lines; raw output and paths are suppressed.
@@ -20,6 +20,11 @@ PowerShell 5.1 and PowerShell 7, covering:
 Fixtures are disposable and removed after the checks. Command output and prompt
 contents are not logged. These checks do not build fixture projects or install
 third-party development tools. The existing CI build still requires Go.
+
+Windows npm probes allow ten seconds by default for cold launcher startup;
+other probes retain the three-second default. An explicit diagnose API timeout
+overrides either default. The installed-npm test uses the product deadline policy
+and still fails if npm cannot return a valid version within that bound.
 
 ## Manual installer action
 

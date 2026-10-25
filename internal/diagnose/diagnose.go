@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	probeTimeout = 3 * time.Second
-	maxOutput    = 32 * 1024
+	probeTimeout      = 3 * time.Second
+	windowsNPMTimeout = 10 * time.Second
+	maxOutput         = 32 * 1024
 )
 
 // Options supplies the local values and execution seams used to collect a
@@ -31,7 +32,8 @@ type Options struct {
 	ClipboardAvailable func() bool
 	Runner             Runner
 	Environment        []string
-	Timeout            time.Duration
+	// Timeout overrides all probe deadlines when positive.
+	Timeout time.Duration
 }
 
 // Runner locates and invokes local tools. The system runner uses a shell only
@@ -139,9 +141,6 @@ func defaults(opts Options) Options {
 	if opts.Environment == nil {
 		opts.Environment = os.Environ()
 	}
-	if opts.Timeout <= 0 {
-		opts.Timeout = probeTimeout
-	}
 	return opts
 }
 
@@ -225,8 +224,24 @@ func (c collector) probePath(names, args []string, overrides map[string]string, 
 	return "", "not found"
 }
 
+// npm's Windows launcher starts Node more than once. Cold starts on hosted
+// Windows runners can exceed the usual three-second version-probe allowance.
+func (c collector) probeDeadline(path string) time.Duration {
+	if c.opts.Timeout > 0 {
+		return c.opts.Timeout
+	}
+	name := path[strings.LastIndexAny(path, `/\`)+1:]
+	if c.opts.GOOS == "windows" {
+		switch strings.ToLower(name) {
+		case "npm", "npm.cmd", "npm.bat", "npm.exe":
+			return windowsNPMTimeout
+		}
+	}
+	return probeTimeout
+}
+
 func (c collector) run(path string, args []string, overrides map[string]string, parse func(string) (string, bool), acceptNonzero bool) (string, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), c.opts.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), c.probeDeadline(path))
 	defer cancel()
 	output, err := c.opts.Runner.Run(ctx, path, append([]string(nil), args...), mergeEnvironment(c.opts.Environment, overrides, c.opts.GOOS))
 	if err != nil && !acceptNonzero {

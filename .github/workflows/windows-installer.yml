@@ -1,0 +1,36 @@
+name: Windows installer smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Pinned published release tag (vX.Y.Z); tests the installer from the selected workflow ref'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install verified release and smoke (PowerShell 5.1)
+        shell: powershell
+        env:
+          SMOKE_VERSION: ${{ inputs.version }}
+        run: ./scripts/windows-installer-smoke.ps1 -Version $env:SMOKE_VERSION
+
+      - name: Installed CLI smoke (PowerShell 7)
+        shell: pwsh
+        run: ./scripts/windows-smoke.ps1 -BinaryPath $env:BADGER_INSTALLED_BIN
+
+      - name: Clean experiment files
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ChildItem -LiteralPath $env:RUNNER_TEMP -Directory -Filter 'Badger installer *' |
+            Remove-Item -Recurse -Force

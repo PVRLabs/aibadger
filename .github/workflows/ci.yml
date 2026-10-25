@@ -79,3 +79,13 @@ jobs:
       - name: Native Windows replacement
         if: runner.os == 'Windows'
         run: go test ./internal/codemap -run '^TestWindowsNativeReplacementSucceeds$' -count=1 -timeout=30s -v
+
+      - name: Windows diagnose, API, Unicode, and path smoke (PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/windows-smoke.ps1 -BinaryPath ./bin/badger.exe
+
+      - name: Windows diagnose, API, Unicode, and path smoke (PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/windows-smoke.ps1 -BinaryPath ./bin/badger.exe

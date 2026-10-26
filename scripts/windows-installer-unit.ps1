@@ -66,8 +66,14 @@ try {
   Install-BadgerExecutable $source $target
   Assert-Content $target 'new'
   Assert-Content "$target.old" 'old'
-  $backups = @(Get-ChildItem -LiteralPath $temp -Filter 'badger.exe.old.*')
-  if ($backups.Count) { throw 'Unlocked unique backup was not removed' }
+  # Windows PowerShell's filesystem filter can match the bare .old file with
+  # 'badger.exe.old.*'. Match the literal prefix so the locked backup is excluded.
+  $backups = @(Get-ChildItem -LiteralPath $temp | Where-Object {
+    $_.Name.StartsWith('badger.exe.old.', [StringComparison]::OrdinalIgnoreCase)
+  })
+  if ($backups.Count) {
+    throw "Unlocked unique backup was not removed: $($backups.Name -join ', ')"
+  }
   Write-Host 'PASS: fresh install, upgrade, partial-copy rollback, locked backup, repeated upgrade'
 } finally {
   Microsoft.PowerShell.Management\Remove-Item -LiteralPath $temp -Recurse -Force

@@ -91,6 +91,20 @@ jobs:
           BADGER_WINDOWS_INSTALLED_TOOLS: "1"
         run: go test ./internal/diagnose -count=1 -timeout=30s
 
+      - name: Windows installer file-operation unit tests (PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/windows-installer-unit.ps1
+
+      - name: Windows installer file-operation unit tests (PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/windows-installer-unit.ps1
+
+      - name: Windows Explorer command-line unit tests
+        if: runner.os == 'Windows'
+        run: go test ./internal/tui -run '^TestExplorerReveal' -count=1 -timeout=30s
+
       - name: Windows diagnose, API, Unicode, and path smoke (PowerShell 5.1)
         if: runner.os == 'Windows'
         shell: powershell

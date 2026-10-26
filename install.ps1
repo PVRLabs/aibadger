@@ -4,6 +4,46 @@
 
 $ErrorActionPreference = "Stop"
 
+# Rename the old image so upgrades can proceed while Badger is running.
+function Install-BadgerExecutable {
+  param([string]$Source, [string]$Target)
+
+  $backup = $null
+  if (Test-Path -LiteralPath $Target) {
+    $candidate = "$Target.old"
+    if (Test-Path -LiteralPath $candidate) {
+      try {
+        Remove-Item -LiteralPath $candidate -Force -ErrorAction Stop
+      } catch {
+        # A prior image may still be running. Leave it alone and use a new name.
+        $candidate = "$Target.old.$([Guid]::NewGuid().ToString('N'))"
+      }
+    }
+    Move-Item -LiteralPath $Target -Destination $candidate -ErrorAction Stop
+    $backup = $candidate
+  }
+  try {
+    Copy-Item -LiteralPath $Source -Destination $Target -Force -ErrorAction Stop
+  } catch {
+    $copyFailure = $_
+    if ($backup) {
+      try {
+        if (Test-Path -LiteralPath $Target) {
+          Remove-Item -LiteralPath $Target -Force -ErrorAction Stop
+        }
+        Move-Item -LiteralPath $backup -Destination $Target -ErrorAction Stop
+      } catch {
+        throw "Install failed: $($copyFailure.Exception.Message). Restore failed: $($_.Exception.Message). Previous executable remains at $backup"
+      }
+    }
+    throw $copyFailure
+  }
+  if ($backup) {
+    # A running image can refuse deletion; the new executable is already installed.
+    Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+  }
+}
+
 $repo = if ($env:BADGER_REPO) { $env:BADGER_REPO } else { "PVRLabs/aibadger" }
 $installDir = if ($env:BADGER_INSTALL_DIR) { $env:BADGER_INSTALL_DIR } else { "" }
 $version = if ($env:BADGER_VERSION) { $env:BADGER_VERSION } else { "" }
@@ -56,7 +96,7 @@ try {
   if (-not (Test-Path $extractedBinary)) {
     throw "Archive did not contain $binaryName"
   }
-  Copy-Item -Path $extractedBinary -Destination $targetPath -Force
+  Install-BadgerExecutable -Source $extractedBinary -Target $targetPath
 } finally {
   Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
 }

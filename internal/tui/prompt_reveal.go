@@ -15,9 +15,7 @@ type promptFileRevealCommand struct {
 var (
 	promptFileRevealGOOS     = runtime.GOOS
 	promptFileRevealLookPath = exec.LookPath
-	promptFileRevealRun      = func(name string, args ...string) error {
-		return exec.Command(name, args...).Run()
-	}
+	promptFileRevealRun      = runPromptFileReveal
 )
 
 func promptFileRevealAvailable(path string) bool {

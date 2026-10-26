@@ -90,7 +90,13 @@ $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRand
 New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
 try {
   $archivePath = Join-Path $tmpDir $archiveName
-  Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath -UseBasicParsing
+  $previousProgressPreference = $ProgressPreference
+  try {
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath -UseBasicParsing
+  } finally {
+    $ProgressPreference = $previousProgressPreference
+  }
   Expand-Archive -Path $archivePath -DestinationPath $tmpDir -Force
   $extractedBinary = Join-Path $tmpDir $binaryName
   if (-not (Test-Path $extractedBinary)) {

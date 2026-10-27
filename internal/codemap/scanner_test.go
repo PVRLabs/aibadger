@@ -215,3 +215,44 @@ func TestAmbiguousHeadersUseSharedLanguageLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestTemplateAndBuildFilenameRecognition(t *testing.T) {
+	cases := map[string]string{
+		"home.blade.php": "Blade", "home.php": "PHP",
+		"page.html.twig": "Twig", "config.yaml.j2": "Jinja", "page.jinja.html": "HTML",
+		"page.jinja": "Jinja", "page.jinja2": "Jinja", "run.ps1": "PowerShell",
+		"module.psm1": "PowerShell", "manifest.psd1": "PowerShell",
+		"run.bat": "Batch", "run.cmd": "Batch",
+		"Dockerfile": "Dockerfile", "Makefile": "Makefile", "Justfile": "Just",
+		"CMakeLists.txt": "CMake", "module.cmake": "CMake", "page.astro": "Astro",
+		"query.graphql": "GraphQL", "query.gql": "GraphQL", "Dockerfile.sh": "Shell",
+		"view.blade.php.bak": "", "view.blade.phpx": "", "view.php.blade": "",
+		"Dockerfile.dev": "", "Makefile.am": "", "Makefile.in": "", "GNUmakefile": "",
+		"Justfile.local": "", "CMakeLists.txt.bak": "", "notes.txt": "", "arbitrary": "",
+	}
+	for name, want := range cases {
+		mixed := []byte(strings.ToLower(name))
+		for i := 0; i < len(mixed); i += 2 {
+			if mixed[i] >= 'a' && mixed[i] <= 'z' {
+				mixed[i] -= 'a' - 'A'
+			}
+		}
+		for _, variant := range []string{name, strings.ToUpper(name), string(mixed)} {
+			for _, prefix := range []string{"", "nested/"} {
+				t.Run(prefix+variant, func(t *testing.T) {
+					root := t.TempDir()
+					path := prefix + variant
+					writeTestFile(t, root, path, "source\n")
+					entries, err := os.ReadDir(filepath.Dir(filepath.Join(root, filepath.FromSlash(path))))
+					if err != nil {
+						t.Fatal(err)
+					}
+					got, err := classifyEntry(entries[0])
+					if err != nil || got.language != want {
+						t.Fatalf("classification = %q, %v; want %q", got.language, err, want)
+					}
+				})
+			}
+		}
+	}
+}

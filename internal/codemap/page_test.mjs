@@ -108,6 +108,8 @@ test('additional source and configuration languages have fixed styles and unknow
     COBOL:45, Ada:150, JCL:30, SystemVerilog:195, VHDL:225,
     Fortran:275, 'PL/I':310, RPG:350, 'IBM CL':175, ABAP:205,
     JSON:50, YAML:345, TOML:15, XML:35, INI:130,
+    Blade:10, Twig:110, Jinja:20, PowerShell:215, Batch:90,
+    Dockerfile:200, Makefile:65, Just:35, CMake:150, Astro:280, GraphQL:315,
     Config:160, Properties:80,
   };
   const context = vm.createContext({});
@@ -119,6 +121,16 @@ test('additional source and configuration languages have fixed styles and unknow
   }
   assert.equal(vm.runInContext('languageStyle("unknown")', context),
     '--language-hue:160;--language-saturation:0%');
+});
+
+test('template, script and build language labels render in chips and details', () => {
+  const names = ['Blade', 'Twig', 'Jinja', 'PowerShell', 'Batch', 'Dockerfile', 'Makefile', 'Just', 'CMake', 'Astro', 'GraphQL'];
+  for (const name of names) {
+    const node = folder('project', {[name]:{lines:2,files:1}});
+    const html = vm.runInNewContext(helpers + sizing + language + '\nlanguageChips(node) + directLanguageRows(node)', {node});
+    assert.ok(html.includes('>' + name + '<'), name);
+    assert.ok(html.includes('--language-saturation:36%'), name);
+  }
 });
 
 test('complete embedded script has valid JavaScript syntax', () => {

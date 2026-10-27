@@ -12,6 +12,8 @@ import (
 
 func TestLanguageContract(t *testing.T) {
 	groups := map[string]string{
+		"Twig": "twig", "Jinja": "jinja jinja2 j2", "PowerShell": "ps1 psm1 psd1",
+		"Batch": "bat cmd", "CMake": "cmake", "Astro": "astro", "GraphQL": "graphql gql",
 		"Ada":           "ads adb ada",
 		"JCL":           "jcl",
 		"SystemVerilog": "sv svh",
@@ -52,7 +54,7 @@ func TestLanguageContract(t *testing.T) {
 	}
 	writeTestFile(t, root, "ignored.txt", "ignored\n")
 	writeTestFile(t, root, "ignored.unknown", "ignored\n")
-	writeTestFile(t, root, "Makefile", "ignored\n")
+	writeTestFile(t, root, "unrecognized", "ignored\n")
 	got, err := scanProject(root)
 	if err != nil {
 		t.Fatal(err)
@@ -258,5 +260,49 @@ func TestSymlinksAndInvalidRoots(t *testing.T) {
 		if err == nil || got != nil || !strings.Contains(err.Error(), path) {
 			t.Fatalf("invalid root: %v %v", got, err)
 		}
+	}
+}
+
+// Exercise newly supported-only projects through publication and embedded metadata.
+func TestTemplateBuildReportAccounting(t *testing.T) {
+	source, caller := t.TempDir(), t.TempDir()
+	fixtures := map[string]string{
+		"Dockerfile":            "# comment\n\nFROM scratch",
+		"blank.psd1":            " \n\t\n",
+		"nested/home.blade.php": "<!-- comment -->\n\n<div />",
+		"nested/Justfile":       "",
+	}
+	for name, content := range fixtures {
+		writeTestFile(t, source, name, content)
+	}
+	writeTestFile(t, source, "vendor/ignored.twig", "excluded\n")
+	writeTestFile(t, source, "node_modules/ignored.ps1", "excluded\n")
+	writeTestFile(t, source, "ignored.txt", "excluded\n")
+	path, err := generateIn(source, caller, scanProject, renderHTML, publishHTML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, data, ok := strings.Cut(string(page), `<script id="map-data" type="application/json">`)
+	if !ok {
+		t.Fatal("missing report data")
+	}
+	data, _, _ = strings.Cut(data, "</script>")
+	var got directory
+	if err := json.Unmarshal([]byte(data), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]languageStats{
+		"Dockerfile": {Lines: 2, Files: 1}, "PowerShell": {Lines: 0, Files: 1},
+		"Blade": {Lines: 2, Files: 1}, "Just": {Lines: 0, Files: 1},
+	}
+	if got.Lines != 4 || got.Files != 4 || got.DirectLines != 2 || got.DirectFiles != 2 || !reflect.DeepEqual(got.Languages, want) {
+		t.Fatalf("report accounting: %+v", got)
+	}
+	if len(got.Children) != 1 || got.Children[0].Path != "nested" || got.Children[0].DirectLines != 2 || got.Children[0].DirectFiles != 2 {
+		t.Fatalf("nested accounting: %+v", got.Children)
 	}
 }

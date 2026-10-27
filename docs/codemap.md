@@ -85,32 +85,53 @@ See the [VS Code review walkthrough](https://pvrlabs.xyz/articles/reviewing-ai-g
 
 ## Supported languages and extensions
 
-Codemap recognizes source files by extension, without parsing their contents.
-Extension matching is case-insensitive, so `.GO` and `.go` both count as Go.
+Codemap recognizes source files by filename, without parsing their contents.
+Basenames are matched case-insensitively on every OS at any directory depth.
+Exact build basenames take precedence, followed by the compound suffix
+`.blade.php`, then the final extension. Thus `.GO` and `.go` both count as Go.
+
+Templates count as whole files, including embedded languages: `home.blade.php`
+counts once as Blade, while ordinary `.php` stays PHP. The final template
+suffix wins: `page.html.twig` is Twig and `config.yaml.j2` is Jinja, but
+`page.jinja.html` remains HTML. Plain HTML stays HTML regardless of content or
+location. PowerShell `.psd1` manifests/data count as PowerShell too.
+All formats use raw nonblank physical lines, including comments; blank
+recognized files still count as files. No encoding conversion is performed.
+
+Only the exact build basenames below are special. Variants such as
+`Dockerfile.dev`, `Makefile.am`, `Makefile.in`, `GNUmakefile`, and
+`Justfile.local` remain unrecognized unless their final extension is already
+supported (`Dockerfile.sh` counts as Shell).
 
 Configuration formats also contribute to file counts, nonblank line totals, and
 folder sizes. Web app manifests (`.webmanifest`) are counted as JSON; `.conf`
 files use the Config label.
 
-| Language | Extensions | Excluded files |
+| Language | Extensions or exact basenames | Excluded files |
 | --- | --- | --- |
 | ABAP | `.abap` | — |
 | Ada | `.ads`, `.adb`, `.ada` | — |
+| Astro | `.astro` | — |
+| Batch | `.bat`, `.cmd` | — |
+| Blade | `.blade.php` | — |
 | C | `.c` | — |
 | C# | `.cs` | — |
 | C++ | `.cc`, `.cpp`, `.cxx`, `.hh`, `.hpp`, `.hxx` | — |
 | C/C++ | `.h` | — |
 | Clojure | `.clj` | — |
 | ClojureScript | `.cljs` | — |
+| CMake | `.cmake`, exact `CMakeLists.txt` | — |
 | COBOL | `.cbl`, `.cob`, `.cobol`, `.ccp`, `.cpy` | — |
 | Config | `.conf` | — |
 | CSS | `.css` | — |
 | Dart | `.dart` | — |
+| Dockerfile | exact `Dockerfile` | — |
 | Elixir | `.ex`, `.exs` | — |
 | Erlang | `.erl`, `.hrl` | — |
 | F# | `.fs`, `.fsx` | — |
 | Fortran | `.f77`, `.f90`, `.f95`, `.f03`, `.f08`, `.fpp`, `.ftn` | — |
 | Go | `.go` | — |
+| GraphQL | `.graphql`, `.gql` | — |
 | Groovy | `.groovy`, `.gradle` | — |
 | Haskell | `.hs`, `.lhs` | — |
 | HTML | `.html`, `.htm` | — |
@@ -119,15 +140,19 @@ files use the Config label.
 | Java | `.java` | — |
 | JavaScript | `.js`, `.mjs`, `.cjs`, `.jsx` | — |
 | JCL | `.jcl` | — |
+| Jinja | `.jinja`, `.jinja2`, `.j2` | — |
 | JSON | `.json`, `.webmanifest` | `package-lock.json` |
+| Just | exact `Justfile` | — |
 | Kotlin | `.kt`, `.kts` | — |
 | Lua | `.lua` | — |
+| Makefile | exact `Makefile` | — |
 | Markdown | `.md`, `.markdown`, `.mdx` | — |
 | Objective-C | `.m` | — |
 | Objective-C++ | `.mm` | — |
 | Perl | `.pl`, `.pm` | — |
 | PHP | `.php` | — |
 | PL/I | `.pli`, `.pl1` | — |
+| PowerShell | `.ps1`, `.psm1`, `.psd1` | — |
 | Properties | `.properties` | — |
 | Protocol Buffers | `.proto` | — |
 | Python | `.py`, `.pyw` | — |
@@ -146,6 +171,7 @@ files use the Config label.
 | SystemVerilog | `.sv`, `.svh` | — |
 | Terraform | `.tf` | — |
 | TOML | `.toml` | — |
+| Twig | `.twig` | — |
 | TypeScript | `.ts`, `.mts`, `.cts`, `.tsx` | — |
 | VHDL | `.vhd`, `.vhdl` | — |
 | Visual Basic | `.vb` | — |
@@ -162,8 +188,9 @@ files and names such as `custom-package-lock.json` remain eligible.
 
 The following entries do not contribute to line totals, file counts, or map area:
 
-- **Unrecognized extensions**, including generic `.txt` files and files without
-  an extension.
+- **Unrecognized filenames**, including generic `.txt` files (except
+  `CMakeLists.txt`) and extensionless files other than the exact build basenames
+  listed above.
 - **Generated dependency lockfiles** listed in the table above.
 - **Skipped directories and their contents**, listed below. Exact directory
   names are matched case-sensitively at any depth below the supplied root.

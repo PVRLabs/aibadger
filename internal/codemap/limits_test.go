@@ -17,6 +17,9 @@ func TestScanLimits(t *testing.T) {
 		limits scanLimits
 		want   string
 	}{
+		{"new build basename boundary", []string{"Dockerfile"}, scanLimits{0, 1, 1, 2}, ""},
+		{"new file count", []string{"Makefile", "run.ps1"}, scanLimits{0, 1, 1, 10}, "recognized-file limit (1)"},
+		{"new file bytes", []string{"home.blade.php"}, scanLimits{0, 1, 1, 1}, "source file size limit (1 bytes)"},
 		{"depth boundary", []string{"a/b/main.go"}, scanLimits{2, 3, 1, 10}, ""},
 		{"depth exceeded", []string{"a/b/c/main.go"}, scanLimits{2, 10, 10, 10}, "directory depth limit (2)"},
 		{"directory count", []string{"a/main.go", "b/main.go"}, scanLimits{5, 2, 10, 10}, "directory limit (2)"},

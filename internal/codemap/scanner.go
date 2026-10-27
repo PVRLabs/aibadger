@@ -13,6 +13,19 @@ import (
 )
 
 var extensionLanguages = map[string]string{
+	".twig":        "Twig",
+	".jinja":       "Jinja",
+	".jinja2":      "Jinja",
+	".j2":          "Jinja",
+	".ps1":         "PowerShell",
+	".psm1":        "PowerShell",
+	".psd1":        "PowerShell",
+	".bat":         "Batch",
+	".cmd":         "Batch",
+	".cmake":       "CMake",
+	".astro":       "Astro",
+	".graphql":     "GraphQL",
+	".gql":         "GraphQL",
 	".ads":         "Ada",
 	".adb":         "Ada",
 	".ada":         "Ada",
@@ -319,9 +332,29 @@ func classifyEntry(entry os.DirEntry) (classifiedEntry, error) {
 		case "package-lock.json", "pnpm-lock.yaml":
 			return result, nil
 		}
-		result.language = extensionLanguages[strings.ToLower(filepath.Ext(result.name))]
+		result.language = languageForName(result.name)
 	}
 	return result, nil
+}
+
+// languageForName resolves exact build names before compound and final suffixes.
+// Eligibility and exclusions remain the responsibility of classifyEntry.
+func languageForName(name string) string {
+	name = strings.ToLower(name)
+	switch name {
+	case "dockerfile":
+		return "Dockerfile"
+	case "makefile":
+		return "Makefile"
+	case "justfile":
+		return "Just"
+	case "cmakelists.txt":
+		return "CMake"
+	}
+	if strings.HasSuffix(name, ".blade.php") {
+		return "Blade"
+	}
+	return extensionLanguages[filepath.Ext(name)]
 }
 
 func newDirectory(name, path string) *directory {

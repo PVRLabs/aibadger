@@ -4,6 +4,23 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.8.2] - 2026-10-26
+
+### Windows reliability
+
+- Fixed Unicode clipboard copying and revealing prompt files in Explorer.
+- Fixed diagnosis of npm and other batch launchers, with more time for npm's
+  cold startup.
+- Made installer executable replacement recoverable when replacement fails,
+  and suppressed PowerShell download progress noise.
+
+### File extraction
+
+- Fixed `FILE:` selectors ending in a Markdown line-break backslash so copied
+  AI responses resolve the requested files correctly.
+- Accept Markdown wrappers around extraction selectors, including inline code,
+  lists, blockquotes, and fenced code blocks.
+
 ## [v0.8.1] - 2026-10-22
 
 ### Review

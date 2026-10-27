@@ -398,9 +398,9 @@ func TestExcludePatternContract(t *testing.T) {
 		{"archive/**/*.go", "archive/app.go", true},
 		{"archive/**/*.go", "archive/pkg/app.go", true},
 		{"archive/*.go", "archive/pkg/app.go", false},
-		{"**/test?.[ch]", "pkg/test1.c", true},
-		{"**/test?.[ch]", "test1.h", true},
-		{"literal\\*.go", "pkg/literal*.go", true},
+		{"vendor", "pkg/vendor/file.go", true},
+		{"src/generated", "src/generated/file.go", true},
+		{"**/*.min.js", "app.min.js", true},
 	} {
 		t.Run(tc.pattern+"/"+tc.path, func(t *testing.T) {
 			if err := ValidateExcludePatterns([]string{tc.pattern}); err != nil {
@@ -411,7 +411,7 @@ func TestExcludePatternContract(t *testing.T) {
 			}
 		})
 	}
-	for _, pattern := range []string{"", "[", "a/[", "foo\\", "/archive/**", "../*.csv", "a//b", "a/./b", "a/**x", "a\nb"} {
+	for _, pattern := range []string{"test?.go", "test.[ch]", "literal\\*.go", "C:foo", "C:/foo", "", "[", "a/[", "foo\\", "/archive/**", "../*.csv", "a//b", "a/./b", "a/**x", "a\nb"} {
 		if err := ValidateExcludePatterns([]string{pattern}); err == nil || !strings.Contains(err.Error(), "invalid --exclude pattern") {
 			t.Errorf("pattern %q: %v", pattern, err)
 		}

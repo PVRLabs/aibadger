@@ -65,7 +65,7 @@ header { padding:18px 28px; display:flex; align-items:center; justify-content:sp
 .search-result:hover { background:var(--soft); }
 .search-result small { display:block; color:var(--muted); }
 .workspace { padding:22px 28px 26px; }
-.toolbar { display:flex; align-items:center; gap:8px; padding:12px 14px; background:var(--panel); border:1px solid var(--line); border-radius:12px 12px 0 0; }
+.toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 14px; background:var(--panel); border:1px solid var(--line); border-radius:12px 12px 0 0; }
 .control { font-size:12px; font-weight:550; border:1px solid var(--line); border-radius:7px; padding:6px 10px; color:var(--text); background:var(--panel); white-space:nowrap; }
 .control:hover:enabled { background:var(--soft); }
 #crumbs { display:flex; align-items:center; gap:4px; flex:1; min-width:0; overflow:auto; }
@@ -158,6 +158,12 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
 @media(max-width:1100px) { .toolbar { flex-wrap:wrap; } #repository-stats { order:3; flex-basis:100%; margin:4px 0 0; padding:12px 0 0; border-left:0; border-top:1px solid var(--line); text-align:left; } }
 @media(max-width:900px) { header { padding:16px; } .workspace { padding:16px; } main { grid-template-columns:minmax(0,1fr) 270px; } .depth-label { display:none; } }
 @media(max-width:680px) { header { align-items:stretch; flex-direction:column; gap:12px; } .header-actions { gap:8px; } .search { width:auto; flex:1; min-width:0; } .toolbar { flex-wrap:wrap; } #crumbs { order:2; flex-basis:100%; } main { grid-template-columns:1fr; } #map { height:55vh; min-height:320px; } #details { border-left:0; border-top:1px solid var(--line); max-height:none; } }
+.regeneration-toggle { flex:0 0 auto; padding-left:5px; }
+#regeneration-arrow { display:inline-block; width:12px; margin-right:4px; font-size:18px; line-height:1; vertical-align:middle; text-align:center; }
+.exclusion-notice { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; margin-right:5px; border:1px solid currentColor; border-radius:50%; font-size:10px; font-weight:700; }
+.regeneration-panel { order:4; flex:1 0 100%; min-width:0; padding-top:10px; border-top:1px solid var(--line); font-size:12px; }
+.regeneration-panel p { color:var(--muted); }
+.regeneration-panel textarea { width:100%; min-height:72px; margin:8px 0; }
 </style>
 </head>
 <body>
@@ -170,14 +176,16 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
     <button id="up" class="control" title="Go to parent folder">↑ Up</button>
     <button id="reset" class="control" title="Return to the repository root">Repository</button>
     <nav id="crumbs" aria-label="Focused directory"></nav>
+    __BADGER_MAP_REPRO__
     <label class="depth-label" for="depth">Visible levels</label><select id="depth" class="control" aria-label="Visible levels"><option value="1">One level</option><option value="2" selected>Two levels</option><option value="4">Four levels</option></select>
     <div id="repository-stats" aria-label="Repository totals"></div>
+    __BADGER_MAP_REPRO_PANEL__
   </div>
   <main>
     <section id="map-wrap"><div id="map" aria-label="Directory treemap"></div><div class="map-caption"><span id="area-caption">Area = nonblank lines, including comments · Color = folder group</span><span>Click to inspect · Double-click to explore folder</span></div></section>
     <aside id="details" aria-label="Folder details"></aside>
   </main>
-  <footer class="page-footer"><span class="footer-brand"><a href="https://pvrlabs.xyz/aibadger" target="_blank" rel="noopener noreferrer">AI Badger</a> · Codebase Map</span><span class="footer-links"><span>Generated locally · Nothing uploaded</span><a href="https://github.com/PVRLabs/aibadger" target="_blank" rel="noopener noreferrer">Star us on GitHub ↗</a></span></footer>
+  <footer class="page-footer"><span class="footer-brand"><a href="https://pvrlabs.xyz/aibadger" target="_blank" rel="noopener noreferrer">AI Badger</a> · Codebase Map</span><span class="footer-links"><span>Generated locally · Nothing uploaded</span><span id="generator-version"></span><a href="https://github.com/PVRLabs/aibadger" target="_blank" rel="noopener noreferrer">Star us on GitHub ↗</a></span></footer>
 </div>
 <div id="tooltip"></div>
 <script id="map-data" type="application/json">__BADGER_MAP_DATA__</script>
@@ -507,6 +515,21 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
       status.textContent = "Text selected. Press Ctrl+C or ⌘C to copy.";
     }
   }
+  function renderReproduction(settings) {
+    if (!settings) return;
+    const toggle = document.getElementById("regeneration");
+    const panel = document.getElementById("regeneration-panel");
+    toggle.addEventListener("click", () => {
+      panel.hidden = !panel.hidden;
+      toggle.setAttribute("aria-expanded", String(!panel.hidden));
+      document.getElementById("regeneration-arrow").textContent = panel.hidden ? "▸" : "▾";
+    });
+    const field = document.getElementById("regeneration-command");
+    const status = document.getElementById("regeneration-status");
+    document.getElementById("regeneration-shell").textContent = settings.shell;
+    field.value = settings.command;
+    document.getElementById("regeneration-copy").addEventListener("click", () => copyText(settings.command, status, field));
+  }
   function addBadgerActions(node) {
     const heading = details.querySelector("h2");
     const row = document.createElement("div");
@@ -673,6 +696,8 @@ summary:focus-visible,textarea:focus-visible { outline:3px solid var(--accent); 
   }
 
   const repositoryStats = document.getElementById("repository-stats");
+  renderReproduction(root.reproduction);
+  if (root.generatorVersion) document.getElementById("generator-version").textContent = "Badger " + root.generatorVersion;
   repositoryStats.innerHTML = '<span class="repository-loc"><strong>' + compactLOC(root.lines) + '</strong><span class="loc-unit">LOC</span></span><span class="repository-counts">' + formatNumber(root.files) + ' files · ' + formatNumber(byPath.size) + ' folders</span>';
   repositoryStats.title = formatNumber(root.lines) + " nonblank lines, including comments. Entire repository.";
   repositoryStats.setAttribute("aria-label", "Repository totals: " + formatNumber(root.lines) + " nonblank lines, including comments; " + formatNumber(root.files) + " files; " + formatNumber(byPath.size) + " folders.");

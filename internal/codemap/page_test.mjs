@@ -387,7 +387,7 @@ test('repository totals retain wrapping and shrinkable CSS with large counts at 
   const start=source.indexOf('  const repositoryStats');
   const end=source.indexOf('  document.getElementById("up")',start);
   vm.runInNewContext(helpers+functions('percent','selectNode')+source.slice(start,end), {
-    root,byPath:{size:999999999999},document:{getElementById() {return stats;}},
+    root,renderReproduction() {},byPath:{size:999999999999},document:{getElementById() {return stats;}},
   });
   assert.match(stats.innerHTML,/999,999,999,999 files · 999,999,999,999 folders/);
   assert.doesNotMatch(stats.innerHTML,/&nbsp;|\u00a0|nowrap/);
@@ -590,4 +590,47 @@ test('denied/unavailable clipboard selects visible task and path text with manua
       assert.match(statuses[i].textContent,/Text selected.*Ctrl\+C.*⌘C/);
     }
   }
+});
+
+test('regeneration uses literal DOM values and reads clipboard only on explicit copy', async () => {
+  const settings = {shell:'PowerShell',command:"badger map . --exclude='</script> & $(nope) `nope` a''b'"};
+  for (const clipboard of ['allowed','denied','missing']) {
+    let calls = 0;
+    const nodes = Object.fromEntries(['regeneration','panel','arrow','command','shell','copy','status'].map(name => [name, {
+      textContent:'',value:'',hidden:true,attributes:{},setAttribute(name,value) {this.attributes[name]=value;},events:{},focus() {this.focused=true;},select() {this.selected=true;},
+      addEventListener(event,callback) {this.events[event]=callback;},
+      set innerHTML(_) {throw new Error('metadata must use text/value properties');},
+    }]));
+    const navigator = clipboard === 'missing' ? {} : {clipboard:{async writeText(text) {
+      calls++;
+      assert.equal(text,settings.command);
+      if (clipboard === 'denied') throw new Error('denied');
+    }}};
+    const context = vm.createContext({settings,navigator,document:{getElementById(id) {
+      return nodes[id.replace('regeneration-','')];
+    }}});
+    vm.runInContext(source.slice(source.indexOf('  async function copyText'),source.indexOf('  function addBadgerActions')) + '\nrenderReproduction(settings)',context);
+    assert.equal(calls,0);
+    const toggle = nodes.regeneration;
+    toggle.events.click();
+    assert.equal(nodes.panel.hidden,false);
+    assert.equal(toggle.attributes['aria-expanded'],'true');
+    toggle.events.click();
+    assert.equal(nodes.panel.hidden,true);
+    assert.equal(toggle.attributes['aria-expanded'],'false');
+    assert.equal(nodes.command.value,settings.command);
+    assert.equal(nodes.shell.textContent,settings.shell);
+    await nodes.copy.events.click();
+    assert.equal(calls,clipboard === 'missing' ? 0 : 1);
+    if (clipboard === 'allowed') {
+      assert.equal(nodes.status.textContent,'Copied.');
+    } else {
+      assert.equal(nodes.command.focused,true);
+      assert.equal(nodes.command.selected,true);
+      assert.match(nodes.status.textContent,/Text selected/);
+    }
+  }
+  vm.runInNewContext(functions('renderReproduction','addBadgerActions') + '\nrenderReproduction(undefined)', {
+    document:{getElementById() {throw new Error('absent settings must omit UI');}},
+  });
 });

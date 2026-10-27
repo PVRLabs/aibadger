@@ -5,15 +5,22 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/PVRLabs/aibadger/internal/codemap"
+	"github.com/PVRLabs/aibadger/pkg/badger"
 )
 
 func TestMapCommandValidationAndHelp(t *testing.T) {
 	for _, args := range [][]string{{""}, {"a", "b"}, {"--output"}, {"--help", "extra"}} {
 		var out bytes.Buffer
-		err := runMapCommandWithGenerator(args, &out, func(string) (string, error) { t.Fatal("invalid arguments invoked generator"); return "", nil })
+		err := runMapCommandWithGenerator(args, &out, func(string, codemap.Options) (string, error) {
+			t.Fatal("invalid arguments invoked generator")
+			return "", nil
+		})
 		if err == nil || out.Len() != 0 {
 			t.Fatalf("args %q: error %v, output %q", args, err, out.String())
 		}
@@ -35,7 +42,7 @@ func TestMapCommandValidationAndHelp(t *testing.T) {
 func TestMapCommandGeneratorResult(t *testing.T) {
 	for _, failure := range []error{nil, errors.New("publish failed")} {
 		var out bytes.Buffer
-		err := runMapCommandWithGenerator([]string{"./source"}, &out, func(path string) (string, error) {
+		err := runMapCommandWithGenerator([]string{"./source"}, &out, func(path string, _ codemap.Options) (string, error) {
 			if path != "./source" {
 				t.Fatalf("source = %q", path)
 			}
@@ -143,5 +150,45 @@ func TestMapOpenCommand(t *testing.T) {
 		if got := mapOpenCommand(tc.path, tc.goos); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.goos, got, tc.want)
 		}
+	}
+}
+
+func TestMapOptions(t *testing.T) {
+	for _, tc := range []struct {
+		args     []string
+		target   string
+		patterns []string
+		hidden   bool
+	}{
+		{nil, ".", nil, false},
+		{[]string{"--exclude", "vendor", "repo", "--exclude=**/*.min.js", "--exclude", "vendor"}, "repo", []string{"vendor", "**/*.min.js", "vendor"}, false},
+		{[]string{"--no-repro-command", "--exclude=-secret", "--", "-repo"}, "-repo", []string{"-secret"}, true},
+		{[]string{"repo", "--no-repro-command"}, "repo", nil, true},
+		{[]string{"--exclude= a'b $();{} ", "repo"}, "repo", []string{" a'b $();{} "}, false},
+	} {
+		target, opts, err := parseMapOptions(tc.args)
+		if err != nil || target != tc.target || opts.NoReproCommand != tc.hidden || !reflect.DeepEqual(opts.ExcludePatterns, tc.patterns) {
+			t.Fatalf("%q: %q %+v %v", tc.args, target, opts, err)
+		}
+	}
+	for _, args := range [][]string{
+		{"--exclude"}, {"--exclude", "--no-repro-command"}, {"--exclude="}, {"--exclude", ""}, {"--exclude=C:foo"},
+		{"--exclude=../foo"}, {"--exclude=a?"}, {"--no-repro-command=true"}, {"a", "b"}, {"--", "a", "b"},
+	} {
+		called := false
+		err := runMapCommandWithGenerator(args, &bytes.Buffer{}, func(string, codemap.Options) (string, error) { called = true; return "", nil })
+		if err == nil || called {
+			t.Fatalf("invalid args %q: err=%v called=%v", args, err, called)
+		}
+	}
+	var out bytes.Buffer
+	err := runMapCommandWithGenerator([]string{"--exclude=vendor", "repo"}, &out, func(target string, opts codemap.Options) (string, error) {
+		if target != "repo" || opts.Version != badger.Version || !reflect.DeepEqual(opts.ExcludePatterns, []string{"vendor"}) {
+			t.Fatalf("settings: %s %+v", target, opts)
+		}
+		return "/report.html", nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

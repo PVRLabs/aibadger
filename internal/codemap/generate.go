@@ -7,23 +7,39 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/PVRLabs/aibadger/internal/pathmatch"
 )
 
 // Generate creates a complete offline report in the caller's current directory.
 // It returns the absolute output path only after successful publication. Source
 // contents are never retained in the report, and existing reports survive errors.
 func Generate(source string) (string, error) {
+	return GenerateWithOptions(source, Options{})
+}
+
+// GenerateWithOptions validates settings before scanning or publishing.
+func GenerateWithOptions(source string, options Options) (string, error) {
+	if err := pathmatch.Validate(options.ExcludePatterns); err != nil {
+		return "", err
+	}
 	caller, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("resolve output directory: %w", err)
 	}
 	scan := func(path string) (*directory, error) {
 		destination := filepath.Join(caller, reportFilename(filepath.Base(filepath.Clean(path))))
-		return scanProjectExcludingReport(path, destination)
+		return scanProjectWithExclusions(path, scanLimits{maxDirectoryDepth, maxDirectories, maxSourceFiles, maxSourceBytes}, (*os.File).ReadDir, destination, options.ExcludePatterns)
 	}
-	return generateIn(source, caller, scan, renderHTML, publishHTML)
+	render := func(root *directory) ([]byte, error) {
+		root.GeneratorVersion = options.Version
+		root.Reproduction = reproductionFor(options, runtime.GOOS)
+		return renderHTML(root)
+	}
+	return generateIn(source, caller, scan, render, publishHTML)
 }
 
 // generateIn keeps tests isolated from process-wide working-directory changes.

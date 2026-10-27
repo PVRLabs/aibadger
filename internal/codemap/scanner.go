@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/PVRLabs/aibadger/internal/pathmatch"
 )
 
 var extensionLanguages = map[string]string{
@@ -195,6 +197,14 @@ func scanProjectExcludingReport(rootPath, reportPath string) (*directory, error)
 }
 
 func scanProjectWithReportExclusion(rootPath string, limits scanLimits, readDir func(*os.File, int) ([]os.DirEntry, error), reportPath string) (*directory, error) {
+	return scanProjectWithExclusions(rootPath, limits, readDir, reportPath, nil)
+}
+
+func scanProjectWithExclusions(rootPath string, limits scanLimits, readDir func(*os.File, int) ([]os.DirEntry, error), reportPath string, patterns []string) (*directory, error) {
+	if err := pathmatch.Validate(patterns); err != nil {
+		return nil, err
+	}
+
 	absRoot, err := filepath.Abs(rootPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve source directory %q: %w", rootPath, err)
@@ -222,7 +232,13 @@ func scanProjectWithReportExclusion(rootPath string, limits scanLimits, readDir 
 		reportInfo, _ = os.Lstat(reportPath)
 	}
 	sourceFiles := 0
-	err = walkSourceTree(absRoot, 0, limits.depth, readDir, func(path string, entry classifiedEntry) error {
+	err = walkSourceTree(absRoot, 0, limits.depth, readDir, func(path string) bool {
+		if len(patterns) == 0 {
+			return false
+		}
+		rel, _ := filepath.Rel(absRoot, path)
+		return pathmatch.Matches(patterns, filepath.ToSlash(rel))
+	}, func(path string, entry classifiedEntry) error {
 		if entry.isDir {
 			if skippedDirectories[entry.name] {
 				return nil
@@ -407,7 +423,7 @@ func addLanguage(totals map[string]languageStats, language string, lines, files 
 
 // Read directory entries in batches, rather than allocating every entry in a
 // very wide directory before the scan limits can be checked.
-func walkSourceTree(path string, depth, maxDepth int, readDir func(*os.File, int) ([]os.DirEntry, error), visit func(string, classifiedEntry) error) error {
+func walkSourceTree(path string, depth, maxDepth int, readDir func(*os.File, int) ([]os.DirEntry, error), skip func(string) bool, visit func(string, classifiedEntry) error) error {
 	dir, err := os.Open(path)
 	if err != nil {
 		return err
@@ -417,6 +433,9 @@ func walkSourceTree(path string, depth, maxDepth int, readDir func(*os.File, int
 		entries, readErr := readDir(dir, 128)
 		for _, rawEntry := range entries {
 			childPath := filepath.Join(path, rawEntry.Name())
+			if skip(childPath) {
+				continue
+			}
 			entry, err := classifyEntry(rawEntry)
 			if err != nil {
 				return fmt.Errorf("inspect entry %s: %w", childPath, err)
@@ -431,7 +450,7 @@ func walkSourceTree(path string, depth, maxDepth int, readDir func(*os.File, int
 				return err
 			}
 			if entry.isDir {
-				if err := walkSourceTree(childPath, depth+1, maxDepth, readDir, visit); err != nil {
+				if err := walkSourceTree(childPath, depth+1, maxDepth, readDir, skip, visit); err != nil {
 					return err
 				}
 			}

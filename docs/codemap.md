@@ -42,6 +42,69 @@ Linux uses `xdg-open`; Windows prints a separately labeled PowerShell
 Successful regeneration replaces an existing regular report. Generation failures
 preserve it. Regenerate the report when you want to reflect source changes.
 
+## Exclusions and regeneration
+
+Add exclusions before or after the optional target:
+
+```sh
+badger map . --exclude 'vendor' --exclude 'public/assets/**' --exclude '**/*.min.js'
+badger map ./src --exclude=generated --no-repro-command
+badger map --exclude=-private -- -directory
+```
+
+Repeated patterns are additive; duplicates, overlaps and unmatched patterns are
+valid. Use `--exclude=<pattern>` for values beginning with `-`. The `--`
+delimiter permits a directory operand beginning with `-`.
+
+Matching uses the same grammar as review, case-sensitively on every OS:
+
+- Patterns without `/` match basenames at any depth. `vendor` matches a file
+  or directory with that exact name; a matched directory prunes its subtree.
+- Patterns with `/` are anchored at the **supplied mapped directory**, independently
+  of the caller's working directory or Git root. `public/assets/**` matches the
+  root subtree, including `public/assets` itself; `src/generated` prunes that
+  directory without requiring a trailing `/**`.
+- `*` matches zero or more characters within one component. Whole-component
+  `**` matches zero or more components: `**/*.min.js` includes root-level files.
+- Use `/` on Windows too. Empty patterns/components, `.`/`..` components,
+  trailing slashes, absolute POSIX/Windows paths (including `C:foo` and UNC),
+  control characters, `?`, brackets, backslashes and embedded `**` are rejected.
+  Other punctuation is literal, including spaces, apostrophes, `$`, `;`,
+  parentheses, braces and `!`. There is no regex, negation or escape syntax.
+  Quote patterns for your shell; Badger preserves their text without trimming.
+
+Built-in exclusions remain additive. Matching directories are pruned before
+descent and depth/directory limits; matching files are skipped before file/byte
+limits and reading. Removing all recognized nonblank source still fails and
+preserves an existing report.
+
+With user-provided exclusions, the report shows a subtle **Exclusions applied**
+control after the breadcrumb in the navigation toolbar, above the map.
+Its instructions expand below the controls without moving the button.
+Expand it to reveal and copy the canonical regeneration command,
+labeled POSIX on Unix or PowerShell on Windows. It preserves pattern order,
+duplicates and literal characters. Copying happens only on click; if clipboard
+access is unavailable, the command is selected for manual copying. Without user
+exclusions, there is no indicator, regeneration section or command.
+
+**Privacy:** relative exclusion patterns are embedded by default, including
+unmatched patterns and names of excluded paths absent from the map. They may
+expose sensitive repository names. `--no-repro-command` removes the indicator,
+section, command and exclusion metadata entirely from the HTML; it affects
+presentation only. Existing report paths, counts and filename lists remain
+embedded. Generator version may remain as ordinary provenance.
+
+Run the command from the **mapped directory** (the repository root only when
+the whole repository was mapped). Its target is always `.`: mapping `repo/src`
+must be replayed from `repo/src`, not `repo`. Equivalent counts require the same
+source tree, Badger version and settings. Version identifies the generator; it
+does not install or pin an executable. Byte-identical output is not promised.
+
+The current working directory controls output placement, and only the destination
+report is automatically omitted. Replaying from the mapped root may count an old
+report left in a nested caller directory, or omit a different existing destination.
+Remove or explicitly exclude stale report files when equivalent counts matter.
+
 ## Read and explore the map
 
 - **Area shows code concentration.** Counts are raw nonblank physical lines,

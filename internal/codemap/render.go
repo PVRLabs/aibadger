@@ -12,6 +12,19 @@ import (
 
 const maxHTMLBytes = 20 * 1024 * 1024
 const dataMarker = "__BADGER_MAP_DATA__"
+const reproductionMarker = "__BADGER_MAP_REPRO__"
+const reproductionPanelMarker = "__BADGER_MAP_REPRO_PANEL__"
+const reproductionControlHTML = `<button id="regeneration" class="control regeneration-toggle" type="button" aria-expanded="false" aria-controls="regeneration-panel"><span id="regeneration-arrow" aria-hidden="true">▸</span><span class="exclusion-notice" aria-hidden="true">!</span><span>Exclusions applied</span></button>`
+const reproductionHTML = `<section id="regeneration-panel" class="regeneration-panel" aria-label="Regeneration instructions" hidden>
+<p>Regenerate from the mapped directory (the repository root when mapping the whole repository).
+Use the same source tree, Badger version and settings. Version is provenance, not a pinned executable.
+Output is written in the current directory; only the destination report is automatically omitted.
+Remove or explicitly exclude stale reports for equivalent counts, including reports in nested directories.</p>
+<div class="folder-heading"><label for="regeneration-command">Regeneration command · <span id="regeneration-shell"></span></label>
+<button id="regeneration-copy" class="control copy-path" type="button" title="Copy regeneration command" aria-label="Copy regeneration command"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button></div>
+<textarea id="regeneration-command" class="copy-fallback" readonly></textarea>
+<span id="regeneration-status" role="status" aria-live="polite"></span>
+</section>`
 
 //go:embed page.html
 var pageTemplate string
@@ -110,7 +123,32 @@ func (w *htmlWriter) directory(node *directory, depth int) {
 		w.err = fmt.Errorf("cannot render missing directory metadata")
 		return
 	}
-	w.add(`{"name":`)
+	w.add("{")
+	if depth == 0 {
+		if node.GeneratorVersion != "" {
+			w.add(`"generatorVersion":`)
+			w.value(node.GeneratorVersion)
+			w.add(",")
+		}
+		if settings := node.Reproduction; settings != nil {
+			w.add(`"reproduction":{"patterns":[`)
+			for i, pattern := range settings.Patterns {
+				if w.err != nil {
+					return
+				}
+				if i > 0 {
+					w.add(",")
+				}
+				w.value(pattern)
+			}
+			w.add(`],"shell":`)
+			w.value(settings.Shell)
+			w.add(`,"command":`)
+			w.value(settings.Command)
+			w.add("},")
+		}
+	}
+	w.add(`"name":`)
 	w.value(node.Name)
 	w.add(`,"path":`)
 	w.value(node.Path)
@@ -158,6 +196,13 @@ func renderHTML(root *directory) ([]byte, error) {
 }
 
 func renderHTMLTemplate(root *directory, page string, limit int) ([]byte, error) {
+	section, control := "", ""
+	if root != nil && root.Reproduction != nil {
+		section, control = reproductionHTML, reproductionControlHTML
+	}
+	page = strings.Replace(page, reproductionMarker, control, 1)
+	page = strings.Replace(page, reproductionPanelMarker, section, 1)
+
 	marker := strings.Index(page, dataMarker)
 	if marker < 0 {
 		return nil, fmt.Errorf("HTML template is missing its data marker")

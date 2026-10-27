@@ -746,8 +746,10 @@ Review options:
                 [--exclude <pattern>]... [extra guidance]
   --exclude        Omit matching changes (repeatable; quote shell globs).
                    No slash: match basenames at any depth. With slash: root-relative.
-                   *, ?, [class] match within a component; ** as a whole component
-                   matches zero or more directories. Renames match either path.
+                   * matches within a component; whole-component ** matches zero
+                   or more components. Matching directories excludes descendants.
+                   Use / on Windows; ?, brackets and backslashes are rejected.
+                   Matching is case-sensitive. Renames match either path.
                    Excluded changes will not be reviewed; Ctrl+R retains patterns.
 
 Stable API:

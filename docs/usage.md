@@ -337,6 +337,15 @@ reports replace existing regular reports atomically. When the destination lies
 inside the source, that report is excluded from scanning so regeneration does
 not count its own previous output. Limits have no command-line overrides.
 
+Map supports repeated `--exclude <pattern>` / `--exclude=<pattern>` values before
+or after the target, using the same `*` / whole-component `**` grammar as review.
+Patterns are relative to the supplied mapped directory. With user exclusions,
+the HTML embeds the patterns and a collapsed regeneration command by default.
+Use `--no-repro-command` to omit that metadata and UI when names are sensitive;
+existing report paths/counts remain embedded.
+See [Codebase Map exclusions and regeneration](codemap.md#exclusions-and-regeneration)
+for matching, privacy and replay limits.
+
 ## Commands
 
 - `/help`: show the interactive command reference.
@@ -390,11 +399,17 @@ badger review --commit HEAD --exclude '*.csv'
 Quote patterns so your shell passes them unchanged. Patterns without `/` match
 basenames at any depth (`*.csv` includes `data/backfill.csv`). Patterns containing
 `/` match repository-relative paths from the root (`archive/**` includes all
-its descendants). Within a path component, `*`, `?`, and `[class]` use Go's
-`path.Match` rules, including backslash escapes. A whole `**` component matches
-zero or more path components; embedded `**`, empty components, `.`/`..`
-components, absolute paths, control characters, and malformed globs are rejected.
-Matching is case-sensitive. Renames are excluded if either endpoint matches.
+its descendants). Matching a directory excludes its descendants, including
+ancestors of review paths: `vendor` omits `src/vendor/app.go` and
+`src/generated` omits `src/generated/app.go`.
+Only `*` (zero or more characters within a component) and whole-component
+`**` (zero or more path components) are wildcards. `?`, brackets, backslashes,
+embedded `**`, empty components, `.`/`..` components, trailing slashes,
+absolute paths (including Windows drive-relative `C:foo` and UNC paths), and
+control characters are rejected. Use `/` on Windows too. Other punctuation,
+including braces, `!`, apostrophes, spaces, `$`, `;` and parentheses, is literal;
+there is no negation or escape syntax. Matching is case-sensitive on every OS.
+Renames are excluded if either endpoint or an ancestor matches.
 Default-mode discovered untracked candidates follow the same exclusions and
 retain the existing discovery bounds.
 

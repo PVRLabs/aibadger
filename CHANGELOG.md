@@ -4,6 +4,11 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+- Improved compatibility with ChatGPT `FILE:` responses containing
+  Markdown-escaped underscores, preserving existing literal filenames. Added
+  cross-platform regression coverage for space-separated and newline-separated
+  references, trailing formatting backslashes, and CRLF line endings.
+
 ## [v0.8.2] - 2026-10-26
 
 ### Windows reliability

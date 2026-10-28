@@ -1,0 +1,10 @@
+FILE:cmd/badger/main.go\
+FILE:internal/tui/tui.go\
+FILE:internal/extractor/extractor.go\
+FILE:internal/extractor/extractor_test.go\
+FILE:internal/taggedfile/taggedfile.go\
+FILE:internal/taggedfile/taggedfile_test.go\
+FILE:internal/clipboard/clipboard.go\
+FILE:internal/clipboard/clipboard_windows_test.go\
+FILE:tests/cli/platform_smoke_test.go\
+FILE:scripts/windows-smoke.ps1

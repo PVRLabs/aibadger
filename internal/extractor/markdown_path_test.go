@@ -22,12 +22,16 @@ func TestFileMarkdownIssue171(t *testing.T) {
 	if strings.Count(input, "FILE:") != 21 || strings.Count(input, `\_`) != 10 || strings.ContainsAny(input, "\r\n") {
 		t.Fatal("issue fixture must retain 21 references and 10 escapes on one line")
 	}
-	// Keep the original bytes on Windows; use Unix separators elsewhere while
-	// preserving the Markdown escapes so the same recovery is exercised.
-	if runtime.GOOS != "windows" {
-		input = strings.ReplaceAll(input, `\`, "/")
-		input = strings.ReplaceAll(input, "/_", `\_`)
-	}
+	// Separate the fixture's native Windows separators from Markdown escapes.
+	// Exercise the same portable formatting input on every platform; native
+	// separator resolution has dedicated coverage below.
+	input = strings.ReplaceAll(input, `\`, "/")
+	input = strings.ReplaceAll(input, "/_", `\_`)
+	testFileMarkdownIssue171(t, input)
+}
+
+func testFileMarkdownIssue171(t *testing.T, input string) {
+	t.Helper()
 	paths := []string{
 		"README.md", "AGENTS.md", "cmd/badger/main.go", "cmd/badger/main_test.go",
 		"internal/clipboard/clipboard.go", "internal/clipboard/clipboard_windows_test.go",
@@ -61,8 +65,8 @@ func TestFileMarkdownIssue171(t *testing.T) {
 		}
 		var contents []string
 		for i, result := range results {
-			if result.Path != filepath.FromSlash(paths[i]) {
-				t.Fatalf("reference %d path = %q, want %q", i+1, result.Path, filepath.FromSlash(paths[i]))
+			if filepath.ToSlash(result.Path) != paths[i] {
+				t.Fatalf("reference %d path = %q, want %q", i+1, result.Path, paths[i])
 			}
 			want := "fixture content: " + paths[i] + "\n"
 			if result.Content != want {

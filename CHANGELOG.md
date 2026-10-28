@@ -4,10 +4,27 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.8.3] - 2026-10-28
+
+### Codebase Map
+
+- Added repeatable `--exclude` patterns to omit files and directory trees from
+  maps. Reports with exclusions include a copyable regeneration command;
+  `--no-repro-command` omits exclusion metadata and its controls from the HTML.
+- Expanded file recognition to Astro, Blade, Jinja, Twig, GraphQL, PowerShell,
+  Windows batch scripts, CMake, Dockerfile, Makefile, and Justfile.
+
+### Review exclusions
+
+- Aligned map and review exclusions so matching a directory excludes its
+  descendants. Both commands support `*` and whole-component `**`; review
+  patterns using `?`, brackets, or backslashes are now rejected. Use `/` as
+  the path separator on every platform.
+
+### File extraction
+
 - Improved compatibility with ChatGPT `FILE:` responses containing
-  Markdown-escaped underscores, preserving existing literal filenames. Added
-  cross-platform regression coverage for space-separated and newline-separated
-  references, trailing formatting backslashes, and CRLF line endings.
+  Markdown-escaped underscores, while preserving existing literal filenames.
 
 ## [v0.8.2] - 2026-10-26
 

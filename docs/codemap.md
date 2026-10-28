@@ -276,11 +276,16 @@ have no visible map area.
 
 ## Local generation and limits
 
-Generation and normal report use stay local. The HTML embeds relative paths,
+Generate and explore the report offline, with no uploads or telemetry.
+The HTML embeds relative paths,
 aggregate metadata, and bounded filename lists; it does not embed source contents.
 There are no external scripts, fonts, uploads, or automatic browser launches.
 Documentation and product links open only when you choose them. Share the report
 only if you intend to share its folder names, filenames, and counts.
+
+See [Verify AI Badger's Local-Only Operation](network-verification.md) for the
+CLI source inspection and its scope, including network-backed filesystem and
+external-program limitations.
 
 Hard limits are depth 50 below root, 20,000 directories including root,
 100,000 recognized files, 50 MiB per source file, and 20 MiB for the complete HTML.

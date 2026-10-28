@@ -124,7 +124,7 @@ func TestFileSelectorLineBreakNormalizationBoundaries(t *testing.T) {
 		ok    bool
 	}{
 		{`FILE:src\main.go\`, Command{Type: "FILE", Path: `src\main.go`}, true},
-		{`FILE:main.go\\`, Command{Type: "FILE", Path: `main.go\`}, true},
+		{`FILE:main.go\\`, Command{Type: "FILE", Path: `main.go`}, true},
 		{`PREFIX:src\main.go\#pattern\`, Command{Type: "PREFIX", Path: `src\main.go\`, Pattern: `pattern\`}, true},
 		{`NEAR:src\main.go\#pattern\`, Command{Type: "NEAR", Path: `src\main.go\`, Pattern: `pattern\`}, true},
 		{`FILE:\`, Command{}, false},

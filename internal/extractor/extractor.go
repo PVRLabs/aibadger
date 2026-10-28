@@ -152,9 +152,17 @@ func (e *Extractor) Extract(commands []Command) ([]protocol.ExtractionResult, er
 }
 
 func (e *Extractor) processCommand(cmd Command) (string, string, bool, error) {
-	resolvedPath := e.resolveCommandPath(cmd.Path)
+	var resolvedPath string
+	if cmd.Type == "FILE" {
+		resolvedPath = e.resolveFileCommandPath(cmd.Path)
+	} else {
+		resolvedPath = e.resolveCommandPath(cmd.Path)
+	}
 	if resolvedPath != "" {
 		content, fullFile, err := e.processLocalCommand(cmd, resolvedPath)
+		if cmd.Type == "FILE" && resolvedPath != cmd.Path && resolvedPath == strings.ReplaceAll(cmd.Path, `\_`, `_`) {
+			return resolvedPath, content, fullFile, err
+		}
 		return cmd.Path, content, fullFile, err
 	}
 

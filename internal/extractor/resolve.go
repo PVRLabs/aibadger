@@ -10,12 +10,49 @@ import (
 	"github.com/PVRLabs/aibadger/internal/util"
 )
 
-func (e *Extractor) resolveCommandPath(path string) string {
-	candidate := filepath.Join(e.ProjectRoot, path)
-	if util.FileExists(candidate) && isWithinProjectRoot(e.ProjectRoot, candidate) {
-		return path
+// resolveFileCommandPath preserves literal files before recovering Markdown's
+// escaped underscores. Recovery requires an exact local match, never a fuzzy one.
+func (e *Extractor) resolveFileCommandPath(path string) string {
+	if !strings.Contains(path, `\_`) {
+		return e.resolveCommandPath(path)
 	}
+	candidate := filepath.Join(e.ProjectRoot, path)
+	if !isWithinProjectRoot(e.ProjectRoot, candidate) {
+		return ""
+	}
+	resolved, err := e.resolveExactCommandPath(path)
+	if resolved != "" || err != nil {
+		return resolved
+	}
+	repaired := strings.ReplaceAll(path, `\_`, `_`)
+	if resolved, _ := e.resolveExactCommandPath(repaired); resolved != "" {
+		return resolved
+	}
+	return e.resolveUnmatchedCommandPath(path)
+}
 
+func (e *Extractor) resolveCommandPath(path string) string {
+	if resolved, _ := e.resolveExactCommandPath(path); resolved != "" {
+		return resolved
+	}
+	return e.resolveUnmatchedCommandPath(path)
+}
+
+// resolveExactCommandPath is the shared exact lookup for ordinary and recovered
+// selectors. Keep filesystem validation here so each candidate is probed once.
+func (e *Extractor) resolveExactCommandPath(path string) (string, error) {
+	candidate := filepath.Join(e.ProjectRoot, path)
+	exists, err := util.FileExistsAndNotDir(candidate)
+	if err != nil {
+		return "", err
+	}
+	if exists && isWithinProjectRoot(e.ProjectRoot, candidate) {
+		return path, nil
+	}
+	return "", nil
+}
+
+func (e *Extractor) resolveUnmatchedCommandPath(path string) string {
 	if e.Topology == nil {
 		return ""
 	}

@@ -225,9 +225,10 @@ func (e *Extractor) unwrapFilePath(cmd Command) Command {
 }
 
 // AI responses sometimes use a trailing backslash as a Markdown hard line break.
-// Remove only one such suffix; internal path separators remain literal.
+// FILE selectors cannot name directories; remove trailing backslashes while
+// preserving internal separators and escapes for literal-first resolution.
 func normalizeFileSelectorPath(path string) string {
-	return strings.TrimSpace(strings.TrimSuffix(path, `\`))
+	return strings.TrimRight(strings.TrimSpace(path), `\`)
 }
 
 func isSupportedCommandType(cmdType string) bool {

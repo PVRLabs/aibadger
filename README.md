@@ -45,6 +45,7 @@ Badger fetches those files and builds a second prompt.
 - **Token & cost efficient** — Send only relevant context instead of repeatedly feeding the whole repository to cloud models
 - **Precise & lightweight** — Built in Go, fast, minimal overhead
 - **Specialized modes** — `review` and `design` for common workflows
+- **[Visual codebase map](#offline-codebase-map)** — Explore your repository with an interactive, offline HTML map
 
 ## Install
 
@@ -61,12 +62,6 @@ curl -fsSL https://raw.githubusercontent.com/PVRLabs/aibadger/main/install.sh | 
 See [docs/install.md](docs/install.md) for Windows, source builds, and more.
 
 Also available as an official [VS Code companion](https://marketplace.visualstudio.com/items?itemName=pvrlabs.ai-badger) ([GitHub](https://github.com/PVRLabs/aibadger-vscode)).
-
-## Agent Skills
-
-Badger includes the `handoff` and `badger-review` skills for continuing an AI
-coding session or requesting an independent review. See the [Agent Skills
-guide](skills/README.md) for installation, usage, and details.
 
 ## Quick Start
 
@@ -92,10 +87,20 @@ Full usage: [docs/usage.md](docs/usage.md)
 
 ## Offline Codebase Map
 
-Run `badger map` to generate a local, offline HTML map of your codebase.
-Explore folders and see where source lines are concentrated.
+<a href="https://pvrlabs.xyz/aibadger/codemap/">
+  <img src="docs/images/codemap-thumbnail.webp" alt="Explore the AI Badger Codebase Map demo: a treemap of repository folders" width="320">
+</a>
 
-[Live demo](https://pvrlabs.xyz/aibadger/codemap/) · [Guide](docs/codemap.md)
+Explore your codebase visually. Run `badger map` to generate an interactive,
+offline HTML map of your repository and see where source lines are concentrated.
+
+[Try the live demo →](https://pvrlabs.xyz/aibadger/codemap/) · [Map your own repository](docs/codemap.md)
+
+## Agent Skills
+
+Badger includes the `handoff` and `badger-review` skills for continuing an AI
+coding session or requesting an independent review. See the [Agent Skills
+guide](skills/README.md) for installation, usage, and details.
 
 ## Learn More
 

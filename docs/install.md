@@ -142,4 +142,5 @@ until the next release is prepared.
 
 ## Release Notes
 
-For release publishing and artifact details, see [releasing.md](releasing.md).
+See the [GitHub Releases](https://github.com/PVRLabs/aibadger/releases) for
+release notes, binary archives, and SHA-256 checksums.

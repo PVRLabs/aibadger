@@ -33,8 +33,7 @@ Do not commit ignored local binaries (`/badger`, `/badger-release`, `*.test`,
 release packaging metadata unless the task is a release or tap update.
 
 Default builds are development builds. Release builds use the
-`aibadger_release` tag and profiling builds use `aibadger_profile`; see
-`docs/releasing.md` for release-specific details.
+`aibadger_release` tag and profiling builds use `aibadger_profile`.
 
 When a commit is tied to a named plan, include `Plan: <plan name>`.
 

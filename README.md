@@ -87,14 +87,19 @@ Full usage: [docs/usage.md](docs/usage.md)
 
 ## Offline Codebase Map
 
-<a href="https://pvrlabs.xyz/aibadger/codemap/">
-  <img src="docs/images/codemap-thumbnail.webp" alt="Explore the AI Badger Codebase Map demo: a treemap of repository folders" width="320">
-</a>
-
-Explore your codebase visually. Run `badger map` to generate an interactive,
-offline HTML map of your repository and see where source lines are concentrated.
-
-[Try the live demo →](https://pvrlabs.xyz/aibadger/codemap/) · [Map your own repository](docs/codemap.md)
+<table>
+  <tr>
+    <td width="240">
+      <a href="https://pvrlabs.xyz/aibadger/codemap/">
+        <img src="docs/images/codemap-thumbnail.webp" alt="Treemap of AI Badger repository folders" width="240">
+      </a>
+    </td>
+    <td>
+      <p>Explore your codebase visually. Run <code>badger map</code> to generate an interactive, offline HTML map of your repository and see where source lines are concentrated.</p>
+      <p><a href="https://pvrlabs.xyz/aibadger/codemap/">Try the live demo →</a> · <a href="docs/codemap.md">Map your own repository</a></p>
+    </td>
+  </tr>
+</table>
 
 ## Agent Skills
 

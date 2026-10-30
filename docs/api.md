@@ -197,6 +197,15 @@ Pkg: internal/client [4 files] -> Top: client.go (8KB), config.go (2KB)
 The topology is AI-facing text rather than JSON. Callers can pass it directly
 to a model or embed it in their own prompt.
 
+For projects with at least two distinct structural module paths, topology may
+include a `[MODULES]` section between `[PROJECT TOPOLOGY]` and `[SOURCE TREE]`.
+It lists up to 50 sorted, root-relative paths, uses `.` for the root module,
+and omits synthetic coverage groups and duplicate paths. Known detector-provided
+languages appear in parentheses; unknown or conflicting language metadata is
+left unlabeled. When a truncated list fits at least one entry, a compact count
+marks modules omitted by the display cap or Prompt 1 byte budget. The section
+is omitted if no entry fits, or if the topology is single-module or empty.
+
 #### Topology contract
 
 `api topology`:

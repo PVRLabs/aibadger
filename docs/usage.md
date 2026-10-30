@@ -525,6 +525,9 @@ every build graph or semantic relationship.
 | C# | Uses `.csproj` files as project boundaries, groups `.cs` files by their actual directories, and surfaces root `appsettings.json` plus simple environment variants such as `appsettings.Development.json` as context. Nested projects are recognized separately and generated outputs such as `bin/` and `obj/` are skipped; Badger does not evaluate MSBuild, solutions, namespaces, or target frameworks. |
 | C++ | Uses a conservative CMake/source-layout detector for conventional root, `src/`, `include/`, `test/`, and `tests/` trees; it preserves physical files and does not evaluate CMake or compiler/build graphs. |
 
+When multiple structural modules are detected, topology can list up to 50
+root-relative module paths with known detector-provided language labels.
+
 When a first-class detector does not apply, Badger falls back to Generic
 filesystem scanning with extension-based language recognition. Generic uses
 ordinary filesystem grouping, the same bounded topology and source-weighting

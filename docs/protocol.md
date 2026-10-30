@@ -22,6 +22,15 @@ submissions retain their supplied content.
 **Prompt 1 (Map)** — the project topology — has this structure:
 
 - **PROJECT TOPOLOGY** — languages, build stack, and module structure.
+- **MODULES** — when at least two distinct structural module paths are
+  detected and the byte budget fits an entry, up to 50 root-relative paths in
+  deterministic order, with known
+  detector-provided languages in parentheses. The section
+  omits synthetic coverage groups and duplicate paths; a module at the project
+  root is shown as `.`. When a truncated list still fits at least one entry, a
+  compact indicator reports modules omitted by the display or Prompt 1 byte
+  budget. If no entry fits, the section is omitted. Unknown labels are omitted;
+  conflicting detector labels for one path are left unlabeled.
 - **SOURCE TREE** — packages with file names and sizes, grouped by priority
   (docs, config, source code, assets).
 - **EXTERNAL CONTEXT** — optional read-only context roots configured outside
@@ -88,7 +97,8 @@ marker immediately before `[CONTEXT]`; its selector and supplemental-context
 semantics are otherwise unchanged.
 
 Interactive Review composes generated review context into the normal Prompt 1
-schema, so it includes `[PROJECT TOPOLOGY]` and `[SOURCE TREE]`. The stable
+schema, so it includes `[PROJECT TOPOLOGY]`, optional `[MODULES]`, and
+`[SOURCE TREE]`. The stable
 `api review-context` output is intentionally standalone and topology-free; it
 contains the review instructions, authoritative diff, status, guidance, and
 eligible supporting context only. Integrations must not assume the API and TUI

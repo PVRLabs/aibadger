@@ -5,6 +5,7 @@ package protocol
 
 import (
 	"fmt"
+	pathpkg "path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,6 +15,10 @@ import (
 	"github.com/PVRLabs/aibadger/internal/filegroups"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
+
+const maxTopologyModules = 50
+
+const topologyTruncationMarker = "... [Truncated due to size limit] ...\n"
 
 // Formatter handles Schema A and B generation.
 type Formatter struct {
@@ -94,10 +99,10 @@ func (f *Formatter) GenerateSchemaAWithTaggedFiles(t *model.ProjectTopology, que
 }
 
 func (f *Formatter) generateTopology(t *model.ProjectTopology, taggedFiles []TaggedFile, reservedBytes int) string {
-	var header strings.Builder
-	f.writeTopologySection(&header, t, 0)
-	header.WriteString("\n[SOURCE TREE]\n")
-	headerStr := header.String()
+	var topologyHeader strings.Builder
+	f.writeTopologySection(&topologyHeader, t, 0)
+	topologyHeaderStr := topologyHeader.String()
+	sourceHeader := "\n[SOURCE TREE]\n"
 
 	var packages []string
 	for _, pkg := range schemaATopologyPackages(t) {
@@ -115,39 +120,148 @@ func (f *Formatter) generateTopology(t *model.ProjectTopology, taggedFiles []Tag
 	etcStr := etcBuilder.String()
 
 	keep := len(packages)
-
-	if f.MaxTopologyPromptBytes > 0 && keep > 0 {
-		fixedSize := len(headerStr) + len(etcStr) + reservedBytes
-		available := f.MaxTopologyPromptBytes - fixedSize
+	if f.MaxPackages > 0 && keep > f.MaxPackages {
+		keep = f.MaxPackages
+	}
+	available := 0
+	showTruncationMarker := keep < len(packages)
+	if f.MaxTopologyPromptBytes > 0 {
+		fixedSize := len(topologyHeaderStr) + len(sourceHeader) + len(etcStr) + reservedBytes
+		available = f.MaxTopologyPromptBytes - fixedSize
 		if available < 0 {
 			available = 0
 		}
 		bodySize := 0
-		for _, line := range packages {
-			bodySize += len(line) + 1
+		for i := 0; i < keep; i++ {
+			bodySize += len(packages[i]) + 1
 		}
 		for keep > 0 && bodySize > available {
 			keep--
 			bodySize -= len(packages[keep]) + 1
 		}
+		available -= bodySize
+		showTruncationMarker = keep < len(packages) && available >= len(topologyTruncationMarker)
+	}
+	if showTruncationMarker && f.MaxTopologyPromptBytes > 0 {
+		available -= len(topologyTruncationMarker)
 	}
 
-	if f.MaxPackages > 0 && keep > f.MaxPackages {
-		keep = f.MaxPackages
+	moduleSection := ""
+	modules := structuralModules(t)
+	if len(modules) > 1 {
+		if f.MaxTopologyPromptBytes <= 0 {
+			moduleSection = formatModuleSection(modules, 0)
+		} else if available > 0 {
+			moduleSection = formatModuleSection(modules, available)
+		}
 	}
 
 	var result strings.Builder
-	result.WriteString(headerStr)
+	result.WriteString(topologyHeaderStr)
+	result.WriteString(moduleSection)
+	result.WriteString(sourceHeader)
 	for i := 0; i < keep; i++ {
 		result.WriteString(packages[i])
 		result.WriteString("\n")
 	}
-	if keep < len(packages) {
-		result.WriteString("... [Truncated due to size limit] ...\n")
+	if showTruncationMarker {
+		result.WriteString(topologyTruncationMarker)
 	}
 	result.WriteString(etcStr)
 
 	return result.String()
+}
+
+type topologyModule struct {
+	path     string
+	language string
+}
+
+func structuralModules(t *model.ProjectTopology) []topologyModule {
+	if t == nil {
+		return nil
+	}
+	type moduleLanguages struct {
+		language string
+		conflict bool
+	}
+	languagesByPath := make(map[string]*moduleLanguages, len(t.Modules))
+	for _, module := range t.Modules {
+		if module.Coverage {
+			continue
+		}
+		modulePath := strings.ReplaceAll(strings.TrimSpace(module.Path), "\\", "/")
+		if modulePath == "" {
+			modulePath = "."
+		} else {
+			if pathpkg.IsAbs(modulePath) || (len(modulePath) >= 2 && modulePath[1] == ':') {
+				continue
+			}
+			modulePath = pathpkg.Clean(modulePath)
+			if modulePath == ".." || strings.HasPrefix(modulePath, "../") {
+				continue
+			}
+		}
+		entry := languagesByPath[modulePath]
+		if entry == nil {
+			entry = &moduleLanguages{}
+			languagesByPath[modulePath] = entry
+		}
+		language := strings.TrimSpace(module.Language)
+		if language == "" || strings.EqualFold(language, "Generic") || strings.EqualFold(language, "Unknown") {
+			continue
+		}
+		if entry.language == "" {
+			entry.language = language
+		} else if entry.language != language {
+			entry.conflict = true
+		}
+	}
+	paths := make([]string, 0, len(languagesByPath))
+	for modulePath := range languagesByPath {
+		paths = append(paths, modulePath)
+	}
+	sort.Strings(paths)
+	modules := make([]topologyModule, 0, len(paths))
+	for _, modulePath := range paths {
+		entry := languagesByPath[modulePath]
+		language := entry.language
+		if entry.conflict {
+			language = ""
+		}
+		modules = append(modules, topologyModule{path: modulePath, language: language})
+	}
+	return modules
+}
+
+func formatModuleSection(modules []topologyModule, budget int) string {
+	maxShown := len(modules)
+	if maxShown > maxTopologyModules {
+		maxShown = maxTopologyModules
+	}
+	var section strings.Builder
+	section.WriteString("\n[MODULES]\n")
+	shown := 0
+	for shown < maxShown {
+		module := modules[shown]
+		line := module.path
+		if module.language != "" {
+			line += " (" + module.language + ")"
+		}
+		line += "\n"
+		if budget > 0 && section.Len()+len(line) > budget {
+			break
+		}
+		section.WriteString(line)
+		shown++
+	}
+	if shown < len(modules) {
+		if shown == 0 {
+			return ""
+		}
+		section.WriteString(fmt.Sprintf("... [%d of %d modules shown]\n", shown, len(modules)))
+	}
+	return section.String()
 }
 
 func (f *Formatter) writeExternalContextSection(sb *strings.Builder, t *model.ProjectTopology) {

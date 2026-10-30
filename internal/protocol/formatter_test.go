@@ -98,6 +98,10 @@ func TestGenerateTopologyIsSchemaAPrefix(t *testing.T) {
 		Languages: []string{"Go"},
 		Stack:     []string{"Go Modules"},
 		Structure: "Single Module",
+		Modules: []model.Module{
+			{Path: "service"},
+			{Path: "shared"},
+		},
 	}
 
 	standalone := formatter.GenerateTopology(topology)
@@ -107,6 +111,203 @@ func TestGenerateTopologyIsSchemaAPrefix(t *testing.T) {
 	}
 	if strings.Contains(standalone, "[TASK]") || strings.Contains(standalone, "[CONSTRAINT]") {
 		t.Fatalf("standalone topology contains prompt-only sections:\n%s", standalone)
+	}
+}
+
+func TestGenerateTopologyModulesSection(t *testing.T) {
+	formatter := NewFormatter()
+	topology := &model.ProjectTopology{
+		Modules: []model.Module{
+			{Path: "zeta"},
+			{Path: "alpha"},
+			{Path: "./alpha/"}, // detector duplicate after path cleaning
+			{Path: ""},
+			{Path: ".", Language: "Java"},
+			{Path: "coverage", Coverage: true},
+			{Path: "/absolute"},
+			{Path: "../outside"},
+			{Path: `C:\absolute`},
+		},
+	}
+
+	got := formatter.GenerateTopology(topology)
+	want := "[PROJECT TOPOLOGY]\n\n[MODULES]\n. (Java)\nalpha\nzeta\n\n[SOURCE TREE]\n\n"
+	if got != want {
+		t.Fatalf("topology module output mismatch\ngot:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+func TestGenerateTopologyModuleLanguageLabelsAndConflicts(t *testing.T) {
+	formatter := NewFormatter()
+	topology := &model.ProjectTopology{Modules: []model.Module{
+		{Path: "java/api", Language: "Java"},
+		{Path: "java/api", Language: "Java"},
+		{Path: "js/web", Language: "JavaScript"},
+		{Path: "unknown/tool", Language: "Generic"},
+		{Path: "conflict", Language: "Go"},
+		{Path: "conflict", Language: "Java"},
+		{Path: "unlabeled"},
+	}}
+	output := formatter.GenerateTopology(topology)
+	want := "\n[MODULES]\nconflict\njava/api (Java)\njs/web (JavaScript)\nunknown/tool\nunlabeled\n\n[SOURCE TREE]\n"
+	if !strings.Contains(output, want) {
+		t.Fatalf("module language labels or conflict handling mismatch:\n%s", output)
+	}
+}
+
+func TestGenerateTopologyOmitsModulesForSingleOrEmptyTopology(t *testing.T) {
+	formatter := NewFormatter()
+	for name, topology := range map[string]*model.ProjectTopology{
+		"empty":           {},
+		"single":          {Modules: []model.Module{{Path: "."}}},
+		"duplicate paths": {Modules: []model.Module{{Path: "module"}, {Path: "./module/"}}},
+		"coverage only":   {Modules: []model.Module{{Path: "coverage", Coverage: true}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := formatter.GenerateTopology(topology); strings.Contains(got, "[MODULES]") {
+				t.Fatalf("unexpected module section: %q", got)
+			}
+		})
+	}
+}
+
+func TestGenerateSchemaATruncatesModuleListWithinByteBudget(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.SetPromptInstructions(shortFooter)
+	modules := make([]model.Module, 0, 73)
+	for i := 72; i >= 0; i-- {
+		modules = append(modules, model.Module{Path: fmt.Sprintf("module-%02d", i), Language: "Java"})
+	}
+	topology := &model.ProjectTopology{Modules: modules}
+	baseline := formatter.GenerateSchemaA(&model.ProjectTopology{}, "budget")
+	moduleLine := "module-00 (Java)\n"
+	formatter.MaxTopologyPromptBytes = len(baseline) + len("\n[MODULES]\n") + len(moduleLine) + 8
+	output := formatter.GenerateSchemaA(topology, "budget")
+	if !strings.Contains(output, moduleLine) || strings.Contains(output, "module-01 (Java)\n") || !strings.Contains(output, "of 73 modules shown]") {
+		t.Fatalf("expected an ordered, budget-truncated module list with count indicator:\n%s", output)
+	}
+}
+
+func TestGenerateSchemaAOmitModulesWhenNoPathFits(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.SetPromptInstructions(shortFooter)
+	topology := &model.ProjectTopology{Modules: []model.Module{
+		{Path: "long/module/path/one", Language: "Java"},
+		{Path: "long/module/path/two", Language: "Java"},
+	}}
+	baseline := formatter.GenerateSchemaA(&model.ProjectTopology{}, "budget")
+	formatter.MaxTopologyPromptBytes = len(baseline) + 1
+	output := formatter.GenerateSchemaA(topology, "budget")
+	if strings.Contains(output, "[MODULES]") {
+		t.Fatalf("empty module section should be omitted when no path fits:\n%s", output)
+	}
+}
+
+func TestGenerateSchemaAOmitsUnfittableTruncationMarkerAndRetainsPackage(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.SetPromptInstructions(shortFooter)
+	formatter.MaxPackages = 1
+
+	empty := formatter.GenerateSchemaA(&model.ProjectTopology{}, "budget")
+	firstPackage := model.Package{
+		Path:      "p1",
+		FileCount: 1,
+		TopFiles:  []model.FileSummary{{Name: "a", Path: "p1/a", Size: 1}},
+	}
+	onePackage := &model.ProjectTopology{Modules: []model.Module{{
+		Path:        "module",
+		SourceRoots: []model.SourceRoot{{Packages: []model.Package{firstPackage}}},
+	}}}
+	firstLineBytes := len(formatter.GenerateSchemaA(onePackage, "budget")) - len(empty)
+	formatter.MaxTopologyPromptBytes = len(empty) + firstLineBytes + 12
+
+	topology := &model.ProjectTopology{Modules: []model.Module{{
+		Path: "module",
+		SourceRoots: []model.SourceRoot{{Packages: []model.Package{
+			firstPackage,
+			{Path: "p2", FileCount: 1, TopFiles: []model.FileSummary{{Name: "b", Path: "p2/b", Size: 1}}},
+		}}},
+	}}}
+	output := formatter.GenerateSchemaA(topology, "budget")
+	if len(output) > formatter.MaxTopologyPromptBytes {
+		t.Fatalf("Prompt 1 bytes = %d, budget = %d", len(output), formatter.MaxTopologyPromptBytes)
+	}
+	if !strings.Contains(output, "Pkg: p1") || strings.Contains(output, "Pkg: p2") {
+		t.Fatalf("expected the first source package to fit without the marker:\n%s", output)
+	}
+	if strings.Contains(output, "... [Truncated due to size limit] ...") {
+		t.Fatalf("unfittable optional marker was emitted:\n%s", output)
+	}
+}
+
+func TestGenerateTopologyModuleCapAndDeterministicOrdering(t *testing.T) {
+	modules := make([]model.Module, 0, 73)
+	for i := 72; i >= 0; i-- {
+		modules = append(modules, model.Module{Path: fmt.Sprintf("module-%02d", i)})
+	}
+	formatter := NewFormatter()
+	first := formatter.GenerateTopology(&model.ProjectTopology{Modules: modules})
+	second := formatter.GenerateTopology(&model.ProjectTopology{Modules: append([]model.Module(nil), modules...)})
+	if first != second {
+		t.Fatal("module output should be deterministic")
+	}
+	if !strings.Contains(first, "... [50 of 73 modules shown]\n") {
+		t.Fatalf("missing module cap indicator:\n%s", first)
+	}
+	if !strings.Contains(first, "module-00\n") || !strings.Contains(first, "module-49\n") || strings.Contains(first, "module-50\n") {
+		t.Fatalf("module list is not the first 50 paths in sorted order:\n%s", first)
+	}
+}
+
+func TestGenerateSchemaAModuleSectionRespectsByteBudgetAndTaskReserve(t *testing.T) {
+	formatter := NewFormatter()
+	formatter.SetPromptInstructions(shortFooter)
+	formatter.MaxPackages = 1
+	topology := &model.ProjectTopology{
+		Modules: []model.Module{
+			{Path: "services/api"}, {Path: "services/worker"}, {Path: "shared"},
+			{Path: "code", SourceRoots: []model.SourceRoot{{Packages: []model.Package{{Path: "src/kept", FileCount: 1, TopFiles: []model.FileSummary{{Name: "kept.go", Path: "src/kept/kept.go", Size: 10}}}, {Path: "src/dropped", FileCount: 1, TopFiles: []model.FileSummary{{Name: "dropped.go", Path: "src/dropped/dropped.go", Size: 10}}}}}}},
+		},
+	}
+	full := formatter.GenerateSchemaA(topology, "short")
+	if !strings.Contains(full, "[MODULES]\ncode\nservices/api\nservices/worker\nshared\n") {
+		t.Fatalf("expected modules when budget is ample:\n%s", full)
+	}
+	if !strings.Contains(full, "Pkg: src/kept") || strings.Contains(full, "Pkg: src/dropped") {
+		t.Fatalf("module section changed source-tree package selection:\n%s", full)
+	}
+
+	task := strings.Repeat("task", 20)
+	moduleBytes := len("\n[MODULES]\ncode\nservices/api\nservices/worker\nshared\n")
+	formatter.MaxTopologyPromptBytes = len(full) + len(task) - len("short") - moduleBytes
+	constrained := formatter.GenerateSchemaA(topology, task)
+	if len(constrained) > formatter.MaxTopologyPromptBytes+64 {
+		t.Fatalf("Prompt 1 bytes = %d, budget = %d (+64-byte tolerance)", len(constrained), formatter.MaxTopologyPromptBytes)
+	}
+	if !strings.Contains(constrained, "[TASK]\n"+task) {
+		t.Fatal("large task was not preserved")
+	}
+	if !strings.Contains(constrained, "Pkg: src/kept") {
+		t.Fatalf("limited module space displaced the retained package:\n%s", constrained)
+	}
+}
+
+func TestGenerateSchemaAModuleSectionLeavesSourceTreeFormattingUnchanged(t *testing.T) {
+	formatter := NewFormatter()
+	topology := &model.ProjectTopology{
+		Modules: []model.Module{
+			{Path: "api"},
+			{Path: "shared"},
+			{Path: "api", SourceRoots: []model.SourceRoot{{Packages: []model.Package{{Path: "pkg/example", FileCount: 2, TopFiles: []model.FileSummary{{Name: "main.go", Path: "pkg/example/main.go", Size: 1024}}}}}}},
+		},
+	}
+	got := formatter.GenerateTopology(topology)
+	want := "\n[SOURCE TREE]\nPkg: pkg/example [2 files] -> Top: main.go (1KB)\n"
+	if !strings.Contains(got, want) {
+		t.Fatalf("source tree changed around module section:\n%s", got)
+	}
+	if strings.Index(got, "[MODULES]") > strings.Index(got, "[SOURCE TREE]") {
+		t.Fatalf("module section must precede source tree:\n%s", got)
 	}
 }
 
@@ -829,10 +1030,11 @@ func TestGenerateSchemaAByteBudgetTruncation(t *testing.T) {
 	noLimit.SetPromptInstructions(shortFooter)
 	full := noLimit.GenerateSchemaA(topology, "test")
 
-	// Set budget to 1 byte less than full — forces one package to be dropped.
+	// Leave room for pkg1 but not pkg2 or a truncation marker.
 	formatter := NewFormatter()
 	formatter.SetPromptInstructions(shortFooter)
-	formatter.MaxTopologyPromptBytes = len(full) - 1
+	pkg2LineBytes := len("Pkg: pkg2 [1 files] -> Top: small.go (10B)\n")
+	formatter.MaxTopologyPromptBytes = len(full) - pkg2LineBytes + 5
 	formatter.MaxPackages = 0
 
 	output := formatter.GenerateSchemaA(topology, "test")
@@ -846,8 +1048,8 @@ func TestGenerateSchemaAByteBudgetTruncation(t *testing.T) {
 	if strings.Contains(output, "Pkg: pkg2") {
 		t.Errorf("expected pkg2 to be truncated by byte budget, got:\n%s", output)
 	}
-	if !strings.Contains(output, "... [Truncated due to size limit] ...") {
-		t.Errorf("expected truncation marker, got:\n%s", output)
+	if strings.Contains(output, "... [Truncated due to size limit] ...") {
+		t.Errorf("marker should be omitted when no room remains, got:\n%s", output)
 	}
 }
 

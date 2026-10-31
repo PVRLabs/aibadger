@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	probeTimeout      = 3 * time.Second
-	windowsNPMTimeout = 10 * time.Second
-	maxOutput         = 32 * 1024
+	probeTimeout        = 3 * time.Second
+	windowsNPMTimeout   = 10 * time.Second
+	windowsMavenTimeout = 10 * time.Second
+	maxOutput           = 32 * 1024
 )
 
 // Options supplies the local values and execution seams used to collect a
@@ -224,8 +225,8 @@ func (c collector) probePath(names, args []string, overrides map[string]string, 
 	return "", "not found"
 }
 
-// npm's Windows launcher starts Node more than once. Cold starts on hosted
-// Windows runners can exceed the usual three-second version-probe allowance.
+// npm's Windows launcher starts Node more than once, and Maven starts a JVM.
+// Cold starts on hosted Windows runners can exceed the usual probe allowance.
 func (c collector) probeDeadline(path string) time.Duration {
 	if c.opts.Timeout > 0 {
 		return c.opts.Timeout
@@ -235,6 +236,8 @@ func (c collector) probeDeadline(path string) time.Duration {
 		switch strings.ToLower(name) {
 		case "npm", "npm.cmd", "npm.bat", "npm.exe":
 			return windowsNPMTimeout
+		case "mvn", "mvn.cmd", "mvn.bat":
+			return windowsMavenTimeout
 		}
 	}
 	return probeTimeout

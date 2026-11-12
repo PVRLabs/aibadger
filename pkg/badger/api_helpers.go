@@ -30,10 +30,14 @@ func apiEngineOptions(cfg Config, focus protocol.Focus) workflow.EngineOptions {
 }
 
 func scanProject(w io.Writer, root string, output scanOutputMode, maxFilesPerDir int, policies ...dirpolicy.Policy) (*engine.Engine, error) {
+	return scanProjectWithLimit(w, root, output, maxFilesPerDir, 0, policies...)
+}
+
+func scanProjectWithLimit(w io.Writer, root string, output scanOutputMode, maxFilesPerDir, topLimit int, policies ...dirpolicy.Policy) (*engine.Engine, error) {
 	if output != scanOutputSilent {
 		fmt.Fprint(w, "Scanning project... ")
 	}
-	eng, err := engine.New(root, maxFilesPerDir, policies...)
+	eng, err := engine.NewWithTopFileLimit(root, maxFilesPerDir, topLimit, policies...)
 	if err != nil {
 		return nil, err
 	}

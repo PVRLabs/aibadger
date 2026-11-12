@@ -27,7 +27,15 @@ type topologyFileCandidate struct {
 }
 
 // Deduplicate surfaced file summaries by repo-relative path, then rebuild ownership rollups.
-func deduplicateTopologyFiles(t *model.ProjectTopology) {
+func deduplicateTopologyFiles(t *model.ProjectTopology, topLimits ...int) {
+	limit := 0
+	if len(topLimits) > 0 {
+		limit = topLimits[0]
+	}
+	deduplicateTopologyFilesWithLimits(t, limit, false)
+}
+
+func deduplicateTopologyFilesWithLimits(t *model.ProjectTopology, topLimit int, genericFallback bool) {
 	winners := make(map[string]topologyFileCandidate)
 	candidateGroups := make(map[string][]topologyFileCandidate)
 	moduleIdentities := make([]string, len(t.Modules))
@@ -111,6 +119,30 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 		}
 	}
 
+	type packageBudgets struct{ base, top, generic int }
+	budgets := make(map[*model.Package]packageBudgets)
+	for mi := range t.Modules {
+		module := &t.Modules[mi]
+		for si := range module.SourceRoots {
+			sourceRoot := &module.SourceRoots[si]
+			base := topologySourceRootFileLimit(sourceRoot)
+			for pi := range sourceRoot.Packages {
+				pkg := &sourceRoot.Packages[pi]
+				nonRoot := base
+				if base == maxPackageTopFiles {
+					nonRoot = effectiveTopFileLimit(topLimit)
+				}
+				budget := packageBudgets{base: base, top: packageTopFileLimit(pkg.Path, nonRoot)}
+				if sourceRoot.SupplementalHTML {
+					budget.top = packageTopFileLimit(pkg.Path, effectiveTopFileLimit(topLimit))
+				} else if genericFallback && sourceRoot.Role == "" {
+					budget.generic = genericPackageTopFileLimit(pkg.Path, topLimit)
+					budget.top = budget.generic
+				}
+				budgets[pkg] = budget
+			}
+		}
+	}
 	for _, winner := range winners {
 		module := findModuleByCandidate(t.Modules, winner)
 		if module == nil {
@@ -121,29 +153,13 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 			continue
 		}
 
-		limit := 3
+		budget := budgets[pkg]
 		sourceRoot := findSourceRootInModule(module, winner.sourceRoot, winner.sourceRole, winner.supplementalHTML)
-		if sourceRoot != nil {
-			switch sourceRoot.Role {
-			case "Documentation":
-				limit = 5
-			case "Web Resources":
-				limit = 10
-			case "Ops/Deploy":
-				limit = maxOpsPackageFiles
-			case projectContextRole:
-				limit = maxProjectContextPackageFiles
-			}
-		}
-		if strings.HasSuffix(strings.ToLower(winner.summary.Name), ".md") {
-			limit = 5
-		}
-		pkgLimit := packageTopFileLimit(pkg.Path, limit)
 
 		if winner.inTopFiles {
-			pkg.TopFiles = addTopologyPackageTopFile(pkg.TopFiles, winner.summary, module, sourceRoot, pkgLimit)
+			pkg.TopFiles = addTopologyPackageTopFile(pkg.TopFiles, winner.summary, module, sourceRoot, budget.top, budget.generic)
 		} else {
-			pkg.AuxFiles = addTopologyAuxFile(pkg.AuxFiles, winner.summary, module, limit)
+			pkg.AuxFiles = addTopologyAuxFile(pkg.AuxFiles, winner.summary, module, budget.base)
 		}
 	}
 
@@ -153,29 +169,10 @@ func deduplicateTopologyFiles(t *model.ProjectTopology) {
 		var cppContextTopFiles []model.FileSummary
 		for sourceRootIdx := range module.SourceRoots {
 			sourceRoot := &module.SourceRoots[sourceRootIdx]
-			limit := 3
-			switch sourceRoot.Role {
-			case "Documentation":
-				limit = 5
-			case "Web Resources":
-				limit = 10
-			case "Ops/Deploy":
-				limit = maxOpsPackageFiles
-			case projectContextRole:
-				limit = maxProjectContextPackageFiles
-			}
+			limit := topologySourceRootFileLimit(sourceRoot)
 			for packageIdx := range sourceRoot.Packages {
 				pkg := &sourceRoot.Packages[packageIdx]
-				// We don't easily know if the package contains MD here without re-scanning
-				// but we can just use the sourceRoot's limit as a baseline.
-				// Actually, we can check if any of the pkg.TopFiles are MD.
 				pkgLimit := limit
-				for _, f := range pkg.TopFiles {
-					if strings.HasSuffix(strings.ToLower(f.Name), ".md") {
-						pkgLimit = 5
-						break
-					}
-				}
 
 				if len(pkg.TopFiles) > 0 && (!isFirstClassCppModule(module) || !isCppOwnedSourceRoot(sourceRoot)) {
 					pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
@@ -226,9 +223,12 @@ func addTopologyTopFile(files []model.FileSummary, file model.FileSummary, modul
 	return addTopFile(files, file, limit)
 }
 
-func addTopologyPackageTopFile(files []model.FileSummary, file model.FileSummary, module *model.Module, sourceRoot *model.SourceRoot, limit int) []model.FileSummary {
+func addTopologyPackageTopFile(files []model.FileSummary, file model.FileSummary, module *model.Module, sourceRoot *model.SourceRoot, limit int, genericLimits ...int) []model.FileSummary {
+	if len(genericLimits) > 0 && genericLimits[0] > 0 {
+		return addGenericTopFile(files, file, genericLimits[0])
+	}
 	if sourceRoot != nil && sourceRoot.SupplementalHTML {
-		return addHTMLFile(files, file, packageTopFileLimit(normalizeRelativeDir(filepath.Dir(file.Path)), maxPackageTopFiles))
+		return addHTMLFile(files, file, limit)
 	}
 	if isFirstClassCppModule(module) && isCppOwnedSourceRoot(sourceRoot) {
 		// The detector already applied its logical package cap. Retain both
@@ -242,7 +242,11 @@ func addTopologyPackageTopFile(files []model.FileSummary, file model.FileSummary
 		return addCSharpTopFile(files, file, limit)
 	}
 	if usesGenericRanking(module) {
-		return addGenericTopFile(files, file, maxGenericPackageFiles)
+		genericLimit := maxGenericPackageFiles
+		if len(genericLimits) > 0 && genericLimits[0] > 0 {
+			genericLimit = genericLimits[0]
+		}
+		return addGenericTopFile(files, file, genericLimit)
 	}
 	return addTopFile(files, file, limit)
 }
@@ -337,4 +341,20 @@ func sameTopologyFileCandidate(left, right topologyFileCandidate) bool {
 		left.summary.Path == right.summary.Path &&
 		left.summary.Size == right.summary.Size &&
 		left.summary.Kind == right.summary.Kind
+}
+
+// Reporting budgets depend on package ownership, never on individual filenames.
+func topologySourceRootFileLimit(sourceRoot *model.SourceRoot) int {
+	switch sourceRoot.Role {
+	case "Documentation":
+		return 5
+	case "Web Resources":
+		return 10
+	case "Ops/Deploy":
+		return maxOpsPackageFiles
+	case projectContextRole:
+		return maxProjectContextPackageFiles
+	default:
+		return maxPackageTopFiles
+	}
 }

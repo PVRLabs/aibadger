@@ -14,6 +14,7 @@ import (
 // PythonDetector handles Python projects using shallow markers and common layouts.
 type PythonDetector struct {
 	Exclusions      map[string]bool
+	maxTopFiles     int
 	directoryPolicy dirpolicy.Policy
 }
 
@@ -163,7 +164,7 @@ func (p *PythonDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string
 		}
 		sr.FileCount++
 		totalBytes += info.Size()
-		recordPythonFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size())
+		recordPythonFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size(), p.maxTopFiles)
 		return nil
 	}, p.directoryPolicy, projectRoot)
 
@@ -242,7 +243,7 @@ func isPythonSourceFile(name string) bool {
 	return strings.ToLower(filepath.Ext(name)) == ".py"
 }
 
-func recordPythonFile(packageMap map[string]*model.Package, fullRootPath, projectRoot, path, name string, size int64) {
+func recordPythonFile(packageMap map[string]*model.Package, fullRootPath, projectRoot, path, name string, size int64, topLimits ...int) {
 	pkgPath := filepath.Dir(path)
 	relPkgPath := normalizeRelativeDir(relativePath(fullRootPath, pkgPath))
 	relToProject := relativePath(projectRoot, path)
@@ -257,7 +258,7 @@ func recordPythonFile(packageMap map[string]*model.Package, fullRootPath, projec
 	}
 
 	pkg.FileCount++
-	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles)
+	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), effectiveTopFileLimit(topLimits...))
 	pkg.TopFiles = addPythonTopFile(pkg.TopFiles, model.FileSummary{
 		Name: name,
 		Path: relToProject,

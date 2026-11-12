@@ -65,7 +65,8 @@ type Options struct {
 	IncludeTopology bool
 	// MaxFilesPerDirectory applies the normal scanner bound when topology is
 	// requested. Zero retains the scanner's unlimited low-level default.
-	MaxFilesPerDirectory int
+	MaxTopFilesPerPackage int
+	MaxFilesPerDirectory  int
 	// MaxPromptBytes bounds the complete interactive Schema A prompt. It is
 	// ignored by non-interactive payload generation.
 	MaxPromptBytes int

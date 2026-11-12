@@ -24,8 +24,12 @@ var resolveDownloadsDirectory = downloads.Resolve
 var savePromptToDownloads = downloads.SavePrompt
 
 func scanProjectCmd(root string, maxFilesPerDir int, policies ...dirpolicy.Policy) tea.Cmd {
+	return scanProjectWithLimitCmd(root, maxFilesPerDir, 0, policies...)
+}
+
+func scanProjectWithLimitCmd(root string, maxFilesPerDir, topLimit int, policies ...dirpolicy.Policy) tea.Cmd {
 	return func() tea.Msg {
-		eng, err := engine.New(root, maxFilesPerDir, policies...)
+		eng, err := engine.NewWithTopFileLimit(root, maxFilesPerDir, topLimit, policies...)
 		return scanDoneMsg{eng: eng, err: err}
 	}
 }

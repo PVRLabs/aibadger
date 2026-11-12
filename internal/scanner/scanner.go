@@ -11,9 +11,11 @@ import (
 
 // Scanner orchestrates the scanning process.
 type Scanner struct {
-	ProjectRoot          string
-	MaxFilesPerDirectory int // 0 = unlimited
-	directoryPolicy      dirpolicy.Policy
+	MaxTopFilesPerPackage int
+	ProjectRoot           string
+	MaxFilesPerDirectory  int // 0 = unlimited
+	genericFallback       bool
+	directoryPolicy       dirpolicy.Policy
 }
 
 // NewScanner creates a new Scanner instance.
@@ -44,16 +46,31 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 
 	nodeDetector := NewNodeDetector(s.directoryPolicy)
 	nodeDetector.maxFilesPerDir = s.MaxFilesPerDirectory
+	nodeDetector.maxTopFiles = s.MaxTopFilesPerPackage
 	csharpDetector := NewCSharpDetector(s.directoryPolicy)
 	csharpDetector.maxFilesPerDir = s.MaxFilesPerDirectory
+	csharpDetector.maxTopFiles = s.MaxTopFilesPerPackage
 	cppDetector := NewCppDetector(s.directoryPolicy)
 	cppDetector.maxFilesPerDir = s.MaxFilesPerDirectory
+	cppDetector.maxTopFiles = s.MaxTopFilesPerPackage
 
 	detectors := []func(string) ([]model.Module, error){
-		NewGoDetector(s.directoryPolicy).Detect,
-		NewJavaDetector(s.directoryPolicy).Detect,
+		func(root string) ([]model.Module, error) {
+			d := NewGoDetector(s.directoryPolicy)
+			d.maxTopFiles = s.MaxTopFilesPerPackage
+			return d.Detect(root)
+		},
+		func(root string) ([]model.Module, error) {
+			d := NewJavaDetector(s.directoryPolicy)
+			d.maxTopFiles = s.MaxTopFilesPerPackage
+			return d.Detect(root)
+		},
 		nodeDetector.Detect,
-		NewPythonDetector(s.directoryPolicy).Detect,
+		func(root string) ([]model.Module, error) {
+			d := NewPythonDetector(s.directoryPolicy)
+			d.maxTopFiles = s.MaxTopFilesPerPackage
+			return d.Detect(root)
+		},
 		csharpDetector.Detect,
 		cppDetector.Detect,
 	}
@@ -81,6 +98,7 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 	var supplementalHTML []model.SourceRoot
 	if len(topology.Modules) == 0 {
 		det := NewGenericDetector(s.directoryPolicy)
+		det.maxTopFiles = s.MaxTopFilesPerPackage
 		if s.MaxFilesPerDirectory > 0 {
 			det.maxFilesPerDir = s.MaxFilesPerDirectory
 		}
@@ -91,6 +109,7 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 		}
 	} else {
 		det := NewGenericDetector(s.directoryPolicy)
+		det.maxTopFiles = s.MaxTopFilesPerPackage
 		if s.MaxFilesPerDirectory > 0 {
 			det.maxFilesPerDir = s.MaxFilesPerDirectory
 		}
@@ -147,6 +166,7 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 
 	// Finalize topology
 	topology.ScanTime = time.Since(start)
+	s.genericFallback = usedGenericFallback
 	s.finalizeTopologyWithLanguageWeights(topology, languageWeights)
 
 	return topology, nil

@@ -87,7 +87,7 @@ func (d *GenericDetector) collectSupplementalHTML(root string, ownership semanti
 		}
 		reached[normalizeTopologyFilePath(rel)] = true
 		pkg.FileCount++
-		pkg.TopFiles = addHTMLFile(pkg.TopFiles, model.FileSummary{Name: entry.Name(), Path: rel, Size: info.Size()}, packageTopFileLimit(dir, maxPackageTopFiles))
+		pkg.TopFiles = addHTMLFile(pkg.TopFiles, model.FileSummary{Name: entry.Name(), Path: rel, Size: info.Size()}, packageTopFileLimit(dir, effectiveTopFileLimit(d.maxTopFiles)))
 		return nil
 	}, d.directoryPolicy, root)
 	sr := model.SourceRoot{Role: "Web Resources", SupplementalHTML: true, HTMLPaths: reached}

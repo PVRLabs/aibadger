@@ -3,7 +3,6 @@ package tui
 import (
 	"errors"
 	"fmt"
-	"github.com/PVRLabs/aibadger/internal/defaults"
 	sharedsettings "github.com/PVRLabs/aibadger/internal/settings"
 )
 
@@ -19,30 +18,21 @@ func resolveSettingsLimits(cfg Config, limits *SettingsLimits) (Config, []string
 	if limits == nil {
 		return cfg, nil
 	}
-	type limitSpec struct {
-		key     string
-		value   int
-		minimum int
-		maximum int
-		apply   func(int)
-	}
-	specs := []limitSpec{
-		{"max_files_per_directory", limits.MaxFilesPerDirectory, defaults.MaxFilesPerDirectory, defaults.MaxFilesPerDirectoryUpperBound, func(v int) { cfg.MaxFilesPerDirectory = v }},
-		{"max_context_file_bytes", limits.MaxContextFileBytes, defaults.MaxContextFileBytes, defaults.MaxContextFileBytesUpperBound, func(v int) { cfg.MaxContextFileBytes = v }},
-		{"max_prompt_two_bytes", limits.MaxPromptTwoBytes, defaults.MaxPromptTwoBytes, defaults.MaxPromptTwoBytesUpperBound, func(v int) { cfg.MaxPromptTwoBytes = v }},
-		{"max_topology_prompt_bytes", limits.MaxTopologyPromptBytes, defaults.MaxTopologyPromptBytes, defaults.MaxTopologyPromptBytesUpperBound, func(v int) { cfg.MaxTopologyPromptBytes = v }},
+	resolved := SettingsLimits{
+		MaxTopFilesPerPackage:  cfg.MaxTopFilesPerPackage,
+		MaxFilesPerDirectory:   cfg.MaxFilesPerDirectory,
+		MaxContextFileBytes:    cfg.MaxContextFileBytes,
+		MaxPromptTwoBytes:      cfg.MaxPromptTwoBytes,
+		MaxTopologyPromptBytes: cfg.MaxTopologyPromptBytes,
 	}
 	var warnings []string
-	for _, spec := range specs {
-		if spec.value == 0 {
-			continue
-		}
-		if spec.value < spec.minimum || spec.value > spec.maximum {
-			warnings = append(warnings, fmt.Sprintf("settings limits.%s must be between %d and %d; keeping the current value", spec.key, spec.minimum, spec.maximum))
-			continue
-		}
-		spec.apply(spec.value)
-	}
+	sharedsettings.MergeLimits(&resolved, limits, func(message string) { warnings = append(warnings, message) })
+	cfg.MaxTopFilesPerPackage = resolved.MaxTopFilesPerPackage
+	cfg.MaxFilesPerDirectory = resolved.MaxFilesPerDirectory
+	cfg.MaxContextFileBytes = resolved.MaxContextFileBytes
+	cfg.MaxPromptTwoBytes = resolved.MaxPromptTwoBytes
+	cfg.MaxTopologyPromptBytes = resolved.MaxTopologyPromptBytes
+
 	return cfg, warnings
 }
 

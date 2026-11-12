@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/PVRLabs/aibadger/internal/dirpolicy"
+	sharedsettings "github.com/PVRLabs/aibadger/internal/settings"
 	"os"
 	"strings"
 	"time"
@@ -216,19 +217,42 @@ func NewModel(root string, cfg Config) Model {
 		goalAttachmentSelected: -1,
 		session:                workflow.NewSession(nil, cfg.WhitespaceMode),
 		reviewOptions:          reviewtask.Options{Mode: reviewtask.ModeDefault},
-		reviewMaxPromptBytes:   cfg.MaxTopologyPromptBytes,
 		prepareReviewContext:   reviewtask.BuildInteractiveContext,
 	}
 
+	suppliedConfig := cfg
 	settings, resolvedCfg, showOnboarding, onboardingCompleted, settingsWriteAllowed, settingsWarnings := loadSettingsState(cfg.SettingsPath, cfg)
 	cfg = resolvedCfg
+	effective, projectWarnings := sharedsettings.OverlayProject(settings, root)
+	cfg, _ = resolveSettingsLimits(cfg, effective.Limits)
+	if effective.ExcludeGeneratedDirectories != nil || effective.AdditionalExcludedDirectories != nil {
+		cfg.DirectoryPolicy = effective.DirectoryPolicy()
+	}
+	defaultConfig := DefaultConfig().withDefaults()
+	if suppliedConfig.MaxTopFilesPerPackage != 0 {
+		cfg.MaxTopFilesPerPackage = suppliedConfig.MaxTopFilesPerPackage
+	}
+	if suppliedConfig.MaxFilesPerDirectory != defaultConfig.MaxFilesPerDirectory {
+		cfg.MaxFilesPerDirectory = suppliedConfig.MaxFilesPerDirectory
+	}
+	if suppliedConfig.MaxContextFileBytes != defaultConfig.MaxContextFileBytes {
+		cfg.MaxContextFileBytes = suppliedConfig.MaxContextFileBytes
+	}
+	if suppliedConfig.MaxTopologyPromptBytes != defaultConfig.MaxTopologyPromptBytes {
+		cfg.MaxTopologyPromptBytes = suppliedConfig.MaxTopologyPromptBytes
+	}
+	if suppliedConfig.MaxPromptTwoBytes != defaultConfig.MaxPromptTwoBytes {
+		cfg.MaxPromptTwoBytes = suppliedConfig.MaxPromptTwoBytes
+	}
+	settingsWarnings = append(settingsWarnings, projectWarnings...)
 	m.cfg = cfg
+	m.reviewMaxPromptBytes = cfg.MaxTopologyPromptBytes
 	m.externalRoots = loadExternalRoots(root, cfg.DirectoryPolicy)
 	m.settings = settings
 	m.settingsWriteAllowed = settingsWriteAllowed
 	m.startupWarnings = settingsWarnings
-	if settings.WhitespaceMode != "" {
-		cfg.WhitespaceMode = writer.WhitespaceMode(settings.WhitespaceMode)
+	if effective.WhitespaceMode != "" {
+		cfg.WhitespaceMode = writer.WhitespaceMode(effective.WhitespaceMode)
 		m.cfg = cfg
 		m.session.WhitespaceMode = cfg.WhitespaceMode
 	}
@@ -640,7 +664,7 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 	m.state = stateScanning
 	m.scanFrame = 0
 	m.goalInput.Blur()
-	return m, tea.Batch(scanProjectCmd(m.root, m.cfg.MaxFilesPerDirectory, m.cfg.DirectoryPolicy), scanTick())
+	return m, tea.Batch(scanProjectWithLimitCmd(m.root, m.cfg.MaxFilesPerDirectory, m.cfg.MaxTopFilesPerPackage, m.cfg.DirectoryPolicy), scanTick())
 }
 
 func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
@@ -713,6 +737,8 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 		MaxPromptBytes: m.reviewMaxPromptBytes,
 	}
 	opts.DirectoryPolicy = &m.cfg.DirectoryPolicy
+	opts.MaxTopFilesPerPackage = m.cfg.MaxTopFilesPerPackage
+	opts.MaxFilesPerDirectory = m.cfg.MaxFilesPerDirectory
 	ctx, err := prepare(m.root, opts)
 	if err != nil {
 		m.status = errorMessage(fmt.Sprintf("Unable to prepare review prompt: %v", err))
@@ -766,6 +792,8 @@ func (m Model) handleReviewRefresh() (tea.Model, tea.Cmd) {
 	opts := m.reviewOptions
 	opts.MaxPromptBytes = m.reviewMaxPromptBytes
 	opts.DirectoryPolicy = &m.cfg.DirectoryPolicy
+	opts.MaxTopFilesPerPackage = m.cfg.MaxTopFilesPerPackage
+	opts.MaxFilesPerDirectory = m.cfg.MaxFilesPerDirectory
 	ctx, err := prepare(m.root, opts)
 	if err != nil {
 		m.status = errorMessage(fmt.Sprintf("Unable to refresh review context: %v", err))

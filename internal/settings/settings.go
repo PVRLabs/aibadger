@@ -12,6 +12,7 @@ import (
 const settingsDirName = ".badger"
 
 type SettingsLimits struct {
+	MaxTopFilesPerPackage  int `json:"max_top_files_per_package,omitempty"`
 	MaxFilesPerDirectory   int `json:"max_files_per_directory,omitempty"`
 	MaxContextFileBytes    int `json:"max_context_file_bytes,omitempty"`
 	MaxPromptTwoBytes      int `json:"max_prompt_two_bytes,omitempty"`
@@ -117,7 +118,10 @@ func decodeDirectories(settings *Settings, toggle, names json.RawMessage) {
 			}
 			valid = append(valid, name)
 		}
-		settings.AdditionalExcludedDirectories = &valid
+		// Only an explicitly empty array clears an inherited exclusion list.
+		if len(values) == 0 || len(valid) > 0 {
+			settings.AdditionalExcludedDirectories = &valid
+		}
 	}
 }
 

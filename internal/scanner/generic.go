@@ -71,6 +71,7 @@ var genericExtensionLanguages = map[string]string{
 
 // GenericDetector handles projects with no specific structure (e.g., Python, simple Go, etc.)
 type GenericDetector struct {
+	maxTopFiles     int
 	Exclusions      map[string]bool
 	maxFilesPerDir  int
 	maxTotalFiles   int
@@ -121,7 +122,7 @@ func (d *GenericDetector) Detect(root string) ([]model.Module, error) {
 		if shouldOmitFile(root, path, entry.Name(), d.directoryPolicy) {
 			return
 		}
-		recordGenericFile(root, path, entry.Name(), info.Size(), packages, extCounts)
+		recordGenericFile(root, path, entry.Name(), info.Size(), packages, extCounts, d.maxTopFiles)
 	})
 
 	if err != nil {
@@ -197,7 +198,7 @@ func (d *GenericDetector) walkFiles(root string, visit func(string, os.DirEntry,
 	}, d.directoryPolicy, root)
 }
 
-func recordGenericFile(root, path, name string, size int64, packages map[string]*model.Package, extCounts map[string]int) {
+func recordGenericFile(root, path, name string, size int64, packages map[string]*model.Package, extCounts map[string]int, topLimits ...int) {
 	relPath := relativePath(root, path)
 	dir := relativeDirFromFile(root, path)
 	pkg := getOrCreateGenericPackage(packages, dir)
@@ -218,7 +219,7 @@ func recordGenericFile(root, path, name string, size int64, packages map[string]
 	if kind == model.FileKindAsset || kind == model.FileKindBinary {
 		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, maxGenericPackageFiles)
 	} else {
-		pkg.TopFiles = addGenericTopFile(pkg.TopFiles, file, maxGenericPackageFiles)
+		pkg.TopFiles = addGenericTopFile(pkg.TopFiles, file, genericPackageTopFileLimit(dir, topLimits...))
 	}
 	if len(pkg.TopFiles) > 0 {
 		pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])

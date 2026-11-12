@@ -83,7 +83,7 @@ func (s *Scanner) finalizeTopologyWithLanguageWeights(t *model.ProjectTopology, 
 	if len(t.Stack) == 0 {
 		t.Stack = detectedStack(s.ProjectRoot, s.directoryPolicy)
 	}
-	deduplicateTopologyFiles(t)
+	deduplicateTopologyFilesWithLimits(t, s.MaxTopFilesPerPackage, s.genericFallback)
 	sortTopology(t)
 }
 

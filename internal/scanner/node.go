@@ -18,6 +18,7 @@ const maxNodeRootOverviewFiles = maxRootPackageTopFiles
 type NodeDetector struct {
 	Exclusions      map[string]bool
 	maxFilesPerDir  int
+	maxTopFiles     int
 	directoryPolicy dirpolicy.Policy
 }
 
@@ -853,7 +854,7 @@ func (n *NodeDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string) 
 			return nil
 		}
 		sr.FileCount++
-		recordNodeFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size())
+		recordNodeFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size(), n.maxTopFiles)
 		return nil
 	}, n.directoryPolicy, projectRoot)
 
@@ -874,7 +875,7 @@ func isNodeSourceFile(name string) bool {
 	}
 }
 
-func recordNodeFile(packageMap map[string]*model.Package, fullRootPath, projectRoot, path, name string, size int64) {
+func recordNodeFile(packageMap map[string]*model.Package, fullRootPath, projectRoot, path, name string, size int64, topLimits ...int) {
 	pkgPath := filepath.Dir(path)
 	relPkgPath := normalizeRelativeDir(relativePath(fullRootPath, pkgPath))
 	relToProject := relativePath(projectRoot, path)
@@ -889,7 +890,7 @@ func recordNodeFile(packageMap map[string]*model.Package, fullRootPath, projectR
 	}
 
 	pkg.FileCount++
-	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles)
+	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), effectiveTopFileLimit(topLimits...))
 	pkg.TopFiles = addTopFile(pkg.TopFiles, model.FileSummary{
 		Name: name,
 		Path: relToProject,

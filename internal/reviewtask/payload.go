@@ -173,7 +173,7 @@ func buildReviewPayloadFromChangeSet(root string, set ChangeSet, opts Options, i
 	if opts.MaxFileBytes > 0 {
 		limits.maxFileBytes = opts.MaxFileBytes
 	}
-	return buildInitialReviewPayloadWithTopology(root, set, strings.TrimSpace(opts.ExtraFocus), limits, opts.IncludeTopology, opts.MaxFilesPerDirectory, includeReviewInstructions, readStableReviewFile, opts.DirectoryPolicy)
+	return buildInitialReviewPayloadWithScanLimits(root, set, strings.TrimSpace(opts.ExtraFocus), limits, opts.IncludeTopology, opts.MaxFilesPerDirectory, opts.MaxTopFilesPerPackage, includeReviewInstructions, readStableReviewFile, opts.DirectoryPolicy)
 }
 
 // BuildInteractiveContext prepares review context for editable TUI
@@ -370,6 +370,10 @@ func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limi
 }
 
 func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, includeTopology bool, maxFilesPerDirectory int, includeReviewInstructions bool, readFile stableFileReader, policies ...*dirpolicy.Policy) InitialReviewResult {
+	return buildInitialReviewPayloadWithScanLimits(root, set, guidance, limits, includeTopology, maxFilesPerDirectory, 0, includeReviewInstructions, readFile, policies...)
+}
+
+func buildInitialReviewPayloadWithScanLimits(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, includeTopology bool, maxFilesPerDirectory, maxTopFiles int, includeReviewInstructions bool, readFile stableFileReader, policies ...*dirpolicy.Policy) InitialReviewResult {
 	label := repositoryLabel(root)
 	set = omitSensitiveUntrackedPaths(set)
 	if len(set.Changes) == 0 && len(set.UntrackedPaths) == 0 {
@@ -408,10 +412,13 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		if len(policies) > 0 && policies[0] != nil {
 			policy = *policies[0]
 		} else {
-			policy, _ = settings.DefaultDirectoryPolicy()
+			userPath, _ := settings.DefaultSettingsPath()
+			effective, _ := settings.LoadProject(userPath, root)
+			policy = effective.DirectoryPolicy()
 		}
 		s := scanner.NewScanner(root, policy)
 		s.MaxFilesPerDirectory = maxFilesPerDirectory
+		s.MaxTopFilesPerPackage = maxTopFiles
 		project, err := s.Scan()
 		if err != nil {
 			return InitialReviewResult{Failure: PayloadFailureTopologyScan}

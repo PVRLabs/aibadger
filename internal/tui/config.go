@@ -33,6 +33,7 @@ type Config struct {
 	SchemaAConstraint         string
 	SchemaBConstraint         string
 	WhitespaceMode            writer.WhitespaceMode
+	MaxTopFilesPerPackage     int // 0 uses the default of 3.
 	MaxFilesPerDirectory      int
 }
 

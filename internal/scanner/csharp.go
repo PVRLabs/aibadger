@@ -25,6 +25,7 @@ var csharpIgnoredDirs = cloneExclusions(markerDiscoveryIgnoredDirs,
 // CSharpDetector handles projects rooted at .csproj files without evaluating
 // project XML or invoking the .NET toolchain.
 type CSharpDetector struct {
+	maxTopFiles         int
 	maxFilesPerDir      int
 	languageSourceCount int
 	directoryPolicy     dirpolicy.Policy
@@ -184,7 +185,7 @@ func (c *CSharpDetector) recordFile(projectRoot, moduleRoot, path string, langua
 	if isUnderCSharpWWWRoot(moduleRoot, path) && (file.Kind == model.FileKindAsset || file.Kind == model.FileKindBinary) {
 		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, maxPackageTopFiles)
 	} else {
-		pkg.TopFiles = addCSharpTopFile(pkg.TopFiles, file, packageTopFileLimit(relativePath(moduleRoot, filepath.Dir(path)), maxPackageTopFiles))
+		pkg.TopFiles = addCSharpTopFile(pkg.TopFiles, file, packageTopFileLimit(relativePath(moduleRoot, filepath.Dir(path)), effectiveTopFileLimit(c.maxTopFiles)))
 		if len(pkg.TopFiles) > 0 {
 			pkg.Heaviest = heaviestFromSummary(pkg.TopFiles[0])
 		}

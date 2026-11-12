@@ -31,6 +31,10 @@ type Engine struct {
 // New scans the project root and creates an engine for follow-up workflow
 // steps. If maxFilesPerDir is 0, scanning is unlimited.
 func New(root string, maxFilesPerDir int, policies ...dirpolicy.Policy) (*Engine, error) {
+	return NewWithTopFileLimit(root, maxFilesPerDir, 0, policies...)
+}
+
+func NewWithTopFileLimit(root string, maxFilesPerDir, maxTopFiles int, policies ...dirpolicy.Policy) (*Engine, error) {
 	if err := CheckDisabled(root); err != nil {
 		return nil, err
 	}
@@ -39,10 +43,13 @@ func New(root string, maxFilesPerDir int, policies ...dirpolicy.Policy) (*Engine
 	if len(policies) > 0 {
 		policy = policies[0]
 	} else {
-		policy, _ = settings.DefaultDirectoryPolicy()
+		userPath, _ := settings.DefaultSettingsPath()
+		effective, _ := settings.LoadProject(userPath, root)
+		policy = effective.DirectoryPolicy()
 	}
 	s := scanner.NewScanner(root, policy)
 	s.MaxFilesPerDirectory = maxFilesPerDir
+	s.MaxTopFilesPerPackage = maxTopFiles
 	topology, err := s.Scan()
 	if err != nil {
 		return nil, err

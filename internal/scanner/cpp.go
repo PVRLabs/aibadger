@@ -34,6 +34,7 @@ var cppConventionalRoots = []struct {
 // CppDetector recognizes only obvious, bounded root and conventional-tree C++ layouts.
 // It deliberately does not parse build files or discover child modules.
 type CppDetector struct {
+	maxTopFiles         int
 	maxFilesPerDir      int
 	maxEntries          int
 	languageSourceCount int
@@ -81,7 +82,7 @@ func (c *CppDetector) Detect(root string) ([]model.Module, error) {
 					c.languageSourceCount++
 				}
 			}
-			return []model.Module{buildCppModule(root, candidates)}, nil
+			return []model.Module{buildCppModule(root, candidates, c.maxTopFiles)}, nil
 		}
 	}
 	return nil, nil
@@ -198,7 +199,7 @@ func isCppActivationFile(path string) bool {
 	return dir == "" || dir == "src" || strings.HasPrefix(dir, "src"+string(filepath.Separator))
 }
 
-func buildCppModule(root string, candidates []cppCandidate) model.Module {
+func buildCppModule(root string, candidates []cppCandidate, topLimits ...int) model.Module {
 	module := model.Module{Name: filepath.Base(root), Language: "C++"}
 	byRoot := make(map[string]map[string][]cppCandidate)
 	rootRoles := make(map[string]string)
@@ -228,7 +229,7 @@ func buildCppModule(root string, candidates []cppCandidate) model.Module {
 				files = append(files, candidate.summary)
 			}
 			pkg := model.Package{Name: cppPackageName(root, path), Path: path, FileCount: len(files)}
-			pkg.TopFiles = selectCppPackageFiles(files, packageTopFileLimit(path, maxPackageTopFiles))
+			pkg.TopFiles = selectCppPackageFiles(files, packageTopFileLimit(path, effectiveTopFileLimit(topLimits...)))
 			pkg.Heaviest = heaviestCppFile(files)
 			sourceRoot.FileCount += pkg.FileCount
 			sourceRoot.Packages = append(sourceRoot.Packages, pkg)

@@ -1,6 +1,7 @@
 package badger
 
 import (
+	"github.com/PVRLabs/aibadger/internal/settings"
 	"os"
 
 	"github.com/PVRLabs/aibadger/internal/protocol"
@@ -35,6 +36,7 @@ type Config struct {
 	SchemaAConstraint         string // Optional: overrides Prompt 1 instructions
 	SchemaBConstraint         string // Optional: overrides Prompt 2 instructions
 	WhitespaceMode            string // "smart" (default), "exact", or "ignore"
+	MaxTopFilesPerPackage     int    // 0 uses the default of 3.
 	MaxFilesPerDirectory      int
 }
 
@@ -132,6 +134,30 @@ func (c Config) tuiConfig() tui.Config {
 		SchemaAConstraint:         c.SchemaAConstraint,
 		SchemaBConstraint:         c.SchemaBConstraint,
 		MaxFilesPerDirectory:      c.MaxFilesPerDirectory,
+		MaxTopFilesPerPackage:     c.MaxTopFilesPerPackage,
 		WhitespaceMode:            writer.WhitespaceMode(c.WhitespaceMode),
 	}
+}
+
+func applyProjectLimits(c Config, limits *settings.SettingsLimits) Config {
+	if limits == nil {
+		return c
+	}
+	defaults := DefaultConfig()
+	if c.MaxTopFilesPerPackage == 0 {
+		c.MaxTopFilesPerPackage = limits.MaxTopFilesPerPackage
+	}
+	if c.MaxFilesPerDirectory == defaults.MaxFilesPerDirectory && limits.MaxFilesPerDirectory != 0 {
+		c.MaxFilesPerDirectory = limits.MaxFilesPerDirectory
+	}
+	if c.MaxContextFileBytes == defaults.MaxContextFileBytes && limits.MaxContextFileBytes != 0 {
+		c.MaxContextFileBytes = limits.MaxContextFileBytes
+	}
+	if c.MaxTopologyPromptBytes == defaults.MaxTopologyPromptBytes && limits.MaxTopologyPromptBytes != 0 {
+		c.MaxTopologyPromptBytes = limits.MaxTopologyPromptBytes
+	}
+	if (c.MaxPromptTwoBytes == 0 || c.MaxPromptTwoBytes == workflow.MaxPromptTwoBytes) && limits.MaxPromptTwoBytes != 0 {
+		c.MaxPromptTwoBytes = limits.MaxPromptTwoBytes
+	}
+	return c
 }

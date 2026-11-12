@@ -1,7 +1,7 @@
 # Settings and External Context
 
-Badger has two small configuration mechanisms. User-level settings live in
-`~/.badger/settings.json`; project-specific external context
+Badger has two small configuration mechanisms. Settings live in
+`~/.badger/settings.json` and optionally `<repo>/.badger/settings.json`; external context
 is configured separately with `.badger-context` in the project root.
 
 ## Settings file
@@ -9,6 +9,38 @@ is configured separately with `.badger-context` in the project root.
 Badger stores optional user settings in
 `~/.badger/settings.json`. Settings are not required; Badger uses its built-in
 defaults when the file is missing.
+
+
+Settings resolve as **built-in defaults → user settings → project settings**.
+Project paths resolve from the selected repository root, independently of the
+process working directory. Both files use the same schema and validation;
+invalid project values warn and retain valid user values. Files are never
+rewritten by project settings loading. Onboarding and saved UI state stay in
+the user settings file. Commit the project file to share settings, or ignore it
+for personal use.
+
+`limits.max_top_files_per_package` changes representative `TopFiles` for ordinary
+non-root packages, Generic fallback packages, and supplemental HTML packages
+before scanner selection. When omitted or zero, existing defaults remain: 3 for
+ordinary/supplemental HTML packages and 10 for Generic fallback packages.
+An explicit value applies to all three categories; Generic fallback retains a
+minimum of 10, so values from 3 through 9 do not reduce its existing budget.
+
+| Configured value | Generic fallback | Ordinary / supplemental HTML |
+|---|---:|---:|
+| Omitted or `0` | 10 | 3 |
+| `3` | 10 | 3 |
+| `8` | 10 | 8 |
+| `30` | 30 | 30 |
+
+Existing ranking and deterministic ordering are preserved (supplemental HTML
+keeps index pages first). It does not expand module/root overviews (10),
+auxiliary-file budgets, other specialized resource budgets, or prompt byte targets.
+For example, `<repo>/.badger/settings.json` may contain:
+
+```json
+{"limits":{"max_top_files_per_package":8,"max_topology_prompt_bytes":1048576}}
+```
 
 ## Directory exclusions
 
@@ -63,10 +95,11 @@ mandatory safety rules. Basename and suffix searches in external context retain
 these discovery exclusions; use a root-relative or displayed full path to request
 an excluded external file explicitly.
 
-Only the user-level file is supported here. Project-local settings and precedence
-are a separate feature; no settings file in the project is loaded.
+Project settings override explicitly supplied user settings. Missing keys inherit;
+explicit `false` disables the generated-directory list and `[]` clears inherited
+additional exclusions. Mandatory safety rules remain enforced.
 
-## Configuring interactive limits
+## Configuring limits
 
 For unusually large repositories or source files, add a `limits` object to
 your existing `~/.badger/settings.json`. Preserve any other settings already
@@ -84,10 +117,11 @@ in the file.
 ```
 
 The optional limits are increase-only. Omit a key or set it to `0` to keep
-Badger's normal value. Accepted inclusive ranges are:
+the preceding layer’s value. Accepted inclusive ranges are:
 
 | Setting | Default | Accepted range |
 |---|---:|---:|
+| `max_top_files_per_package` | 3; Generic fallback 10 | 3–50 |
 | `max_files_per_directory` | 250 | 250–5,000 |
 | `max_context_file_bytes` | 50 KiB | 50–512 KiB |
 | `max_prompt_two_bytes` | 512 KiB | 512 KiB–1 MiB |
@@ -103,7 +137,8 @@ Badger's normal value. Accepted inclusive ranges are:
 A missing settings file is normal and does not produce a warning; first-run
 onboarding is still controlled by the onboarding-completion setting.
 
-The limits settings apply only to interactive sessions, not `badger api` commands.
+Settings apply to interactive sessions and supported headless/API topology paths.
+Explicit nondefault programmatic numeric configuration takes precedence.
 The directory limit currently affects Node, C#, and generic fallback scanning;
 Go, Java, and Python detectors keep their existing behavior. Prompt size limits are
 targets rather than strict output-size guarantees. Required framing, task, and

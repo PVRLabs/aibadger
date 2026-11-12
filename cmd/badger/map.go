@@ -26,7 +26,9 @@ func runMapCommandWithGenerator(args []string, stdout io.Writer, generate func(s
 	if err != nil {
 		return err
 	}
-	policy, warnings := settings.DefaultDirectoryPolicy()
+	userPath, _ := settings.DefaultSettingsPath()
+	effective, warnings := settings.LoadProject(userPath, path)
+	policy := effective.DirectoryPolicy()
 	for _, warning := range warnings {
 		fmt.Fprintln(os.Stderr, warning)
 	}

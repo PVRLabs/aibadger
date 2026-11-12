@@ -13,7 +13,10 @@ import (
 )
 
 // GoDetector handles go.mod projects.
-type GoDetector struct{ directoryPolicy dirpolicy.Policy }
+type GoDetector struct {
+	maxTopFiles     int
+	directoryPolicy dirpolicy.Policy
+}
 
 // NewGoDetector returns a new Go detector.
 func NewGoDetector(directoryPolicies ...dirpolicy.Policy) *GoDetector {
@@ -261,7 +264,7 @@ func (g *GoDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string, re
 		}
 		sr.FileCount++
 		totalBytes += info.Size()
-		recordGoFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size())
+		recordGoFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size(), g.maxTopFiles)
 		return nil
 	}, g.directoryPolicy, projectRoot)
 
@@ -341,7 +344,7 @@ func (g *GoDetector) findTopFiles(modulePath, projectRoot string, limit int) []m
 	return topFiles
 }
 
-func recordGoFile(packageMap map[string]*model.Package, fullRootPath, projectRoot, path, name string, size int64) {
+func recordGoFile(packageMap map[string]*model.Package, fullRootPath, projectRoot, path, name string, size int64, topLimits ...int) {
 	pkgPath := filepath.Dir(path)
 	relPkgPath := normalizeRelativeDir(relativePath(fullRootPath, pkgPath))
 	relToProject := relativePath(projectRoot, path)
@@ -356,7 +359,7 @@ func recordGoFile(packageMap map[string]*model.Package, fullRootPath, projectRoo
 	}
 
 	pkg.FileCount++
-	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles)
+	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), effectiveTopFileLimit(topLimits...))
 	kind := filekind.Classify(path)
 	file := model.FileSummary{
 		Name: name,
@@ -365,7 +368,7 @@ func recordGoFile(packageMap map[string]*model.Package, fullRootPath, projectRoo
 		Kind: kind,
 	}
 	if kind == model.FileKindAsset || kind == model.FileKindBinary {
-		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, limit)
+		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles))
 	} else {
 		pkg.TopFiles = addTopFile(pkg.TopFiles, file, limit)
 		if len(pkg.TopFiles) > 0 {

@@ -153,7 +153,7 @@ func TestNewModelMalformedLimitsKeepsIncomingLimitsAndStartupStatus(t *testing.T
 	}
 }
 
-func TestNewModelAppliesLimitsAndKeepsReviewBudget(t *testing.T) {
+func TestNewModelAppliesLimitsToReviewBudget(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	if err := SaveSettings(path, Settings{FirstRunOnboardingCompleted: true, Limits: &SettingsLimits{
 		MaxFilesPerDirectory: 1000, MaxContextFileBytes: 128 * 1024,
@@ -167,8 +167,8 @@ func TestNewModelAppliesLimitsAndKeepsReviewBudget(t *testing.T) {
 	if m.cfg.MaxFilesPerDirectory != 1000 || m.engineOptions(0).MaxContextFileBytes != 128*1024 || m.engineOptions(0).MaxPromptTwoBytes != 512*1024 || m.engineOptions(0).MaxTopologyPromptBytes != 1024*1024 {
 		t.Fatalf("effective config = %#v", m.cfg)
 	}
-	if m.reviewMaxPromptBytes != cfg.MaxTopologyPromptBytes {
-		t.Fatalf("review budget = %d, want %d", m.reviewMaxPromptBytes, cfg.MaxTopologyPromptBytes)
+	if m.reviewMaxPromptBytes != m.cfg.MaxTopologyPromptBytes {
+		t.Fatalf("review budget = %d, want %d", m.reviewMaxPromptBytes, m.cfg.MaxTopologyPromptBytes)
 	}
 }
 

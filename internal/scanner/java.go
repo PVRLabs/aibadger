@@ -12,7 +12,10 @@ import (
 )
 
 // JavaDetector handles Maven and Gradle projects.
-type JavaDetector struct{ directoryPolicy dirpolicy.Policy }
+type JavaDetector struct {
+	maxTopFiles     int
+	directoryPolicy dirpolicy.Policy
+}
 
 // NewJavaDetector returns a new instance of JavaDetector.
 func NewJavaDetector(directoryPolicies ...dirpolicy.Policy) *JavaDetector {
@@ -147,7 +150,7 @@ func (j *JavaDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string) 
 			return nil
 		}
 		sr.FileCount++
-		recordJavaFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size())
+		recordJavaFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size(), j.maxTopFiles)
 		return nil
 	}, j.directoryPolicy, projectRoot)
 
@@ -218,7 +221,7 @@ func (j *JavaDetector) findSourceRoot(projectRoot, modulePath, rootSuffix string
 	return sr, true
 }
 
-func recordJavaFile(packageMap map[string]*model.Package, fullRootPath, projectRoot, path, name string, size int64) {
+func recordJavaFile(packageMap map[string]*model.Package, fullRootPath, projectRoot, path, name string, size int64, topLimits ...int) {
 	pkgPath := filepath.Dir(path)
 	relPkgPath := normalizeRelativeDir(relativePath(fullRootPath, pkgPath))
 	relToProject := relativePath(projectRoot, path)
@@ -234,7 +237,7 @@ func recordJavaFile(packageMap map[string]*model.Package, fullRootPath, projectR
 	}
 
 	pkg.FileCount++
-	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles)
+	limit := packageTopFileLimit(relativePath(projectRoot, pkgPath), effectiveTopFileLimit(topLimits...))
 	kind := filekind.Classify(path)
 	file := model.FileSummary{
 		Name: name,
@@ -243,7 +246,7 @@ func recordJavaFile(packageMap map[string]*model.Package, fullRootPath, projectR
 		Kind: kind,
 	}
 	if kind == model.FileKindAsset || kind == model.FileKindBinary {
-		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, limit)
+		pkg.AuxFiles = addAuxFile(pkg.AuxFiles, file, packageTopFileLimit(relativePath(projectRoot, pkgPath), maxPackageTopFiles))
 	} else {
 		pkg.TopFiles = addTopFile(pkg.TopFiles, file, limit)
 		if len(pkg.TopFiles) > 0 {

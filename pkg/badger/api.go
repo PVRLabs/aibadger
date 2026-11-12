@@ -30,6 +30,7 @@ import (
 // certification.
 type APIOptions struct {
 	directoryPolicy       *dirpolicy.Policy
+	maxTopFilesPerPackage int
 	Operation             string
 	InputPath             string
 	GoalFilePath          string
@@ -111,11 +112,14 @@ func runAPIWithReviewBuilder(cfg Config, opts APIOptions, buildReview reviewPayl
 		}
 		return err
 	}
-	policy, warnings := settings.LoadDirectoryPolicy(cfg.SettingsPath)
+	effective, warnings := settings.LoadProject(cfg.SettingsPath, cfg.Root)
+	cfg = applyProjectLimits(cfg, effective.Limits)
+	policy := effective.DirectoryPolicy()
 	for _, warning := range warnings {
 		fmt.Fprintln(stderr, warning)
 	}
 	opts.directoryPolicy = &policy
+	opts.maxTopFilesPerPackage = cfg.MaxTopFilesPerPackage
 	if opts.Operation == "review-context" {
 		opts.MaxFilesPerDirectory = cfg.MaxFilesPerDirectory
 		return runReviewContextAPIWithBuilder(cfg.Root, input, opts, stdout, buildReview)
@@ -130,7 +134,7 @@ func runAPIWithReviewBuilder(cfg Config, opts APIOptions, buildReview reviewPayl
 		fmt.Fprintln(stdout, "----------------------")
 		scanOutput = scanOutputStable
 	}
-	eng, err := scanProject(stdout, cfg.Root, scanOutput, cfg.MaxFilesPerDirectory, policy)
+	eng, err := scanProjectWithLimit(stdout, cfg.Root, scanOutput, cfg.MaxFilesPerDirectory, cfg.MaxTopFilesPerPackage, policy)
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
@@ -322,9 +326,10 @@ func runReviewContextAPIWithBuilder(root, guidance string, api APIOptions, stdou
 	result, err := buildReview(root, reviewtask.Options{
 		Mode: mode, Ref: api.ReviewRef, ExtraFocus: guidance, SelectedPaths: paths,
 		MaxPayloadBytes: api.MaxReviewPayloadBytes, MaxFileBytes: api.MaxReviewFileBytes,
-		IncludeTopology:      api.IncludeReviewTopology,
-		DirectoryPolicy:      api.directoryPolicy,
-		MaxFilesPerDirectory: api.MaxFilesPerDirectory,
+		IncludeTopology:       api.IncludeReviewTopology,
+		DirectoryPolicy:       api.directoryPolicy,
+		MaxFilesPerDirectory:  api.MaxFilesPerDirectory,
+		MaxTopFilesPerPackage: api.maxTopFilesPerPackage,
 	})
 	if err != nil {
 		return fmt.Errorf("preparing review context: %w", sanitizeReviewPreparationError(root, err))

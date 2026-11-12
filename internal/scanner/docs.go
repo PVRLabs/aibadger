@@ -6,23 +6,26 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
 
 // scanDocs finds shallow Markdown documentation files.
-func scanDocs(root string) ([]model.SourceRoot, error) {
+func scanDocs(root string, directoryPolicies ...dirpolicy.Policy) ([]model.SourceRoot, error) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	docs := make(map[string][]model.FileSummary)
 
 	// Scan root for *.md
-	entries, err := os.ReadDir(root)
+	entries, err := readDiscoveryDir(root, directoryPolicy, root)
 	if err == nil {
 		for _, entry := range entries {
 			if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
 				continue
 			}
 			path := filepath.Join(root, entry.Name())
-			if shouldOmitFile(root, path, entry.Name()) {
+			if shouldOmitFile(root, path, entry.Name(), directoryPolicy) {
 				continue
 			}
 			info, infoErr := entry.Info()
@@ -41,7 +44,7 @@ func scanDocs(root string) ([]model.SourceRoot, error) {
 			continue
 		}
 
-		entries, err := os.ReadDir(dirPath)
+		entries, err := readDiscoveryDir(dirPath, directoryPolicy, root)
 		if err != nil {
 			continue
 		}
@@ -55,7 +58,7 @@ func scanDocs(root string) ([]model.SourceRoot, error) {
 				continue
 			}
 			path := filepath.Join(dirPath, name)
-			if shouldOmitFile(root, path, name) {
+			if shouldOmitFile(root, path, name, directoryPolicy) {
 				continue
 			}
 			info, infoErr := entry.Info()

@@ -5,6 +5,7 @@ package tui
 
 import (
 	"github.com/PVRLabs/aibadger/internal/brand"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/startup"
 	"github.com/PVRLabs/aibadger/internal/version"
@@ -13,6 +14,7 @@ import (
 )
 
 type Config struct {
+	DirectoryPolicy           dirpolicy.Policy
 	Subtitle                  string
 	Version                   string
 	BuildInfo                 string

@@ -255,7 +255,7 @@ func (m Model) taggedCompletionCandidate(input string, cursor int) (completionCa
 		externalRoots = m.eng.ExternalRoots()
 	}
 
-	suggestions, err := taggedfile.Complete(m.root, prefix, externalRoots, taggedFileCompletionLimit, taggedfile.DefaultCompletionSkip)
+	suggestions, err := taggedfile.Complete(m.root, prefix, externalRoots, taggedFileCompletionLimit, taggedfile.CompletionSkip(m.cfg.DirectoryPolicy))
 	if err != nil || len(suggestions) == 0 {
 		return completionCandidate{}, false
 	}

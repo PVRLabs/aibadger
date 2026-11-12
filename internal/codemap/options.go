@@ -1,10 +1,14 @@
 package codemap
 
-import "strings"
+import (
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
+	"strings"
+)
 
 // Options configures exclusions and optional report provenance. Exclusions are
 // relative to the supplied source directory, independently of the caller's CWD.
 type Options struct {
+	DirectoryPolicy *dirpolicy.Policy
 	ExcludePatterns []string
 	NoReproCommand  bool
 	Version         string

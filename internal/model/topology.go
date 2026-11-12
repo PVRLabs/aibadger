@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
+	"time"
+)
 
 const (
 	FileKindSource = "source"
@@ -24,9 +27,10 @@ type ProjectTopology struct {
 // ExternalContext represents an explicitly configured read-only context
 // directory outside, or separate from, the normal project source topology.
 type ExternalContext struct {
-	Path    string                `json:"path"`     // As listed in .badger-context, cleaned for display
-	AbsPath string                `json:"abs_path"` // Absolute path used for local validation only
-	Top     []ExternalContextItem `json:"top,omitempty"`
+	DirectoryPolicy dirpolicy.Policy      `json:"-"`
+	Path            string                `json:"path"`     // As listed in .badger-context, cleaned for display
+	AbsPath         string                `json:"abs_path"` // Absolute path used for local validation only
+	Top             []ExternalContextItem `json:"top,omitempty"`
 }
 
 // ExternalContextItem stores a compact top-level summary entry for Prompt 1.
@@ -53,20 +57,23 @@ type Module struct {
 
 // SourceRoot represents a directory containing source files (e.g., src/main/java).
 type SourceRoot struct {
-	Path      string    `json:"path"` // Relative to project root
-	Role      string    `json:"role"` // e.g. "Main Source", "Test Source"
-	FileCount int       `json:"file_count"`
-	Packages  []Package `json:"packages"`
+	SupplementalHTML bool            `json:"-"`
+	HTMLPaths        map[string]bool `json:"-"`
+	Path             string          `json:"path"` // Relative to project root
+	Role             string          `json:"role"` // e.g. "Main Source", "Test Source"
+	FileCount        int             `json:"file_count"`
+	Packages         []Package       `json:"packages"`
 }
 
 // Package represents a directory that contains source files (e.g. com.example.service).
 type Package struct {
-	Name      string        `json:"name"` // e.g. "com.example.service"
-	Path      string        `json:"path"` // Relative to project root
-	FileCount int           `json:"file_count"`
-	Heaviest  HeaviestFile  `json:"heaviest"`
-	TopFiles  []FileSummary `json:"top_files"`
-	AuxFiles  []FileSummary `json:"aux_files,omitempty"`
+	SupplementalHTML bool          `json:"-"`
+	Name             string        `json:"name"` // e.g. "com.example.service"
+	Path             string        `json:"path"` // Relative to project root
+	FileCount        int           `json:"file_count"`
+	Heaviest         HeaviestFile  `json:"heaviest"`
+	TopFiles         []FileSummary `json:"top_files"`
+	AuxFiles         []FileSummary `json:"aux_files,omitempty"`
 }
 
 // HeaviestFile stores details about the largest primary source file in a module.

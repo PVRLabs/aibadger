@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/externalcontext"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
@@ -12,11 +13,14 @@ import (
 type Scanner struct {
 	ProjectRoot          string
 	MaxFilesPerDirectory int // 0 = unlimited
+	directoryPolicy      dirpolicy.Policy
 }
 
 // NewScanner creates a new Scanner instance.
-func NewScanner(root string) *Scanner {
-	return &Scanner{ProjectRoot: root}
+func NewScanner(root string, directoryPolicies ...dirpolicy.Policy) *Scanner {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	return &Scanner{ProjectRoot: root, directoryPolicy: directoryPolicy}
 }
 
 // Scan runs language-specific detectors in parallel, then falls back to the
@@ -29,7 +33,7 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 		Modules:     []model.Module{},
 	}
 
-	externalContext, err := externalcontext.Load(s.ProjectRoot)
+	externalContext, err := externalcontext.Load(s.ProjectRoot, s.directoryPolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -38,18 +42,18 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	nodeDetector := NewNodeDetector()
+	nodeDetector := NewNodeDetector(s.directoryPolicy)
 	nodeDetector.maxFilesPerDir = s.MaxFilesPerDirectory
-	csharpDetector := NewCSharpDetector()
+	csharpDetector := NewCSharpDetector(s.directoryPolicy)
 	csharpDetector.maxFilesPerDir = s.MaxFilesPerDirectory
-	cppDetector := NewCppDetector()
+	cppDetector := NewCppDetector(s.directoryPolicy)
 	cppDetector.maxFilesPerDir = s.MaxFilesPerDirectory
 
 	detectors := []func(string) ([]model.Module, error){
-		NewGoDetector().Detect,
-		NewJavaDetector().Detect,
+		NewGoDetector(s.directoryPolicy).Detect,
+		NewJavaDetector(s.directoryPolicy).Detect,
 		nodeDetector.Detect,
-		NewPythonDetector().Detect,
+		NewPythonDetector(s.directoryPolicy).Detect,
 		csharpDetector.Detect,
 		cppDetector.Detect,
 	}
@@ -74,8 +78,9 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 	// own so normal language weighting and finalization can consume it.
 	usedGenericFallback := false
 	var projectContext []projectContextCandidate
+	var supplementalHTML []model.SourceRoot
 	if len(topology.Modules) == 0 {
-		det := NewGenericDetector()
+		det := NewGenericDetector(s.directoryPolicy)
 		if s.MaxFilesPerDirectory > 0 {
 			det.maxFilesPerDir = s.MaxFilesPerDirectory
 		}
@@ -85,18 +90,19 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 			usedGenericFallback = true
 		}
 	} else {
-		det := NewGenericDetector()
+		det := NewGenericDetector(s.directoryPolicy)
 		if s.MaxFilesPerDirectory > 0 {
 			det.maxFilesPerDir = s.MaxFilesPerDirectory
 		}
-		ownership := newSemanticSourceOwnership(s.ProjectRoot, topology.Modules)
+		ownership := newSemanticSourceOwnership(s.ProjectRoot, topology.Modules, s.directoryPolicy)
+		supplementalHTML, _ = det.collectSupplementalHTML(s.ProjectRoot, ownership)
 		coverage, contextCandidates, coverageErr := det.collectGenericAugmentation(s.ProjectRoot, ownership)
 		if coverageErr == nil {
 			topology.Modules = append(topology.Modules, coverage...)
 			projectContext = contextCandidates
 		}
 	}
-	languageWeights := sourceLanguageWeightsFromModules(topology.Modules, s.ProjectRoot)
+	languageWeights := sourceLanguageWeightsFromModules(topology.Modules, s.ProjectRoot, s.directoryPolicy)
 	if csharpDetector.languageSourceCount > 0 {
 		languageWeights["C#"] += int64(csharpDetector.languageSourceCount)
 	}
@@ -105,31 +111,39 @@ func (s *Scanner) Scan() (*model.ProjectTopology, error) {
 	}
 
 	if !usedGenericFallback {
-		docs, docsErr := scanDocs(s.ProjectRoot)
+		docs, docsErr := scanDocs(s.ProjectRoot, s.directoryPolicy)
 		if docsErr != nil {
 			docs = nil
 		}
 		attachDocsToTopology(topology, docs)
 
-		webResources, webErr := scanWebResources(s.ProjectRoot)
+		webResources, webErr := scanWebResources(s.ProjectRoot, s.directoryPolicy)
 		if webErr != nil {
 			webResources = nil
 		}
 		attachWebResourcesToTopology(topology, webResources)
 	}
 
-	opsResources, opsErr := scanOpsResources(s.ProjectRoot)
+	opsResources, opsErr := scanOpsResources(s.ProjectRoot, s.directoryPolicy)
 	if opsErr != nil {
 		opsResources = nil
 	}
 	attachOpsResourcesToTopology(topology, opsResources)
 
-	resources, resErr := scanGenericResources(s.ProjectRoot)
+	resources, resErr := scanGenericResources(s.ProjectRoot, s.directoryPolicy)
 	if resErr != nil {
 		resources = nil
 	}
 	attachGenericResourcesToTopology(topology, resources)
 	attachProjectContextToTopology(topology, projectContext)
+
+	if len(supplementalHTML) > 0 {
+		transferNodeHTML(topology, s.ProjectRoot, supplementalHTML[0].HTMLPaths, s.directoryPolicy)
+		module := docsTargetModule(topology.Modules)
+		if module != nil {
+			module.SourceRoots = append(module.SourceRoots, supplementalHTML...)
+		}
+	}
 
 	// Finalize topology
 	topology.ScanTime = time.Since(start)

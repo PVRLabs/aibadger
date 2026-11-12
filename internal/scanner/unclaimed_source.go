@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
@@ -20,12 +21,12 @@ func (d *GenericDetector) collectGenericAugmentation(root string, ownership sema
 	sourcesByLanguage := make(map[string]int)
 	recordedPaths := make(map[string]bool)
 	var contextCandidates []projectContextCandidate
-	headerIndex := newCppCompanionHeaderIndex(root, ownership, d.maxFilesPerDir)
+	headerIndex := newCppCompanionHeaderIndex(root, ownership, d.maxFilesPerDir, d.directoryPolicy)
 
 	err := d.walkFiles(root, func(path string, entry os.DirEntry, info os.FileInfo) {
-		language, ok := classifyGenericSourceCandidate(root, path)
+		language, ok := classifyGenericSourceCandidate(root, path, d.directoryPolicy)
 		if !ok {
-			if candidate, contextOK := classifyProjectContextCandidate(root, path, info.Size()); contextOK {
+			if candidate, contextOK := classifyProjectContextCandidate(root, path, info.Size(), d.directoryPolicy); contextOK {
 				contextCandidates = append(contextCandidates, candidate)
 			}
 			return
@@ -123,8 +124,10 @@ type cppCompanionHeaderIndex struct {
 	byDirectory     map[string]map[string][]model.FileSummary
 }
 
-func newCppCompanionHeaderIndex(root string, ownership semanticSourceOwnership, maxFilesPerDir int) *cppCompanionHeaderIndex {
-	genericExclusions := NewGenericDetector().Exclusions
+func newCppCompanionHeaderIndex(root string, ownership semanticSourceOwnership, maxFilesPerDir int, directoryPolicies ...dirpolicy.Policy) *cppCompanionHeaderIndex {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	genericExclusions := NewGenericDetector(directoryPolicy).Exclusions
 	return &cppCompanionHeaderIndex{
 		projectRoot:     root,
 		ownership:       ownership,

@@ -6,17 +6,21 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
 )
 
 // PythonDetector handles Python projects using shallow markers and common layouts.
 type PythonDetector struct {
-	Exclusions map[string]bool
+	Exclusions      map[string]bool
+	directoryPolicy dirpolicy.Policy
 }
 
 // NewPythonDetector returns a new Python detector.
-func NewPythonDetector() *PythonDetector {
+func NewPythonDetector(directoryPolicies ...dirpolicy.Policy) *PythonDetector {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	return &PythonDetector{
 		Exclusions: cloneExclusions(commonIgnoredDirs,
 			".mypy_cache",
@@ -27,6 +31,7 @@ func NewPythonDetector() *PythonDetector {
 			"env",
 			"venv",
 		),
+		directoryPolicy: directoryPolicy,
 	}
 }
 
@@ -46,7 +51,7 @@ func (p *PythonDetector) Detect(root string) ([]model.Module, error) {
 }
 
 func (p *PythonDetector) hasRootPythonMarker(root string) (bool, error) {
-	entries, err := os.ReadDir(root)
+	entries, err := readDiscoveryDir(root, p.directoryPolicy, root)
 	if err != nil {
 		return false, err
 	}
@@ -132,8 +137,7 @@ func (p *PythonDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string
 	fullRootPath := filepath.Join(projectRoot, sr.Path)
 	packageMap := make(map[string]*model.Package)
 	var totalBytes int64
-
-	filepath.WalkDir(fullRootPath, func(path string, d os.DirEntry, err error) error {
+	walkDiscoveryDir(fullRootPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -141,7 +145,7 @@ func (p *PythonDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string
 			if path != fullRootPath && !recursive {
 				return filepath.SkipDir
 			}
-			if path != fullRootPath && shouldSkipDir(d.Name(), p.Exclusions) {
+			if path != fullRootPath && shouldSkipDir(d.Name(), p.Exclusions, p.directoryPolicy) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -161,7 +165,7 @@ func (p *PythonDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string
 		totalBytes += info.Size()
 		recordPythonFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size())
 		return nil
-	})
+	}, p.directoryPolicy, projectRoot)
 
 	for _, pkg := range packageMap {
 		sr.Packages = append(sr.Packages, *pkg)
@@ -173,7 +177,7 @@ func (p *PythonDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string
 }
 
 func (p *PythonDetector) hasRootPythonFiles(projectRoot string) bool {
-	entries, err := os.ReadDir(projectRoot)
+	entries, err := readDiscoveryDir(projectRoot, p.directoryPolicy, projectRoot)
 	if err != nil {
 		return false
 	}
@@ -186,7 +190,7 @@ func (p *PythonDetector) hasRootPythonFiles(projectRoot string) bool {
 }
 
 func (p *PythonDetector) shallowPackageDirs(projectRoot string) []string {
-	entries, err := os.ReadDir(projectRoot)
+	entries, err := readDiscoveryDir(projectRoot, p.directoryPolicy, projectRoot)
 	if err != nil {
 		return nil
 	}
@@ -194,7 +198,7 @@ func (p *PythonDetector) shallowPackageDirs(projectRoot string) []string {
 	var dirs []string
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.IsDir() || name == "src" || name == "tests" || shouldSkipDir(name, p.Exclusions) || shouldSkipTopLevelOpsDir(projectRoot, filepath.Join(projectRoot, name), name) {
+		if !entry.IsDir() || name == "src" || name == "tests" || shouldSkipDir(name, p.Exclusions, p.directoryPolicy) || shouldSkipTopLevelOpsDir(projectRoot, filepath.Join(projectRoot, name), name) {
 			continue
 		}
 		if p.hasDirectPythonFile(filepath.Join(projectRoot, name)) {
@@ -206,7 +210,7 @@ func (p *PythonDetector) shallowPackageDirs(projectRoot string) []string {
 }
 
 func (p *PythonDetector) hasDirectPythonFile(dir string) bool {
-	entries, err := os.ReadDir(dir)
+	entries, err := readDiscoveryDir(dir, p.directoryPolicy)
 	if err != nil {
 		return false
 	}

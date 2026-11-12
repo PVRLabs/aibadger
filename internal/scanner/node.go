@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/util"
 )
@@ -15,14 +16,18 @@ const maxNodeRootOverviewFiles = maxRootPackageTopFiles
 
 // NodeDetector handles Node-family projects rooted at package.json files.
 type NodeDetector struct {
-	Exclusions     map[string]bool
-	maxFilesPerDir int
+	Exclusions      map[string]bool
+	maxFilesPerDir  int
+	directoryPolicy dirpolicy.Policy
 }
 
 // NewNodeDetector returns a new Node detector.
-func NewNodeDetector() *NodeDetector {
+func NewNodeDetector(directoryPolicies ...dirpolicy.Policy) *NodeDetector {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	return &NodeDetector{
-		Exclusions: cloneExclusions(commonIgnoredDirs, "dist"),
+		Exclusions:      cloneExclusions(commonIgnoredDirs, "dist"),
+		directoryPolicy: directoryPolicy,
 	}
 }
 
@@ -32,7 +37,7 @@ func (n *NodeDetector) Detect(root string) ([]model.Module, error) {
 	seenModules := make(map[string]bool)
 	workspaceRoots := make(map[string]bool)
 
-	markers, err := discoverProjectMarkers(root, "package.json", "pnpm-workspace.yaml")
+	markers, err := discoverProjectMarkersWithPolicy(root, n.directoryPolicy, "package.json", "pnpm-workspace.yaml")
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +157,7 @@ func (n *NodeDetector) workspaceModuleRootsFromPatterns(projectRoot, modulePath 
 
 	found := make(map[string]bool)
 	for _, pattern := range patterns {
-		for _, relPath := range expandWorkspacePattern(projectRoot, modulePath, pattern) {
+		for _, relPath := range expandWorkspacePattern(projectRoot, modulePath, pattern, n.directoryPolicy) {
 			if relPath != "" {
 				found[relPath] = true
 			}
@@ -167,7 +172,9 @@ func (n *NodeDetector) workspaceModuleRootsFromPatterns(projectRoot, modulePath 
 	return roots
 }
 
-func expandWorkspacePattern(projectRoot, modulePath, pattern string) []string {
+func expandWorkspacePattern(projectRoot, modulePath, pattern string, directoryPolicies ...dirpolicy.Policy) []string {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	normalized, ok := normalizeWorkspacePattern(pattern)
 	if !ok {
 		return nil
@@ -181,14 +188,14 @@ func expandWorkspacePattern(projectRoot, modulePath, pattern string) []string {
 	}
 
 	baseDir := strings.TrimSuffix(normalized, string(filepath.Separator)+"*")
-	entries, err := os.ReadDir(filepath.Join(modulePath, baseDir))
+	entries, err := readDiscoveryDir(filepath.Join(modulePath, baseDir), directoryPolicy, projectRoot)
 	if err != nil {
 		return nil
 	}
 
 	var roots []string
 	for _, entry := range entries {
-		if !entry.IsDir() || shouldSkipDir(entry.Name(), commonIgnoredDirs) {
+		if !entry.IsDir() || shouldSkipDir(entry.Name(), commonIgnoredDirs, directoryPolicy) {
 			continue
 		}
 		childRelPath := filepath.Join(baseDir, entry.Name())
@@ -419,10 +426,7 @@ func (n *NodeDetector) rootOverviewPackage(projectRoot, fullModulePath string, p
 		Path: "",
 	}
 
-	candidates := append([]string{"package.json"}, nodeRootConfigCandidates(fullModulePath)...)
-	candidates = append(candidates, nodeRootEntryCandidates(fullModulePath)...)
-	candidates = append(candidates, nodePackageEntryCandidates(packageJSON, fullModulePath)...)
-	candidates = append(candidates, nodeStackOverviewCandidates(packageJSON, fullModulePath)...)
+	candidates := nodeOverviewCandidates(fullModulePath, packageJSON, n.directoryPolicy)
 
 	seen := make(map[string]bool, len(candidates))
 	type nodeOverviewFile struct {
@@ -435,7 +439,7 @@ func (n *NodeDetector) rootOverviewPackage(projectRoot, fullModulePath string, p
 			continue
 		}
 		seen[relPath] = true
-		if shouldOmitFile(projectRoot, filepath.Join(fullModulePath, relPath), filepath.Base(relPath)) {
+		if shouldOmitFile(projectRoot, filepath.Join(fullModulePath, relPath), filepath.Base(relPath), n.directoryPolicy) {
 			continue
 		}
 		info, err := os.Stat(filepath.Join(fullModulePath, relPath))
@@ -595,7 +599,9 @@ func nodePackageEntryCandidates(pkg nodePackageJSON, fullModulePath string) []st
 	return candidates
 }
 
-func nodeStackOverviewCandidates(pkg nodePackageJSON, fullModulePath string) []string {
+func nodeStackOverviewCandidates(pkg nodePackageJSON, fullModulePath string, directoryPolicies ...dirpolicy.Policy) []string {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	var candidates []string
 	deps := nodePackageDependencies(pkg)
 
@@ -608,10 +614,10 @@ func nodeStackOverviewCandidates(pkg nodePackageJSON, fullModulePath string) []s
 				filepath.Join("src", "index.jsx"), filepath.Join("src", "index.tsx"),
 			)...,
 		)
-		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "components")
-		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "hooks")
-		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, filepath.Join("src", "components"))
-		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, filepath.Join("src", "hooks"))
+		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "components", directoryPolicy)
+		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "hooks", directoryPolicy)
+		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, filepath.Join("src", "components"), directoryPolicy)
+		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, filepath.Join("src", "hooks"), directoryPolicy)
 	}
 
 	if hasNextOverviewSignal(deps, fullModulePath) {
@@ -624,8 +630,8 @@ func nodeStackOverviewCandidates(pkg nodePackageJSON, fullModulePath string) []s
 				filepath.Join("app", "page.js"), filepath.Join("app", "page.ts"),
 			)...,
 		)
-		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "pages")
-		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "app")
+		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "pages", directoryPolicy)
+		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "app", directoryPolicy)
 	}
 
 	if hasVueOverviewSignal(deps, fullModulePath) {
@@ -635,8 +641,8 @@ func nodeStackOverviewCandidates(pkg nodePackageJSON, fullModulePath string) []s
 				"src/App.vue", "App.vue",
 			)...,
 		)
-		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "components")
-		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, filepath.Join("src", "components"))
+		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "components", directoryPolicy)
+		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, filepath.Join("src", "components"), directoryPolicy)
 	}
 
 	if hasViteOverviewSignal(deps, fullModulePath) {
@@ -654,8 +660,8 @@ func nodeStackOverviewCandidates(pkg nodePackageJSON, fullModulePath string) []s
 		candidates = append(candidates,
 			nodeExistingCandidates(fullModulePath, "nest-cli.json", filepath.Join("src", "main.ts"), filepath.Join("src", "main.js"))...,
 		)
-		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "apps")
-		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "libs")
+		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "apps", directoryPolicy)
+		candidates = appendRepresentativeDirCandidate(candidates, fullModulePath, "libs", directoryPolicy)
 	}
 
 	return candidates
@@ -671,14 +677,18 @@ func nodeExistingCandidates(fullModulePath string, relPaths ...string) []string 
 	return candidates
 }
 
-func appendRepresentativeDirCandidate(candidates []string, fullModulePath, relDir string) []string {
-	if relPath, ok := firstNodeOverviewFileUnderDir(fullModulePath, relDir); ok {
+func appendRepresentativeDirCandidate(candidates []string, fullModulePath, relDir string, directoryPolicies ...dirpolicy.Policy) []string {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	if relPath, ok := firstNodeOverviewFileUnderDir(fullModulePath, relDir, directoryPolicy); ok {
 		return append(candidates, relPath)
 	}
 	return candidates
 }
 
-func firstNodeOverviewFileUnderDir(fullModulePath, relDir string) (string, bool) {
+func firstNodeOverviewFileUnderDir(fullModulePath, relDir string, directoryPolicies ...dirpolicy.Policy) (string, bool) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	dirPath := filepath.Join(fullModulePath, relDir)
 	info, err := os.Stat(dirPath)
 	if err != nil || !info.IsDir() {
@@ -686,12 +696,12 @@ func firstNodeOverviewFileUnderDir(fullModulePath, relDir string) (string, bool)
 	}
 
 	var found string
-	filepath.WalkDir(dirPath, func(path string, d os.DirEntry, err error) error {
+	walkDiscoveryDir(dirPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil || found != "" {
 			return nil
 		}
 		if d.IsDir() {
-			if path != dirPath && shouldSkipDir(d.Name(), commonIgnoredDirs) {
+			if path != dirPath && shouldSkipDir(d.Name(), commonIgnoredDirs, directoryPolicy) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -705,7 +715,7 @@ func firstNodeOverviewFileUnderDir(fullModulePath, relDir string) (string, bool)
 		}
 		found = relToModule
 		return nil
-	})
+	}, directoryPolicy, fullModulePath)
 	if found == "" {
 		return "", false
 	}
@@ -814,14 +824,13 @@ func (n *NodeDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string) 
 	fullRootPath := filepath.Join(projectRoot, sr.Path)
 	packageMap := make(map[string]*model.Package)
 	perDirFiles := make(map[string]int)
-
-	filepath.WalkDir(fullRootPath, func(path string, d os.DirEntry, err error) error {
+	walkDiscoveryDir(fullRootPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 
 		if d.IsDir() {
-			if path != fullRootPath && shouldSkipDir(d.Name(), n.Exclusions) {
+			if path != fullRootPath && shouldSkipDir(d.Name(), n.Exclusions, n.directoryPolicy) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -846,7 +855,7 @@ func (n *NodeDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string) 
 		sr.FileCount++
 		recordNodeFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size())
 		return nil
-	})
+	}, n.directoryPolicy, projectRoot)
 
 	for _, pkg := range packageMap {
 		sr.Packages = append(sr.Packages, *pkg)
@@ -896,4 +905,15 @@ func nodePackageName(relPkgPath string) string {
 		return "root"
 	}
 	return filepath.Base(relPkgPath)
+}
+
+func nodeOverviewCandidates(fullModulePath string, packageJSON nodePackageJSON, directoryPolicies ...dirpolicy.Policy) []string {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	candidates := append([]string{"package.json"}, nodeRootConfigCandidates(fullModulePath)...)
+	candidates = append(candidates, nodeRootEntryCandidates(fullModulePath)...)
+	candidates = append(candidates, nodePackageEntryCandidates(packageJSON, fullModulePath)...)
+	candidates = append(candidates, nodeStackOverviewCandidates(packageJSON, fullModulePath, directoryPolicy)...)
+
+	return candidates
 }

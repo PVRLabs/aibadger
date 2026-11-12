@@ -669,7 +669,6 @@ func TestNodeDetectorSurfacesPackageJSONEntryTargetsInRootPackageSummary(t *test
 
 	for _, path := range []string{
 		"package.json",
-		filepath.Join("dist", "main.js"),
 		filepath.Join("esm", "index.mjs"),
 		filepath.Join("bin", "cli.js"),
 		filepath.Join("server", "dev.js"),
@@ -677,6 +676,9 @@ func TestNodeDetectorSurfacesPackageJSONEntryTargetsInRootPackageSummary(t *test
 		if !hasTopFile(rootPkg.TopFiles, path) {
 			t.Fatalf("rootPkg.TopFiles = %+v, missing %s", rootPkg.TopFiles, path)
 		}
+	}
+	if hasTopFile(rootPkg.TopFiles, filepath.Join("dist", "main.js")) {
+		t.Fatal("generated entry target retained")
 	}
 	if hasTopFile(rootPkg.TopFiles, filepath.Join("..", "outside.js")) {
 		t.Fatalf("rootPkg.TopFiles = %+v, should not include escaping paths", rootPkg.TopFiles)

@@ -1,6 +1,9 @@
 package scanner
 
+import
+
 // This file owns the final topology-level fields and finalization pipeline.
+"github.com/PVRLabs/aibadger/internal/dirpolicy"
 
 import (
 	"os"
@@ -78,7 +81,7 @@ func (s *Scanner) finalizeTopologyWithLanguageWeights(t *model.ProjectTopology, 
 		t.Structure = "Single Module"
 	}
 	if len(t.Stack) == 0 {
-		t.Stack = detectedStack(s.ProjectRoot)
+		t.Stack = detectedStack(s.ProjectRoot, s.directoryPolicy)
 	}
 	deduplicateTopologyFiles(t)
 	sortTopology(t)
@@ -93,7 +96,9 @@ func isLanguageOwnedSourceRoot(role string) bool {
 	}
 }
 
-func sourceLanguageWeightsFromModules(modules []model.Module, projectRoot string) map[string]int64 {
+func sourceLanguageWeightsFromModules(modules []model.Module, projectRoot string, directoryPolicies ...dirpolicy.Policy) map[string]int64 {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	weights := make(map[string]int64)
 	for _, module := range modules {
 		if module.Language == "" {
@@ -110,27 +115,31 @@ func sourceLanguageWeightsFromModules(modules []model.Module, projectRoot string
 		if isFirstClassCSharpModule(&module) || isFirstClassCppModule(&module) {
 			continue
 		}
-		weights[module.Language] += int64(countModuleLanguageSourceFiles(module, projectRoot))
+		weights[module.Language] += int64(countModuleLanguageSourceFiles(module, projectRoot, directoryPolicy))
 	}
 	return weights
 }
 
-func countModuleLanguageSourceFiles(module model.Module, projectRoot string) int {
+func countModuleLanguageSourceFiles(module model.Module, projectRoot string, directoryPolicies ...dirpolicy.Policy) int {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	seen := make(map[string]bool)
 	for _, sourceRoot := range module.SourceRoots {
 		if !isLanguageOwnedSourceRoot(sourceRoot.Role) {
 			continue
 		}
 		for _, pkg := range sourceRoot.Packages {
-			countLanguageSourceFilesInDir(module.Language, projectRoot, pkg.Path, seen)
+			countLanguageSourceFilesInDir(module.Language, projectRoot, pkg.Path, seen, directoryPolicy)
 		}
 	}
 	return len(seen)
 }
 
-func countLanguageSourceFilesInDir(language, projectRoot, relDir string, seen map[string]bool) {
+func countLanguageSourceFilesInDir(language, projectRoot, relDir string, seen map[string]bool, directoryPolicies ...dirpolicy.Policy) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	fullDir := filepath.Join(projectRoot, relDir)
-	entries, err := os.ReadDir(fullDir)
+	entries, err := readDiscoveryDir(fullDir, directoryPolicy, projectRoot)
 	if err != nil {
 		return
 	}

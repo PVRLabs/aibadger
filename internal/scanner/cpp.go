@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/defaults"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
@@ -36,11 +37,14 @@ type CppDetector struct {
 	maxFilesPerDir      int
 	maxEntries          int
 	languageSourceCount int
+	directoryPolicy     dirpolicy.Policy
 }
 
 // NewCppDetector returns a bounded C++ detector.
-func NewCppDetector() *CppDetector {
-	return &CppDetector{maxFilesPerDir: defaults.MaxFilesPerDirectory, maxEntries: maxCppDetectorEntries}
+func NewCppDetector(directoryPolicies ...dirpolicy.Policy) *CppDetector {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	return &CppDetector{maxFilesPerDir: defaults.MaxFilesPerDirectory, maxEntries: maxCppDetectorEntries, directoryPolicy: directoryPolicy}
 }
 
 type cppCandidate struct {
@@ -57,7 +61,7 @@ func (c *CppDetector) Detect(root string) ([]model.Module, error) {
 		remaining = maxCppDetectorEntries
 	}
 	candidates := make([]cppCandidate, 0)
-	entries, err := os.ReadDir(root)
+	entries, err := readDiscoveryDir(root, c.directoryPolicy, root)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +117,7 @@ func (c *CppDetector) scanDirect(root, dir, sourceRoot, role string, entries []o
 			continue
 		}
 		path := filepath.Join(dir, entry.Name())
-		if !isAcceptedCppFile(entry.Name()) || shouldOmitFile(root, path, entry.Name()) {
+		if !isAcceptedCppFile(entry.Name()) || shouldOmitFile(root, path, entry.Name(), c.directoryPolicy) {
 			continue
 		}
 		info, err := entry.Info()
@@ -135,7 +139,7 @@ func (c *CppDetector) scanTree(root, treeRoot, sourceRoot, role string, remainin
 		if *remaining <= 0 || depth > maxCppSourceDepth {
 			return
 		}
-		entries, err := os.ReadDir(dir)
+		entries, err := readDiscoveryDir(dir, c.directoryPolicy, root)
 		if err != nil {
 			return
 		}
@@ -150,13 +154,13 @@ func (c *CppDetector) scanTree(root, treeRoot, sourceRoot, role string, remainin
 			path := filepath.Join(dir, entry.Name())
 			if entry.IsDir() {
 				lower := strings.ToLower(entry.Name())
-				if depth >= maxCppSourceDepth || shouldSkipDir(lower, cppIgnoredDirs) || strings.HasPrefix(lower, "cmake-build-") {
+				if depth >= maxCppSourceDepth || shouldSkipDir(lower, cppIgnoredDirs, c.directoryPolicy) {
 					continue
 				}
 				walk(path, depth+1)
 				continue
 			}
-			if !isAcceptedCppFile(entry.Name()) || shouldOmitFile(root, path, entry.Name()) {
+			if !isAcceptedCppFile(entry.Name()) || shouldOmitFile(root, path, entry.Name(), c.directoryPolicy) {
 				continue
 			}
 			info, infoErr := entry.Info()

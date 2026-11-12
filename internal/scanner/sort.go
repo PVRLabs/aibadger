@@ -74,6 +74,10 @@ func sortModuleFileSummaries(module *model.Module) {
 }
 
 func sortPackageFileSummaries(module *model.Module, sourceRoot *model.SourceRoot, pkg *model.Package) {
+	if sourceRoot.SupplementalHTML {
+		sortHTMLFiles(pkg.TopFiles)
+		return
+	}
 	if isFirstClassCppModule(module) && isCppOwnedSourceRoot(sourceRoot) {
 		sortCppFileSummaries(pkg.TopFiles)
 		return

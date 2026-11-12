@@ -6,17 +6,20 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
 )
 
 // GoDetector handles go.mod projects.
-type GoDetector struct{}
+type GoDetector struct{ directoryPolicy dirpolicy.Policy }
 
 // NewGoDetector returns a new Go detector.
-func NewGoDetector() *GoDetector {
-	return &GoDetector{}
+func NewGoDetector(directoryPolicies ...dirpolicy.Policy) *GoDetector {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	return &GoDetector{directoryPolicy: directoryPolicy}
 }
 
 // Detect discovers Go project markers near root and builds Go package topology.
@@ -24,7 +27,7 @@ func (g *GoDetector) Detect(root string) ([]model.Module, error) {
 	var modules []model.Module
 	moduleRoots := make(map[string]bool)
 
-	markers, err := discoverProjectMarkers(root, "go.mod", "go.work")
+	markers, err := discoverProjectMarkersWithPolicy(root, g.directoryPolicy, "go.mod", "go.work")
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +191,7 @@ func (g *GoDetector) analyzeModule(projectRoot, relPath string) model.Module {
 		}
 	}
 
-	mergeWebSourceRoots(&module, scanModuleWebResources(projectRoot, fullModulePath))
+	mergeWebSourceRoots(&module, scanModuleWebResources(projectRoot, fullModulePath, g.directoryPolicy))
 
 	module.TopFiles = g.findTopFiles(fullModulePath, projectRoot, moduleTopFileLimit(module.Path, maxPackageTopFiles))
 	if len(module.TopFiles) > 0 {
@@ -230,8 +233,7 @@ func (g *GoDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string, re
 	fullRootPath := filepath.Join(projectRoot, sr.Path)
 	packageMap := make(map[string]*model.Package)
 	var totalBytes int64
-
-	filepath.WalkDir(fullRootPath, func(path string, d os.DirEntry, err error) error {
+	walkDiscoveryDir(fullRootPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -240,7 +242,7 @@ func (g *GoDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string, re
 			if path != fullRootPath && !recursive {
 				return filepath.SkipDir
 			}
-			if path != fullRootPath && shouldSkipDir(d.Name(), commonIgnoredDirs) {
+			if path != fullRootPath && shouldSkipDir(d.Name(), commonIgnoredDirs, g.directoryPolicy) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -261,7 +263,7 @@ func (g *GoDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string, re
 		totalBytes += info.Size()
 		recordGoFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size())
 		return nil
-	})
+	}, g.directoryPolicy, projectRoot)
 
 	for _, pkg := range packageMap {
 		sr.Packages = append(sr.Packages, *pkg)
@@ -270,7 +272,7 @@ func (g *GoDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string, re
 }
 
 func (g *GoDetector) hasRootGoFiles(modulePath string) bool {
-	entries, err := os.ReadDir(modulePath)
+	entries, err := readDiscoveryDir(modulePath, g.directoryPolicy)
 	if err != nil {
 		return false
 	}
@@ -306,13 +308,13 @@ func (g *GoDetector) findHeaviest(modulePath, projectRoot string) model.Heaviest
 
 func (g *GoDetector) findTopFiles(modulePath, projectRoot string, limit int) []model.FileSummary {
 	var topFiles []model.FileSummary
-	filepath.WalkDir(modulePath, func(path string, d os.DirEntry, err error) error {
+	walkDiscoveryDir(modulePath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 
 		if d.IsDir() {
-			if shouldSkipDir(d.Name(), commonIgnoredDirs) {
+			if shouldSkipDir(d.Name(), commonIgnoredDirs, g.directoryPolicy) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -335,7 +337,7 @@ func (g *GoDetector) findTopFiles(modulePath, projectRoot string, limit int) []m
 			Size: info.Size(),
 		}, limit)
 		return nil
-	})
+	}, g.directoryPolicy, projectRoot)
 	return topFiles
 }
 

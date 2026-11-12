@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filegroups"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
@@ -40,11 +41,13 @@ func cloneExclusions(base map[string]bool, extras ...string) map[string]bool {
 	return cloned
 }
 
-func shouldSkipDir(name string, exclusions map[string]bool) bool {
-	return exclusions[name]
+func shouldSkipDir(name string, exclusions map[string]bool, directoryPolicies ...dirpolicy.Policy) bool {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	return directoryPolicy.SkipLegacy(name, exclusions)
 }
 
-func discoverProjectMarkers(root string, markerNames ...string) ([]string, error) {
+func discoverProjectMarkersWithPolicy(root string, directoryPolicy dirpolicy.Policy, markerNames ...string) ([]string, error) {
 	if len(markerNames) == 0 {
 		return nil, nil
 	}
@@ -55,13 +58,13 @@ func discoverProjectMarkers(root string, markerNames ...string) ([]string, error
 	}
 
 	var paths []string
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	err := walkDiscoveryDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 
 		if d.IsDir() {
-			if path != root && shouldSkipDir(d.Name(), markerDiscoveryIgnoredDirs) {
+			if path != root && shouldSkipDir(d.Name(), markerDiscoveryIgnoredDirs, directoryPolicy) {
 				return filepath.SkipDir
 			}
 			depth, ok := discoveryDepth(root, path)
@@ -80,7 +83,7 @@ func discoverProjectMarkers(root string, markerNames ...string) ([]string, error
 		}
 		paths = append(paths, path)
 		return nil
-	})
+	}, directoryPolicy, root)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +122,12 @@ func isUnderTopLevelOpsDir(root, path string) bool {
 	return filegroups.IsOpsTopLevelDirName(topLevel)
 }
 
-func shouldOmitFile(root, path, name string) bool {
+func shouldOmitFile(root, path, name string, directoryPolicies ...dirpolicy.Policy) bool {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	if isUnderIgnoredDir(root, path, nil, directoryPolicy) {
+		return true
+	}
 	if promptpolicy.IsSensitivePath(relativePath(root, path)) {
 		return true
 	}
@@ -129,13 +137,15 @@ func shouldOmitFile(root, path, name string) bool {
 	return isRootExtensionlessBinary(root, path, name)
 }
 
-func isUnderIgnoredDir(root, path string, exclusions map[string]bool) bool {
+func isUnderIgnoredDir(root, path string, exclusions map[string]bool, directoryPolicies ...dirpolicy.Policy) bool {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	rel := relativePath(root, path)
 	if rel == "" {
 		return false
 	}
 	for dir := filepath.Dir(rel); dir != "." && dir != ""; dir = filepath.Dir(dir) {
-		if exclusions[strings.ToLower(filepath.Base(dir))] {
+		if shouldSkipDir(filepath.Base(dir), exclusions, directoryPolicy) {
 			return true
 		}
 		if next := filepath.Dir(dir); next == dir {
@@ -152,9 +162,11 @@ func isUnderIgnoredDir(root, path string, exclusions map[string]bool) bool {
 // The returned priority is 1 for recognized project files and 0 for auxiliary
 // files. The boolean reports whether the path passes the existing omission
 // policy.
-func ReviewPathPriority(root, path string) (priority int, ok bool) {
+func ReviewPathPriority(root, path string, directoryPolicies ...dirpolicy.Policy) (priority int, ok bool) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	name := filepath.Base(path)
-	if shouldOmitReviewPath(root, path, name) {
+	if shouldOmitReviewPath(root, path, name, directoryPolicy) {
 		return 0, false
 	}
 
@@ -193,11 +205,13 @@ func ReviewPathPriority(root, path string) (priority int, ok bool) {
 	return 0, true
 }
 
-func shouldOmitReviewPath(root, path, name string) bool {
+func shouldOmitReviewPath(root, path, name string, directoryPolicies ...dirpolicy.Policy) bool {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	if promptpolicy.IsSensitivePath(relativePath(root, path)) {
 		return true
 	}
-	if isUnderIgnoredDir(root, path, commonIgnoredDirs) {
+	if isUnderIgnoredDir(root, path, commonIgnoredDirs, directoryPolicy) {
 		return true
 	}
 	return isOmittedNoiseName(name)

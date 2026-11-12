@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filegroups"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
@@ -16,16 +17,18 @@ const maxGenericResourcePackageFiles = 5
 // scanGenericResources finds schema-like resources and conventional example
 // configuration files outside language-specific source roots without depending
 // on a language detector.
-func scanGenericResources(root string) ([]model.SourceRoot, error) {
+func scanGenericResources(root string, directoryPolicies ...dirpolicy.Policy) ([]model.SourceRoot, error) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	packages := make(map[string]*model.Package)
 
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+	err := walkDiscoveryDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 
 		if entry.IsDir() {
-			if path != root && shouldSkipDir(entry.Name(), commonIgnoredDirs) {
+			if path != root && shouldSkipDir(entry.Name(), commonIgnoredDirs, directoryPolicy) {
 				return filepath.SkipDir
 			}
 			if path != root && shouldSkipGenericResourceDir(root, path, entry.Name()) {
@@ -35,7 +38,7 @@ func scanGenericResources(root string) ([]model.SourceRoot, error) {
 		}
 
 		name := entry.Name()
-		if (!isGenericResourceFile(name) && !isTopLevelExampleResourceFile(root, path, name)) || shouldOmitFile(root, path, name) {
+		if (!isGenericResourceFile(name) && !isTopLevelExampleResourceFile(root, path, name)) || shouldOmitFile(root, path, name, directoryPolicy) {
 			return nil
 		}
 		info, infoErr := entry.Info()
@@ -44,7 +47,7 @@ func scanGenericResources(root string) ([]model.SourceRoot, error) {
 		}
 		recordGenericResourceFile(root, path, name, info.Size(), packages)
 		return nil
-	})
+	}, directoryPolicy, root)
 	if err != nil {
 		return nil, err
 	}

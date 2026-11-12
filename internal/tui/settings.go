@@ -1,74 +1,19 @@
 package tui
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-
 	"github.com/PVRLabs/aibadger/internal/defaults"
+	sharedsettings "github.com/PVRLabs/aibadger/internal/settings"
 )
 
-const settingsDirName = ".badger"
+type Settings = sharedsettings.Settings
+type SettingsLimits = sharedsettings.SettingsLimits
+type limitsDecodeError = sharedsettings.LimitsDecodeError
 
-type SettingsLimits struct {
-	MaxFilesPerDirectory   int `json:"max_files_per_directory,omitempty"`
-	MaxContextFileBytes    int `json:"max_context_file_bytes,omitempty"`
-	MaxPromptTwoBytes      int `json:"max_prompt_two_bytes,omitempty"`
-	MaxTopologyPromptBytes int `json:"max_topology_prompt_bytes,omitempty"`
-}
-
-type Settings struct {
-	FirstRunOnboardingCompleted bool            `json:"first_run_onboarding_completed"`
-	WhitespaceMode              string          `json:"whitespace_mode,omitempty"`
-	Limits                      *SettingsLimits `json:"limits,omitempty"`
-}
-
-type limitsDecodeError struct{ err error }
-
-func (e limitsDecodeError) Error() string { return "invalid limits object: " + e.err.Error() }
-
-type settingsDocument struct {
-	FirstRunOnboardingCompleted bool            `json:"first_run_onboarding_completed"`
-	WhitespaceMode              string          `json:"whitespace_mode,omitempty"`
-	Limits                      json.RawMessage `json:"limits"`
-}
-
-func DefaultSettingsPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	if home == "" {
-		return "", fmt.Errorf("home directory is empty")
-	}
-	return filepath.Join(home, settingsDirName, "settings.json"), nil
-}
-
-func LoadSettings(path string) (Settings, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return Settings{}, err
-	}
-
-	var document settingsDocument
-	if err := json.Unmarshal(data, &document); err != nil {
-		return Settings{}, err
-	}
-	settings := Settings{
-		FirstRunOnboardingCompleted: document.FirstRunOnboardingCompleted,
-		WhitespaceMode:              document.WhitespaceMode,
-	}
-	if len(document.Limits) > 0 && string(document.Limits) != "null" {
-		var limits SettingsLimits
-		if err := json.Unmarshal(document.Limits, &limits); err != nil {
-			return settings, limitsDecodeError{err: err}
-		}
-		settings.Limits = &limits
-	}
-	return settings, nil
-}
+func DefaultSettingsPath() (string, error)       { return sharedsettings.DefaultSettingsPath() }
+func LoadSettings(path string) (Settings, error) { return sharedsettings.LoadSettings(path) }
+func SaveSettings(path string, s Settings) error { return sharedsettings.SaveSettings(path, s) }
 
 func resolveSettingsLimits(cfg Config, limits *SettingsLimits) (Config, []string) {
 	if limits == nil {
@@ -107,22 +52,4 @@ func settingsLoadWarning(path string, err error) string {
 		return fmt.Sprintf("Could not apply limits from %s because the limits object is invalid; keeping the current limits.", path)
 	}
 	return fmt.Sprintf("Could not load settings from %s; keeping the current settings.", path)
-}
-
-func SaveSettings(path string, settings Settings) error {
-	if path == "" {
-		return fmt.Errorf("settings path is empty")
-	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-
-	data, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-
-	return os.WriteFile(path, data, 0600)
 }

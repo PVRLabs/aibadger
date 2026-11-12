@@ -2,6 +2,7 @@ package reviewtask
 
 import (
 	"fmt"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -344,5 +345,25 @@ func TestBuildChangeSetDoesNotTreatInvalidHeadAsUnborn(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "git rev-parse --verify HEAD") {
 		t.Fatalf("BuildChangeSet() error = %v, want original HEAD resolution error", err)
+	}
+}
+
+func TestUntrackedDiscoveryUsesDirectoryPolicy(t *testing.T) {
+	root := t.TempDir()
+	entries := []string{"build/visible.js", "custom-output/hidden.js", "nested/CUSTOM-OUTPUT/hidden.js", ".git/hidden.js"}
+	for _, path := range entries {
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	enabled := false
+	policy := dirpolicy.New(&enabled, []string{"custom-output"})
+	paths, _ := rankUntrackedFiles(root, entries, policy)
+	if len(paths) != 1 || paths[0] != "build/visible.js" {
+		t.Fatalf("untracked policy: %v", paths)
 	}
 }

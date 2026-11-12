@@ -1,14 +1,70 @@
 # Settings and External Context
 
-Badger has two small configuration mechanisms. User-level interactive
-settings live in `~/.badger/settings.json`; project-specific external context
+Badger has two small configuration mechanisms. User-level settings live in
+`~/.badger/settings.json`; project-specific external context
 is configured separately with `.badger-context` in the project root.
 
 ## Settings file
 
-Badger stores optional interactive-session settings in
+Badger stores optional user settings in
 `~/.badger/settings.json`. Settings are not required; Badger uses its built-in
 defaults when the file is missing.
+
+## Directory exclusions
+
+Automatic discovery uses these optional keys in the existing
+`~/.badger/settings.json` file:
+
+```json
+{
+  "exclude_generated_directories": true,
+  "additional_excluded_directories": [
+    ".my-cache",
+    "custom-output"
+  ]
+}
+```
+
+| Setting | Default | Behavior |
+|---|---|---|
+| `exclude_generated_directories` | `true` | Enables the built-in generated-directory list: tool caches, temporary directories, virtual environments, build output, and test reports. Set `false` to disable that list, including its automatic build/cache exclusions. |
+| `additional_excluded_directories` | `[]` | Excludes these directory names independently of the generated-directory toggle. |
+
+Each additional name matches a complete directory component at any depth,
+case-insensitively. For example, `.my-cache` excludes both `.my-cache/` and
+`packages/app/.MY-CACHE/`. Names must be nonempty single directory names;
+paths, `.`/`..`, glob patterns, negation, and control characters are invalid.
+These are literal names, with no regex or recursive ignore-file grammar.
+Invalid values produce warnings. Valid fields and valid entries continue to
+apply; malformed entries do not reset unrelated settings. Badger avoids
+rewriting settings containing invalid entries.
+
+To keep custom exclusions while allowing generated directories:
+
+```json
+{
+  "exclude_generated_directories": false,
+  "additional_excluded_directories": ["custom-output"]
+}
+```
+
+Omitted keys retain defaults. Explicit `false` and an explicitly empty array
+are preserved when saving. An empty array means no additional exclusions.
+
+These are Badger-wide discovery settings. They apply before scanning to the
+interactive CLI, headless/API topology, optional review topology, Codebase Map,
+external-context summaries, automatic untracked review-file discovery, and path
+completion. The VS Code extension
+inherits them through Badger. Existing Codebase Map `--exclude` rules still apply
+independently. Mandatory privacy, safety and symlink rules, and independently
+required detector exclusions remain enforced. Deliberate file requests and
+extraction can still select files omitted from automatic discovery, subject to
+mandatory safety rules. Basename and suffix searches in external context retain
+these discovery exclusions; use a root-relative or displayed full path to request
+an excluded external file explicitly.
+
+Only the user-level file is supported here. Project-local settings and precedence
+are a separate feature; no settings file in the project is loaded.
 
 ## Configuring interactive limits
 
@@ -47,7 +103,7 @@ Badger's normal value. Accepted inclusive ranges are:
 A missing settings file is normal and does not produce a warning; first-run
 onboarding is still controlled by the onboarding-completion setting.
 
-These settings apply only to interactive sessions, not `badger api` commands.
+The limits settings apply only to interactive sessions, not `badger api` commands.
 The directory limit currently affects Node, C#, and generic fallback scanning;
 Go, Java, and Python detectors keep their existing behavior. Prompt size limits are
 targets rather than strict output-size guarantees. Required framing, task, and

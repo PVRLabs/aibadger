@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
@@ -45,15 +46,17 @@ var projectContextHelperStems = map[string]bool{
 	"setup": true, "release": true, "clean": true,
 }
 
-func classifyProjectContextCandidate(projectRoot, path string, size int64) (projectContextCandidate, bool) {
+func classifyProjectContextCandidate(projectRoot, path string, size int64, directoryPolicies ...dirpolicy.Policy) (projectContextCandidate, bool) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	rel, full, ok := normalizeSourcePath(projectRoot, path)
 	if !ok {
 		return projectContextCandidate{}, false
 	}
 	name := filepath.Base(rel)
-	if _, source := classifyGenericSourceCandidate(projectRoot, full); source ||
-		shouldOmitFile(projectRoot, full, name) ||
-		isUnderIgnoredDir(projectRoot, full, NewGenericDetector().Exclusions) {
+	if _, source := classifyGenericSourceCandidate(projectRoot, full, directoryPolicy); source ||
+		shouldOmitFile(projectRoot, full, name, directoryPolicy) ||
+		isUnderIgnoredDir(projectRoot, full, NewGenericDetector(directoryPolicy).Exclusions, directoryPolicy) {
 		return projectContextCandidate{}, false
 	}
 	rank, eligible := projectContextRank(name)

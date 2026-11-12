@@ -33,7 +33,7 @@ func decrementTopologyOwnershipStats(t *model.ProjectTopology, candidate topolog
 	if module == nil {
 		return
 	}
-	pkg := findPackageInModule(module, candidate.sourceRoot, candidate.sourceRole, candidate.packagePath)
+	pkg := findPackageInModule(module, candidate.sourceRoot, candidate.sourceRole, candidate.packagePath, candidate.supplementalHTML)
 	if pkg != nil && pkg.FileCount > 0 {
 		pkg.FileCount--
 	}
@@ -52,7 +52,7 @@ func decrementTopologyOwnershipStats(t *model.ProjectTopology, candidate topolog
 		}
 	}
 
-	sourceRoot := findSourceRootInModule(module, candidate.sourceRoot, candidate.sourceRole)
+	sourceRoot := findSourceRootInModule(module, candidate.sourceRoot, candidate.sourceRole, candidate.supplementalHTML)
 	if sourceRoot != nil && sourceRoot.FileCount > 0 {
 		sourceRoot.FileCount--
 	}
@@ -91,10 +91,10 @@ func findModuleByCandidate(modules []model.Module, candidate topologyFileCandida
 	return findModuleByPath(modules, candidate.modulePath)
 }
 
-func findSourceRootInModule(module *model.Module, sourceRootPath, sourceRootRole string) *model.SourceRoot {
+func findSourceRootInModule(module *model.Module, sourceRootPath, sourceRootRole string, supplemental ...bool) *model.SourceRoot {
 	for sourceRootIdx := range module.SourceRoots {
 		sourceRoot := &module.SourceRoots[sourceRootIdx]
-		if sourceRoot.Path == sourceRootPath && sourceRoot.Role == sourceRootRole {
+		if sourceRoot.Path == sourceRootPath && sourceRoot.Role == sourceRootRole && (len(supplemental) == 0 || sourceRoot.SupplementalHTML == supplemental[0]) {
 			return sourceRoot
 		}
 	}
@@ -123,10 +123,10 @@ func pruneEmptyTopologyOwners(t *model.ProjectTopology) {
 	}
 }
 
-func findPackageInModule(module *model.Module, sourceRootPath, sourceRootRole, packagePath string) *model.Package {
+func findPackageInModule(module *model.Module, sourceRootPath, sourceRootRole, packagePath string, supplemental ...bool) *model.Package {
 	for sourceRootIdx := range module.SourceRoots {
 		sourceRoot := &module.SourceRoots[sourceRootIdx]
-		if sourceRoot.Path != sourceRootPath || sourceRoot.Role != sourceRootRole {
+		if sourceRoot.Path != sourceRootPath || sourceRoot.Role != sourceRootRole || (len(supplemental) > 0 && sourceRoot.SupplementalHTML != supplemental[0]) {
 			continue
 		}
 		for packageIdx := range sourceRoot.Packages {

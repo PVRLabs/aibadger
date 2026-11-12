@@ -117,7 +117,7 @@ func TestShouldOmitFile(t *testing.T) {
 		{relPath: "package-lock.json", data: []byte("{}"), want: true},
 		{relPath: "lib/app.jar", data: []byte("jar"), want: true},
 		{relPath: "Main.class", data: []byte("class"), want: true},
-		{relPath: filepath.Join("build", "tmp.txt"), data: []byte("generated"), want: false},
+		{relPath: filepath.Join("build", "tmp.txt"), data: []byte("generated"), want: true},
 		{relPath: "badger", data: []byte{0, 1, 2, 3}, want: true},
 		{relPath: ".gitignore", data: []byte("tmp\n"), want: true},
 		{relPath: ".dockerignore", data: []byte(".git\n"), want: true},

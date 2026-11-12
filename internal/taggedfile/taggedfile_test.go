@@ -902,3 +902,16 @@ func TestCompleteTaggedReferencesExternalBoundedLimit(t *testing.T) {
 		t.Fatalf("expected local files first, got %v", suggestionsToPaths(completions))
 	}
 }
+
+func TestCompletionSkipsToolArtifacts(t *testing.T) {
+	for _, name := range []string{".playwright-cli", ".next", ".pytest_cache", "test-results"} {
+		if !DefaultCompletionSkip("src/"+name, true) {
+			t.Errorf("artifact completion retained: %s", name)
+		}
+	}
+	for _, name := range []string{"docs", "tests", ".github"} {
+		if DefaultCompletionSkip(name, true) {
+			t.Errorf("source/config hidden: %s", name)
+		}
+	}
+}

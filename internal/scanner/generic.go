@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/defaults"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
@@ -70,13 +71,16 @@ var genericExtensionLanguages = map[string]string{
 
 // GenericDetector handles projects with no specific structure (e.g., Python, simple Go, etc.)
 type GenericDetector struct {
-	Exclusions     map[string]bool
-	maxFilesPerDir int
-	maxTotalFiles  int
+	Exclusions      map[string]bool
+	maxFilesPerDir  int
+	maxTotalFiles   int
+	directoryPolicy dirpolicy.Policy
 }
 
 // NewGenericDetector creates a new GenericDetector.
-func NewGenericDetector() *GenericDetector {
+func NewGenericDetector(directoryPolicies ...dirpolicy.Policy) *GenericDetector {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	return &GenericDetector{
 		Exclusions: cloneExclusions(commonIgnoredDirs,
 			".idea",
@@ -92,6 +96,7 @@ func NewGenericDetector() *GenericDetector {
 			"vendor",
 			"venv",
 		),
+		directoryPolicy: directoryPolicy,
 	}
 }
 
@@ -113,7 +118,7 @@ func (d *GenericDetector) Detect(root string) ([]model.Module, error) {
 	extCounts := make(map[string]int)
 
 	err := d.walkFiles(root, func(path string, entry os.DirEntry, info os.FileInfo) {
-		if shouldOmitFile(root, path, entry.Name()) {
+		if shouldOmitFile(root, path, entry.Name(), d.directoryPolicy) {
 			return
 		}
 		recordGenericFile(root, path, entry.Name(), info.Size(), packages, extCounts)
@@ -160,7 +165,7 @@ func (d *GenericDetector) walkFiles(root string, visit func(string, os.DirEntry,
 	}
 	totalProcessed := 0
 
-	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+	return walkDiscoveryDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -175,7 +180,7 @@ func (d *GenericDetector) walkFiles(root string, visit func(string, os.DirEntry,
 			}
 		}
 		if entry.IsDir() {
-			if shouldSkipDir(entry.Name(), d.Exclusions) {
+			if shouldSkipDir(entry.Name(), d.Exclusions, d.directoryPolicy) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -189,7 +194,7 @@ func (d *GenericDetector) walkFiles(root string, visit func(string, os.DirEntry,
 			visit(path, entry, info)
 		}
 		return nil
-	})
+	}, d.directoryPolicy, root)
 }
 
 func recordGenericFile(root, path, name string, size int64, packages map[string]*model.Package, extCounts map[string]int) {

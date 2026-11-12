@@ -11,7 +11,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/pathmatch"
+	"github.com/PVRLabs/aibadger/internal/settings"
 )
 
 // Generate creates a complete offline report in the caller's current directory.
@@ -26,13 +28,19 @@ func GenerateWithOptions(source string, options Options) (string, error) {
 	if err := pathmatch.Validate(options.ExcludePatterns); err != nil {
 		return "", err
 	}
+	var policy dirpolicy.Policy
+	if options.DirectoryPolicy != nil {
+		policy = *options.DirectoryPolicy
+	} else {
+		policy, _ = settings.DefaultDirectoryPolicy()
+	}
 	caller, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("resolve output directory: %w", err)
 	}
 	scan := func(path string) (*directory, error) {
 		destination := filepath.Join(caller, reportFilename(filepath.Base(filepath.Clean(path))))
-		return scanProjectWithExclusions(path, scanLimits{maxDirectoryDepth, maxDirectories, maxSourceFiles, maxSourceBytes}, (*os.File).ReadDir, destination, options.ExcludePatterns)
+		return scanProjectWithExclusions(path, scanLimits{maxDirectoryDepth, maxDirectories, maxSourceFiles, maxSourceBytes}, (*os.File).ReadDir, destination, options.ExcludePatterns, policy)
 	}
 	render := func(root *directory) ([]byte, error) {
 		root.GeneratorVersion = options.Version

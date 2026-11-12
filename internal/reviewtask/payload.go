@@ -3,6 +3,8 @@ package reviewtask
 import (
 	"errors"
 	"fmt"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
+	"github.com/PVRLabs/aibadger/internal/settings"
 	"io"
 	"os"
 	"path/filepath"
@@ -171,7 +173,7 @@ func buildReviewPayloadFromChangeSet(root string, set ChangeSet, opts Options, i
 	if opts.MaxFileBytes > 0 {
 		limits.maxFileBytes = opts.MaxFileBytes
 	}
-	return buildInitialReviewPayloadWithTopology(root, set, strings.TrimSpace(opts.ExtraFocus), limits, opts.IncludeTopology, opts.MaxFilesPerDirectory, includeReviewInstructions, readStableReviewFile)
+	return buildInitialReviewPayloadWithTopology(root, set, strings.TrimSpace(opts.ExtraFocus), limits, opts.IncludeTopology, opts.MaxFilesPerDirectory, includeReviewInstructions, readStableReviewFile, opts.DirectoryPolicy)
 }
 
 // BuildInteractiveContext prepares review context for editable TUI
@@ -367,7 +369,7 @@ func buildInitialReviewPayload(root string, set ChangeSet, guidance string, limi
 	return buildInitialReviewPayloadWithTopology(root, set, guidance, limits, false, 0, true, readFile)
 }
 
-func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, includeTopology bool, maxFilesPerDirectory int, includeReviewInstructions bool, readFile stableFileReader) InitialReviewResult {
+func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance string, limits reviewPayloadLimits, includeTopology bool, maxFilesPerDirectory int, includeReviewInstructions bool, readFile stableFileReader, policies ...*dirpolicy.Policy) InitialReviewResult {
 	label := repositoryLabel(root)
 	set = omitSensitiveUntrackedPaths(set)
 	if len(set.Changes) == 0 && len(set.UntrackedPaths) == 0 {
@@ -402,7 +404,13 @@ func buildInitialReviewPayloadWithTopology(root string, set ChangeSet, guidance 
 		if topologyBudget < 1 {
 			return mandatoryOverflow(set, len(mandatory), limits.maxPayloadBytes)
 		}
-		s := scanner.NewScanner(root)
+		var policy dirpolicy.Policy
+		if len(policies) > 0 && policies[0] != nil {
+			policy = *policies[0]
+		} else {
+			policy, _ = settings.DefaultDirectoryPolicy()
+		}
+		s := scanner.NewScanner(root, policy)
 		s.MaxFilesPerDirectory = maxFilesPerDirectory
 		project, err := s.Scan()
 		if err != nil {

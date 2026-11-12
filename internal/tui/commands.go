@@ -3,6 +3,7 @@ package tui
 // This file owns Bubble Tea command constructors used by the TUI workflow.
 
 import (
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"time"
 
 	"github.com/PVRLabs/aibadger/internal/clipboard"
@@ -22,9 +23,9 @@ var copyToClipboard = clipboard.Copy
 var resolveDownloadsDirectory = downloads.Resolve
 var savePromptToDownloads = downloads.SavePrompt
 
-func scanProjectCmd(root string, maxFilesPerDir int) tea.Cmd {
+func scanProjectCmd(root string, maxFilesPerDir int, policies ...dirpolicy.Policy) tea.Cmd {
 	return func() tea.Msg {
-		eng, err := engine.New(root, maxFilesPerDir)
+		eng, err := engine.New(root, maxFilesPerDir, policies...)
 		return scanDoneMsg{eng: eng, err: err}
 	}
 }

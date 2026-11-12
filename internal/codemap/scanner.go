@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/pathmatch"
 )
 
@@ -200,7 +201,8 @@ func scanProjectWithReportExclusion(rootPath string, limits scanLimits, readDir 
 	return scanProjectWithExclusions(rootPath, limits, readDir, reportPath, nil)
 }
 
-func scanProjectWithExclusions(rootPath string, limits scanLimits, readDir func(*os.File, int) ([]os.DirEntry, error), reportPath string, patterns []string) (*directory, error) {
+func scanProjectWithExclusions(rootPath string, limits scanLimits, readDir func(*os.File, int) ([]os.DirEntry, error), reportPath string, patterns []string, policies ...dirpolicy.Policy) (*directory, error) {
+	policy := dirpolicy.Resolve(policies...)
 	if err := pathmatch.Validate(patterns); err != nil {
 		return nil, err
 	}
@@ -240,7 +242,7 @@ func scanProjectWithExclusions(rootPath string, limits scanLimits, readDir func(
 		return pathmatch.Matches(patterns, filepath.ToSlash(rel))
 	}, func(path string, entry classifiedEntry) error {
 		if entry.isDir {
-			if skippedDirectories[entry.name] {
+			if policy.SkipLegacy(entry.name, skippedDirectories) {
 				return nil
 			}
 			rel, err := filepath.Rel(absRoot, path)
@@ -292,7 +294,7 @@ func scanProjectWithExclusions(rootPath string, limits scanLimits, readDir func(
 		retainSourceFile(parent, sourceFile{Name: entry.name, Lines: lines})
 		addLanguage(parent.DirectByLang, language, lines, 1)
 		return nil
-	})
+	}, policy)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +425,8 @@ func addLanguage(totals map[string]languageStats, language string, lines, files 
 
 // Read directory entries in batches, rather than allocating every entry in a
 // very wide directory before the scan limits can be checked.
-func walkSourceTree(path string, depth, maxDepth int, readDir func(*os.File, int) ([]os.DirEntry, error), skip func(string) bool, visit func(string, classifiedEntry) error) error {
+func walkSourceTree(path string, depth, maxDepth int, readDir func(*os.File, int) ([]os.DirEntry, error), skip func(string) bool, visit func(string, classifiedEntry) error, policies ...dirpolicy.Policy) error {
+	policy := dirpolicy.Resolve(policies...)
 	dir, err := os.Open(path)
 	if err != nil {
 		return err
@@ -440,7 +443,7 @@ func walkSourceTree(path string, depth, maxDepth int, readDir func(*os.File, int
 			if err != nil {
 				return fmt.Errorf("inspect entry %s: %w", childPath, err)
 			}
-			if entry.isDir && skippedDirectories[entry.name] {
+			if entry.isDir && (policy.SkipLegacy(entry.name, skippedDirectories)) {
 				continue
 			}
 			if entry.isDir && depth >= maxDepth {
@@ -450,7 +453,7 @@ func walkSourceTree(path string, depth, maxDepth int, readDir func(*os.File, int
 				return err
 			}
 			if entry.isDir {
-				if err := walkSourceTree(childPath, depth+1, maxDepth, readDir, skip, visit); err != nil {
+				if err := walkSourceTree(childPath, depth+1, maxDepth, readDir, skip, visit, policy); err != nil {
 					return err
 				}
 			}

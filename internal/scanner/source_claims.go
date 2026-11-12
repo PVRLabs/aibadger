@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filegroups"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
@@ -15,17 +16,19 @@ import (
 // summaries: those summaries describe what was reported, not what the detector
 // semantically owns.
 type semanticSourceOwnership struct {
-	projectRoot string
-	claims      []semanticSourceClaim
-	webRoots    []string
+	projectRoot     string
+	claims          []semanticSourceClaim
+	webRoots        []string
+	directoryPolicy dirpolicy.Policy
 }
 
 type semanticSourceClaim struct {
-	language   string
-	moduleRoot string
-	areas      []sourceClaimArea
-	exactPaths map[string]bool
-	exclusions map[string]bool
+	language        string
+	moduleRoot      string
+	areas           []sourceClaimArea
+	exactPaths      map[string]bool
+	exclusions      map[string]bool
+	directoryPolicy dirpolicy.Policy
 }
 
 type sourceClaimArea struct {
@@ -33,14 +36,16 @@ type sourceClaimArea struct {
 	recursive bool
 }
 
-func newSemanticSourceOwnership(projectRoot string, modules []model.Module) semanticSourceOwnership {
-	ownership := semanticSourceOwnership{projectRoot: filepath.Clean(projectRoot)}
+func newSemanticSourceOwnership(projectRoot string, modules []model.Module, directoryPolicies ...dirpolicy.Policy) semanticSourceOwnership {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	ownership := semanticSourceOwnership{projectRoot: filepath.Clean(projectRoot), directoryPolicy: directoryPolicy}
 	for _, module := range modules {
 		moduleRoot, ok := normalizeProjectRelativePath(module.Path)
 		if !ok && module.Path != "" && module.Path != "." {
 			continue
 		}
-		claim := semanticSourceClaim{language: module.Language, moduleRoot: moduleRoot}
+		claim := semanticSourceClaim{language: module.Language, moduleRoot: moduleRoot, directoryPolicy: directoryPolicy}
 		// Only Go and Java delegate to scanModuleWebResources.
 		if !module.Coverage && (module.Language == "Go" || module.Language == "Java") {
 			for _, dir := range moduleWebResourceDirs() {
@@ -55,12 +60,12 @@ func newSemanticSourceOwnership(projectRoot string, modules []model.Module) sema
 			claim.areas = javaSourceClaimAreas(module)
 			claim.exclusions = commonIgnoredDirs
 		case "Python":
-			claim.exclusions = NewPythonDetector().Exclusions
-			claim.areas = pythonSourceClaimAreas(projectRoot)
+			claim.exclusions = NewPythonDetector(directoryPolicy).Exclusions
+			claim.areas = pythonSourceClaimAreas(projectRoot, directoryPolicy)
 		case "JavaScript", "TypeScript":
-			detector := NewNodeDetector()
+			detector := NewNodeDetector(directoryPolicy)
 			claim.exclusions = detector.Exclusions
-			claim.areas, claim.exactPaths = nodeSourceClaimAreas(detector, projectRoot, moduleRoot)
+			claim.areas, claim.exactPaths = nodeSourceClaimAreas(detector, projectRoot, moduleRoot, directoryPolicy)
 		case "C#":
 			claim.areas = []sourceClaimArea{{root: moduleRoot, recursive: true}}
 			claim.exclusions = csharpIgnoredDirs
@@ -117,17 +122,17 @@ func (c semanticSourceClaim) owns(projectRoot, rel string) bool {
 	if c.exactPaths[rel] {
 		return true
 	}
-	if pathUsesExcludedDir(rel, c.moduleRoot, c.exclusions) {
+	if pathUsesExcludedDir(rel, c.moduleRoot, c.exclusions, c.directoryPolicy) {
 		return false
 	}
 	for _, area := range c.areas {
 		if !pathInClaimArea(rel, area) {
 			continue
 		}
-		if c.language == "C#" && crossesNestedCSharpProject(projectRoot, c.moduleRoot, rel) {
+		if c.language == "C#" && crossesNestedCSharpProject(projectRoot, c.moduleRoot, rel, c.directoryPolicy) {
 			return false
 		}
-		if c.language == "C++" && pathUsesCMakeBuildDir(rel, area.root) {
+		if c.language == "C++" && pathUsesCMakeBuildDir(rel, area.root, c.directoryPolicy) {
 			return false
 		}
 		return true
@@ -178,8 +183,10 @@ func javaSourceClaimAreas(module model.Module) []sourceClaimArea {
 	return areas
 }
 
-func pythonSourceClaimAreas(projectRoot string) []sourceClaimArea {
-	detector := NewPythonDetector()
+func pythonSourceClaimAreas(projectRoot string, directoryPolicies ...dirpolicy.Policy) []sourceClaimArea {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	detector := NewPythonDetector(directoryPolicy)
 	areas := []sourceClaimArea{
 		{root: "src", recursive: true},
 		{root: "tests", recursive: true},
@@ -191,7 +198,9 @@ func pythonSourceClaimAreas(projectRoot string) []sourceClaimArea {
 	return areas
 }
 
-func nodeSourceClaimAreas(detector *NodeDetector, projectRoot, moduleRoot string) ([]sourceClaimArea, map[string]bool) {
+func nodeSourceClaimAreas(detector *NodeDetector, projectRoot, moduleRoot string, directoryPolicies ...dirpolicy.Policy) ([]sourceClaimArea, map[string]bool) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	areas := make([]sourceClaimArea, 0, 6)
 	for _, name := range []string{"src", "app", "lib", "server", "test", "tests"} {
 		areas = append(areas, sourceClaimArea{root: joinRelativePath(moduleRoot, name), recursive: true})
@@ -205,7 +214,7 @@ func nodeSourceClaimAreas(detector *NodeDetector, projectRoot, moduleRoot string
 	}
 	candidates := nodeRootEntryCandidates(fullModulePath)
 	candidates = append(candidates, nodePackageEntryCandidates(pkg, fullModulePath)...)
-	candidates = append(candidates, nodeStackOverviewCandidates(pkg, fullModulePath)...)
+	candidates = append(candidates, nodeStackOverviewCandidates(pkg, fullModulePath, directoryPolicy)...)
 	for _, candidate := range candidates {
 		if isNodeSourceFile(filepath.Base(candidate)) {
 			exact[joinRelativePath(moduleRoot, candidate)] = true
@@ -221,7 +230,9 @@ func pathInClaimArea(rel string, area sourceClaimArea) bool {
 	return normalizeRelativeDir(filepath.Dir(rel)) == area.root
 }
 
-func pathUsesExcludedDir(rel, boundary string, exclusions map[string]bool) bool {
+func pathUsesExcludedDir(rel, boundary string, exclusions map[string]bool, directoryPolicies ...dirpolicy.Policy) bool {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	if len(exclusions) == 0 || !sameOrDescendantRelativePath(boundary, rel) {
 		return false
 	}
@@ -231,28 +242,31 @@ func pathUsesExcludedDir(rel, boundary string, exclusions map[string]bool) bool 
 		return false
 	}
 	for _, part := range strings.Split(local, string(filepath.Separator)) {
-		if exclusions[strings.ToLower(part)] {
+		if shouldSkipDir(part, exclusions, directoryPolicy) {
 			return true
 		}
 	}
 	return false
 }
 
-func pathUsesCMakeBuildDir(rel, boundary string) bool {
+func pathUsesCMakeBuildDir(rel, boundary string, policies ...dirpolicy.Policy) bool {
+	policy := dirpolicy.Resolve(policies...)
 	dir := normalizeRelativeDir(filepath.Dir(rel))
 	local, ok := relativeWithin(boundary, dir)
 	if !ok || local == "" {
 		return false
 	}
 	for _, part := range strings.Split(local, string(filepath.Separator)) {
-		if strings.HasPrefix(strings.ToLower(part), "cmake-build-") {
+		if policy.Skip(part) {
 			return true
 		}
 	}
 	return false
 }
 
-func crossesNestedCSharpProject(projectRoot, moduleRoot, rel string) bool {
+func crossesNestedCSharpProject(projectRoot, moduleRoot, rel string, directoryPolicies ...dirpolicy.Policy) bool {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	dir := normalizeRelativeDir(filepath.Dir(rel))
 	local, ok := relativeWithin(moduleRoot, dir)
 	if !ok || local == "" {
@@ -262,7 +276,7 @@ func crossesNestedCSharpProject(projectRoot, moduleRoot, rel string) bool {
 	parts := strings.Split(local, string(filepath.Separator))
 	for _, part := range parts {
 		current = joinRelativePath(current, part)
-		if current != moduleRoot && ownsCSharpProject(filepath.Join(projectRoot, current)) {
+		if current != moduleRoot && ownsCSharpProject(filepath.Join(projectRoot, current), directoryPolicy) {
 			return true
 		}
 	}
@@ -326,14 +340,16 @@ func normalizeSourcePath(projectRoot, path string) (rel, full string, ok bool) {
 // classifyGenericSourceCandidate is used only by mixed-repository source
 // augmentation. The standalone Generic detector intentionally retains its
 // broader behavior.
-func classifyGenericSourceCandidate(projectRoot, path string) (string, bool) {
+func classifyGenericSourceCandidate(projectRoot, path string, directoryPolicies ...dirpolicy.Policy) (string, bool) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	rel, full, ok := normalizeSourcePath(projectRoot, path)
 	if !ok {
 		return "", false
 	}
 	name := filepath.Base(rel)
 	language, ok := genericExtensionLanguages[strings.ToLower(filepath.Ext(name))]
-	if !ok || shouldOmitFile(projectRoot, full, name) || isUnderIgnoredDir(projectRoot, full, NewGenericDetector().Exclusions) || (language == "C#" && isUnderCSharpObjDir(rel)) {
+	if !ok || shouldOmitFile(projectRoot, full, name, directoryPolicy) || isUnderIgnoredDir(projectRoot, full, NewGenericDetector(directoryPolicy).Exclusions, directoryPolicy) || (language == "C#" && isUnderCSharpObjDir(rel)) {
 		return "", false
 	}
 	if filekind.Classify(full) != model.FileKindSource || isIdentityManifest(name) || isOperationalConfigFile(name) || isTextControlFile(name) {

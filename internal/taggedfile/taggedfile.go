@@ -2,6 +2,7 @@ package taggedfile
 
 import (
 	"fmt"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"os"
 	"path/filepath"
 	"sort"
@@ -69,10 +70,17 @@ var defaultCompletionIgnoredDirs = map[string]bool{
 // DefaultCompletionSkip filters known noisy directories from shallow
 // completion suggestions.
 func DefaultCompletionSkip(relPath string, isDir bool) bool {
-	if !isDir {
-		return false
+	return CompletionSkip(dirpolicy.Policy{})(relPath, isDir)
+}
+
+func CompletionSkip(policy dirpolicy.Policy) SkipFunc {
+	return func(relPath string, isDir bool) bool {
+		if !isDir {
+			return false
+		}
+		name := filepath.Base(strings.TrimSuffix(relPath, "/"))
+		return policy.SkipLegacy(name, defaultCompletionIgnoredDirs)
 	}
-	return defaultCompletionIgnoredDirs[filepath.Base(strings.TrimSuffix(relPath, "/"))]
 }
 
 // Parse extracts tagged-file references from arbitrary text.

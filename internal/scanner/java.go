@@ -5,17 +5,20 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
 )
 
 // JavaDetector handles Maven and Gradle projects.
-type JavaDetector struct{}
+type JavaDetector struct{ directoryPolicy dirpolicy.Policy }
 
 // NewJavaDetector returns a new instance of JavaDetector.
-func NewJavaDetector() *JavaDetector {
-	return &JavaDetector{}
+func NewJavaDetector(directoryPolicies ...dirpolicy.Policy) *JavaDetector {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	return &JavaDetector{directoryPolicy: directoryPolicy}
 }
 
 // Detect scans for Java modules and populates the topology.
@@ -23,7 +26,7 @@ func (j *JavaDetector) Detect(root string) ([]model.Module, error) {
 	var modules []model.Module
 	seenModules := make(map[string]bool)
 
-	markers, err := discoverProjectMarkers(root, "pom.xml", "build.gradle", "build.gradle.kts")
+	markers, err := discoverProjectMarkersWithPolicy(root, j.directoryPolicy, "pom.xml", "build.gradle", "build.gradle.kts")
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +86,7 @@ func (j *JavaDetector) analyzeModule(root, relPath string) model.Module {
 		module.FileCount += sr.FileCount
 	}
 
-	mergeWebSourceRoots(&module, scanModuleWebResources(root, fullModulePath))
+	mergeWebSourceRoots(&module, scanModuleWebResources(root, fullModulePath, j.directoryPolicy))
 
 	module.TopFiles = j.findTopFiles(fullModulePath, root, moduleTopFileLimit(module.Path, maxPackageTopFiles))
 	if len(module.TopFiles) > 0 {
@@ -122,9 +125,14 @@ func (j *JavaDetector) inferSourceRole(path string) string {
 func (j *JavaDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string) {
 	fullRootPath := filepath.Join(projectRoot, sr.Path)
 	packageMap := make(map[string]*model.Package)
-
-	filepath.WalkDir(fullRootPath, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	walkDiscoveryDir(fullRootPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if shouldSkipDir(d.Name(), commonIgnoredDirs, j.directoryPolicy) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -141,7 +149,7 @@ func (j *JavaDetector) scanSourceRoot(sr *model.SourceRoot, projectRoot string) 
 		sr.FileCount++
 		recordJavaFile(packageMap, fullRootPath, projectRoot, path, d.Name(), info.Size())
 		return nil
-	})
+	}, j.directoryPolicy, projectRoot)
 
 	for _, pkg := range packageMap {
 		sr.Packages = append(sr.Packages, *pkg)
@@ -158,8 +166,14 @@ func (j *JavaDetector) findHeaviest(modulePath, projectRoot string) model.Heavie
 
 func (j *JavaDetector) findTopFiles(modulePath, projectRoot string, limit int) []model.FileSummary {
 	var topFiles []model.FileSummary
-	filepath.WalkDir(modulePath, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	walkDiscoveryDir(modulePath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if shouldSkipDir(d.Name(), commonIgnoredDirs, j.directoryPolicy) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -182,7 +196,7 @@ func (j *JavaDetector) findTopFiles(modulePath, projectRoot string, limit int) [
 			Size: info.Size(),
 		}, limit)
 		return nil
-	})
+	}, j.directoryPolicy, projectRoot)
 	return topFiles
 }
 

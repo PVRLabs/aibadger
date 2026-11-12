@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/PVRLabs/aibadger/internal/defaults"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
@@ -26,11 +27,14 @@ var csharpIgnoredDirs = cloneExclusions(markerDiscoveryIgnoredDirs,
 type CSharpDetector struct {
 	maxFilesPerDir      int
 	languageSourceCount int
+	directoryPolicy     dirpolicy.Policy
 }
 
 // NewCSharpDetector returns a bounded C# detector.
-func NewCSharpDetector() *CSharpDetector {
-	return &CSharpDetector{maxFilesPerDir: defaults.MaxFilesPerDirectory}
+func NewCSharpDetector(directoryPolicies ...dirpolicy.Policy) *CSharpDetector {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	return &CSharpDetector{maxFilesPerDir: defaults.MaxFilesPerDirectory, directoryPolicy: directoryPolicy}
 }
 
 // Detect discovers bounded .csproj markers and builds directory-backed C# topology.
@@ -40,14 +44,14 @@ func (c *CSharpDetector) Detect(root string) ([]model.Module, error) {
 
 func (c *CSharpDetector) detectWithBudgets(root string, totalBudget, projectBudget int) ([]model.Module, error) {
 	c.languageSourceCount = 0
-	markers, err := discoverProjectMarkers(root, ".csproj")
+	markers, err := discoverProjectMarkersWithPolicy(root, c.directoryPolicy, ".csproj")
 	if err != nil {
 		return nil, err
 	}
 
 	markersByDir := make(map[string][]string)
 	for _, marker := range markers {
-		if isUnderIgnoredDir(root, marker, csharpIgnoredDirs) {
+		if isUnderIgnoredDir(root, marker, csharpIgnoredDirs, c.directoryPolicy) {
 			continue
 		}
 		dir := filepath.Dir(marker)
@@ -84,10 +88,10 @@ func (c *CSharpDetector) analyzeModule(projectRoot, moduleRoot string, markers [
 	for _, marker := range markers {
 		c.recordFile(projectRoot, moduleRoot, marker, false, packages, &sourceRoot, &module)
 	}
-	for _, solution := range colocatedSolutions(moduleRoot) {
+	for _, solution := range colocatedSolutions(moduleRoot, c.directoryPolicy) {
 		c.recordFile(projectRoot, moduleRoot, solution, false, packages, &sourceRoot, &module)
 	}
-	for _, settings := range colocatedAppSettings(moduleRoot) {
+	for _, settings := range colocatedAppSettings(moduleRoot, c.directoryPolicy) {
 		c.recordFile(projectRoot, moduleRoot, settings, false, packages, &sourceRoot, &module)
 	}
 	c.scanModuleFiles(projectRoot, moduleRoot, packages, &sourceRoot, &module, remaining)
@@ -118,7 +122,7 @@ func (c *CSharpDetector) scanModuleFiles(projectRoot, moduleRoot string, package
 		if *remaining <= 0 || depth > maxCSharpSourceDepth {
 			return
 		}
-		entries, err := os.ReadDir(dir)
+		entries, err := readDiscoveryDir(dir, c.directoryPolicy, projectRoot)
 		if err != nil {
 			return
 		}
@@ -136,14 +140,14 @@ func (c *CSharpDetector) scanModuleFiles(projectRoot, moduleRoot string, package
 			*remaining--
 			path := filepath.Join(dir, entry.Name())
 			if entry.IsDir() {
-				if shouldSkipDir(strings.ToLower(entry.Name()), csharpIgnoredDirs) || depth >= maxCSharpSourceDepth || ownsCSharpProject(path) {
+				if shouldSkipDir(strings.ToLower(entry.Name()), csharpIgnoredDirs, c.directoryPolicy) || depth >= maxCSharpSourceDepth || ownsCSharpProject(path, c.directoryPolicy) {
 					continue
 				}
 				walk(path, depth+1)
 				continue
 			}
 			isSource := strings.EqualFold(filepath.Ext(entry.Name()), ".cs")
-			if (isSource || isCSharpCompanionFile(moduleRoot, path)) && !shouldOmitFile(projectRoot, path, entry.Name()) {
+			if (isSource || isCSharpCompanionFile(moduleRoot, path)) && !shouldOmitFile(projectRoot, path, entry.Name(), c.directoryPolicy) {
 				c.recordFile(projectRoot, moduleRoot, path, isSource, packages, sourceRoot, module)
 			}
 		}
@@ -198,8 +202,10 @@ func isUnderCSharpWWWRoot(moduleRoot, path string) bool {
 	return strings.HasPrefix(rel, "wwwroot"+string(filepath.Separator))
 }
 
-func colocatedSolutions(moduleRoot string) []string {
-	entries, err := os.ReadDir(moduleRoot)
+func colocatedSolutions(moduleRoot string, directoryPolicies ...dirpolicy.Policy) []string {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	entries, err := readDiscoveryDir(moduleRoot, directoryPolicy)
 	if err != nil {
 		return nil
 	}
@@ -212,8 +218,10 @@ func colocatedSolutions(moduleRoot string) []string {
 	return paths
 }
 
-func colocatedAppSettings(moduleRoot string) []string {
-	entries, err := os.ReadDir(moduleRoot)
+func colocatedAppSettings(moduleRoot string, directoryPolicies ...dirpolicy.Policy) []string {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	entries, err := readDiscoveryDir(moduleRoot, directoryPolicy)
 	if err != nil {
 		return nil
 	}
@@ -226,8 +234,10 @@ func colocatedAppSettings(moduleRoot string) []string {
 	return paths
 }
 
-func ownsCSharpProject(dir string) bool {
-	entries, err := os.ReadDir(dir)
+func ownsCSharpProject(dir string, directoryPolicies ...dirpolicy.Policy) bool {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	entries, err := readDiscoveryDir(dir, directoryPolicy)
 	if err != nil {
 		return false
 	}

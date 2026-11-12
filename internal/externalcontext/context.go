@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/promptpolicy"
@@ -47,7 +48,7 @@ func (r FileResolution) Match() (FileMatch, bool) {
 // Load reads .badger-context from projectRoot and returns explicitly listed
 // read-only context directories. Missing or empty files preserve current
 // behavior by returning an empty slice.
-func Load(projectRoot string) ([]model.ExternalContext, error) {
+func Load(projectRoot string, policies ...dirpolicy.Policy) ([]model.ExternalContext, error) {
 	configPath := filepath.Join(projectRoot, ConfigFileName)
 	file, err := os.Open(configPath)
 	if err != nil {
@@ -79,9 +80,10 @@ func Load(projectRoot string) ([]model.ExternalContext, error) {
 		}
 		seen[realPath] = true
 		contexts = append(contexts, model.ExternalContext{
-			Path:    displayPath,
-			AbsPath: realPath,
-			Top:     summarizeTop(absPath, displayPath),
+			DirectoryPolicy: dirpolicy.Resolve(policies...),
+			Path:            displayPath,
+			AbsPath:         realPath,
+			Top:             summarizeTop(absPath, displayPath, dirpolicy.Resolve(policies...)),
 		})
 	}
 	if err := scanner.Err(); err != nil {
@@ -142,7 +144,7 @@ func validateDirectory(projectRoot, displayPath string) (string, string, error) 
 	return absPath, realPath, nil
 }
 
-func summarizeTop(absPath, displayPath string) []model.ExternalContextItem {
+func summarizeTop(absPath, displayPath string, policies ...dirpolicy.Policy) []model.ExternalContextItem {
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		return nil
@@ -157,7 +159,7 @@ func summarizeTop(absPath, displayPath string) []model.ExternalContextItem {
 			continue
 		}
 		if entry.IsDir() {
-			if shouldSkipExternalSummaryDir(name) {
+			if shouldSkipExternalSummaryDir(name, policies...) {
 				continue
 			}
 			dirs = append(dirs, model.ExternalContextItem{Name: name, IsDir: true})
@@ -179,13 +181,12 @@ func summarizeTop(absPath, displayPath string) []model.ExternalContextItem {
 	return items
 }
 
-func shouldSkipExternalSummaryDir(name string) bool {
-	switch strings.ToLower(name) {
-	case ".git", "node_modules", "target", "build":
+func shouldSkipExternalSummaryDir(name string, policies ...dirpolicy.Policy) bool {
+	policy := dirpolicy.Resolve(policies...)
+	if policy.Skip(name) {
 		return true
-	default:
-		return false
 	}
+	return policy.SkipLegacy(name, map[string]bool{".git": true, "node_modules": true, "target": true, "build": true})
 }
 
 func shouldOmitExternalSummaryFile(root, path, name string) bool {
@@ -250,19 +251,25 @@ func ResolveFile(projectRoot string, contexts []model.ExternalContext, requestPa
 	// Strategy 1: Resolve relative to each external root.
 	for _, ctx := range contexts {
 		collector.add(ctx, filepath.Join(ctx.AbsPath, filepath.FromSlash(requestPath)))
+		// Display-qualified requests also resolve directly, including paths
+		// deliberately naming a directory omitted from fuzzy discovery.
+		prefix := normalizeRequestPath(ctx.Path) + "/"
+		if strings.HasPrefix(requestPath, prefix) {
+			collector.add(ctx, filepath.Join(ctx.AbsPath, filepath.FromSlash(strings.TrimPrefix(requestPath, prefix))))
+		}
 	}
 
 	// Strategy 2: Walk configured roots for display-path, suffix, and basename
 	// matches. Absolute host paths are intentionally not supported as external
 	// FILE requests; callers should use the displayed configured path.
-	// External context roots are explicit and read-only; omitted dirs are
-	// pruned using the same policy as summaries and direct external reads.
+	// Fuzzy discovery retains summary exclusions; direct requests above use
+	// mandatory safety checks independently of discovery filtering.
 	for _, ctx := range contexts {
 		walkExternalContextFiles(ctx, func(absPath, relPath string) {
 			relSlash := filepath.ToSlash(relPath)
 			displayPath := externalDisplayPath(ctx, relSlash)
 			if isExternalSuffixMatch(requestPath, relSlash, displayPath) {
-				collector.add(ctx, absPath)
+				collector.add(ctx, absPath, true)
 			}
 		})
 	}
@@ -275,7 +282,7 @@ type fileMatchCollector struct {
 	seen    map[string]bool
 }
 
-func (c *fileMatchCollector) add(ctx model.ExternalContext, candidatePath string) {
+func (c *fileMatchCollector) add(ctx model.ExternalContext, candidatePath string, discovery ...bool) {
 	root := cleanExternalRoot(ctx)
 	if root == "" {
 		return
@@ -294,6 +301,9 @@ func (c *fileMatchCollector) add(ctx model.ExternalContext, candidatePath string
 	}
 	rel, ok := containedRelPath(root, realPath)
 	if !ok || shouldOmitExternalContextPath(root, realPath, rel) {
+		return
+	}
+	if len(discovery) > 0 && discovery[0] && ctx.DirectoryPolicy.SkipPath(rel) {
 		return
 	}
 	relSlash := filepath.ToSlash(rel)
@@ -382,7 +392,7 @@ func walkExternalContextFiles(ctx model.ExternalContext, visit func(absPath, rel
 			return nil
 		}
 		if entry.IsDir() {
-			if shouldSkipExternalSummaryDir(entry.Name()) || promptpolicy.IsSensitivePath(filepath.ToSlash(rel)) {
+			if shouldSkipExternalSummaryDir(entry.Name(), ctx.DirectoryPolicy) || promptpolicy.IsSensitivePath(filepath.ToSlash(rel)) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -399,14 +409,14 @@ func walkExternalContextFiles(ctx model.ExternalContext, visit func(absPath, rel
 	})
 }
 
-// IsOmittedPath reports whether a path within an external context root should
-// be ignored based on existing privacy and noise rules.
+// IsOmittedPath validates direct external requests against mandatory privacy
+// and noise rules. Discovery exclusions belong to fuzzy traversal, not reads.
 func IsOmittedPath(root, absPath, relPath string) bool {
 	if promptpolicy.IsSensitivePath(relPath) {
 		return true
 	}
 	for _, part := range strings.Split(filepath.ToSlash(relPath), "/") {
-		if shouldSkipExternalSummaryDir(part) {
+		if strings.EqualFold(part, ".git") {
 			return true
 		}
 	}

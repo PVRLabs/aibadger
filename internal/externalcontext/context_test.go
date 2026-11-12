@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
 
@@ -388,4 +389,84 @@ func realTestPath(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return realPath
+}
+
+func TestExternalSummarySkipsToolArtifacts(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{".playwright-cli", ".next", ".pytest_cache", "test-results", "docs"} {
+		if err := os.MkdirAll(filepath.Join(root, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items := summarizeTop(root, "fixture")
+	if len(items) != 1 || items[0].Name != "docs" {
+		t.Fatalf("external summary includes artifacts: %+v", items)
+	}
+}
+
+func TestExternalFuzzyResolutionPrunesGeneratedDirectories(t *testing.T) {
+	root := t.TempDir()
+	external := t.TempDir()
+	for _, path := range []string{"README.md", "docs/guide.md", "node_modules/dependency/README.md", "node_modules/dependency/docs/guide.md", ".playwright-cli/README.md", "custom-output/README.md"} {
+		full := filepath.Join(external, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	policy := dirpolicy.New(nil, []string{"custom-output"})
+	contexts := []model.ExternalContext{{Path: "../external", AbsPath: external, DirectoryPolicy: policy}}
+	for _, request := range []string{"README.md", "docs/guide.md", "guide.md"} {
+		result := ResolveFile(root, contexts, request)
+		match, ok := result.Match()
+		if !ok || strings.Contains(match.RelPath, "node_modules") {
+			t.Fatalf("fuzzy request %q: %+v", request, result.Matches)
+		}
+	}
+	var visited []string
+	walkExternalContextFiles(contexts[0], func(_, rel string) { visited = append(visited, filepath.ToSlash(rel)) })
+	if len(visited) != 2 {
+		t.Fatalf("fuzzy walker entered excluded trees: %v", visited)
+	}
+	for _, request := range []string{"node_modules/dependency/README.md", "../external/node_modules/dependency/README.md", ".playwright-cli/README.md", "../external/custom-output/README.md"} {
+		if result := ResolveFile(root, contexts, request); len(result.Matches) != 1 {
+			t.Fatalf("direct excluded-directory request %q: %+v", request, result.Matches)
+		}
+	}
+	enabled := false
+	contexts[0].DirectoryPolicy = dirpolicy.New(&enabled, []string{"custom-output"})
+	if result := ResolveFile(root, contexts, "README.md"); len(result.Matches) != 3 {
+		t.Fatalf("fuzzy search ignored configured toggle/custom policy: %+v", result.Matches)
+	}
+}
+
+func TestExternalLoadRetainsDiscoveryPolicyForResolution(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	external := filepath.Join(parent, "external")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(external, "custom-output"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"README.md", "custom-output/README.md"} {
+		if err := os.WriteFile(filepath.Join(external, path), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, ConfigFileName), []byte("../external\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	enabled := false
+	contexts, err := Load(root, dirpolicy.New(&enabled, []string{"custom-output"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := ResolveFile(root, contexts, "README.md")
+	if len(result.Matches) != 1 {
+		t.Fatalf("loaded policy lost: %+v", result.Matches)
+	}
 }

@@ -1,6 +1,9 @@
 package scanner
 
+import
+
 // This file owns stack and framework signal detection.
+"github.com/PVRLabs/aibadger/internal/dirpolicy"
 
 import (
 	"encoding/json"
@@ -8,15 +11,17 @@ import (
 	"path/filepath"
 )
 
-func detectedStack(root string) []string {
+func detectedStack(root string, directoryPolicies ...dirpolicy.Policy) []string {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	found := make(map[string]bool)
-	nodeSignals := detectNodeStacks(root)
-	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	nodeSignals := detectNodeStacks(root, directoryPolicy)
+	walkDiscoveryDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 		if d.IsDir() {
-			if shouldSkipDir(d.Name(), commonIgnoredDirs) || shouldSkipTopLevelOpsDir(root, path, d.Name()) {
+			if shouldSkipDir(d.Name(), commonIgnoredDirs, directoryPolicy) || shouldSkipTopLevelOpsDir(root, path, d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -32,7 +37,7 @@ func detectedStack(root string) []string {
 			found["Node.js"] = true
 		}
 		return nil
-	})
+	}, directoryPolicy, root)
 	for name, ok := range nodeSignals {
 		if ok {
 			found[name] = true
@@ -53,14 +58,16 @@ type nodeDependencySet struct {
 	DevDependencies map[string]string `json:"devDependencies"`
 }
 
-func detectNodeStacks(root string) map[string]bool {
+func detectNodeStacks(root string, directoryPolicies ...dirpolicy.Policy) map[string]bool {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	signals := make(map[string]bool)
-	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	walkDiscoveryDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 		if d.IsDir() {
-			if shouldSkipDir(d.Name(), commonIgnoredDirs) || shouldSkipTopLevelOpsDir(root, path, d.Name()) {
+			if shouldSkipDir(d.Name(), commonIgnoredDirs, directoryPolicy) || shouldSkipTopLevelOpsDir(root, path, d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -91,7 +98,7 @@ func detectNodeStacks(root string) map[string]bool {
 			signals["NestJS"] = true
 		}
 		return nil
-	})
+	}, directoryPolicy, root)
 	return signals
 }
 

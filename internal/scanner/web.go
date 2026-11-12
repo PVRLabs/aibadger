@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filegroups"
 	"github.com/PVRLabs/aibadger/internal/filekind"
 	"github.com/PVRLabs/aibadger/internal/model"
@@ -31,13 +32,15 @@ func isSharedWebResourcePath(path string) bool {
 }
 
 // scanWebResources finds root-level static web resources for the shared scanner path.
-func scanWebResources(root string) ([]model.SourceRoot, error) {
-	sourceRoots, err := scanWebResourceDirs(root, root, standaloneWebResourceDirs())
+func scanWebResources(root string, directoryPolicies ...dirpolicy.Policy) ([]model.SourceRoot, error) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	sourceRoots, err := scanWebResourceDirs(root, root, standaloneWebResourceDirs(), directoryPolicy)
 	if err != nil {
 		return nil, err
 	}
 
-	rootResources := scanKnownRootWebResources(root)
+	rootResources := scanKnownRootWebResources(root, directoryPolicy)
 	if rootResources != nil {
 		sourceRoots = append(sourceRoots, *rootResources)
 	}
@@ -46,15 +49,19 @@ func scanWebResources(root string) ([]model.SourceRoot, error) {
 }
 
 // scanModuleWebResources lets language detectors delegate known static resource directories.
-func scanModuleWebResources(projectRoot, modulePath string) []model.SourceRoot {
-	sourceRoots, err := scanWebResourceDirs(projectRoot, modulePath, moduleWebResourceDirs())
+func scanModuleWebResources(projectRoot, modulePath string, directoryPolicies ...dirpolicy.Policy) []model.SourceRoot {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	sourceRoots, err := scanWebResourceDirs(projectRoot, modulePath, moduleWebResourceDirs(), directoryPolicy)
 	if err != nil {
 		return nil
 	}
 	return sourceRoots
 }
 
-func scanWebResourceDirs(projectRoot, ownerRoot string, relDirs []string) ([]model.SourceRoot, error) {
+func scanWebResourceDirs(projectRoot, ownerRoot string, relDirs []string, directoryPolicies ...dirpolicy.Policy) ([]model.SourceRoot, error) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	var sourceRoots []model.SourceRoot
 	seen := make(map[string]bool, len(relDirs))
 
@@ -74,7 +81,7 @@ func scanWebResourceDirs(projectRoot, ownerRoot string, relDirs []string) ([]mod
 			Path: relativePath(projectRoot, fullDir),
 			Role: "Web Resources",
 		}
-		if err := scanWebSourceRoot(&sourceRoot, projectRoot); err != nil {
+		if err := scanWebSourceRoot(&sourceRoot, projectRoot, directoryPolicy); err != nil {
 			return nil, err
 		}
 		if sourceRoot.FileCount == 0 {
@@ -89,29 +96,31 @@ func scanWebResourceDirs(projectRoot, ownerRoot string, relDirs []string) ([]mod
 	return sourceRoots, nil
 }
 
-func scanWebSourceRoot(sourceRoot *model.SourceRoot, projectRoot string) error {
+func scanWebSourceRoot(sourceRoot *model.SourceRoot, projectRoot string, directoryPolicies ...dirpolicy.Policy) error {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	fullRootPath := filepath.Join(projectRoot, sourceRoot.Path)
 	packages := make(map[string]*model.Package)
 
-	err := filepath.WalkDir(fullRootPath, func(path string, entry os.DirEntry, err error) error {
+	err := walkDiscoveryDir(fullRootPath, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 		if entry.IsDir() {
-			if path != fullRootPath && shouldSkipDir(entry.Name(), commonIgnoredDirs) {
+			if path != fullRootPath && shouldSkipDir(entry.Name(), commonIgnoredDirs, directoryPolicy) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 
 		info, infoErr := entry.Info()
-		if infoErr != nil || shouldOmitFile(projectRoot, path, entry.Name()) {
+		if infoErr != nil || shouldOmitFile(projectRoot, path, entry.Name(), directoryPolicy) {
 			return nil
 		}
 		recordWebResourceFile(projectRoot, fullRootPath, path, entry.Name(), info.Size(), packages)
 		sourceRoot.FileCount++
 		return nil
-	})
+	}, directoryPolicy, projectRoot)
 	if err != nil {
 		return err
 	}
@@ -170,8 +179,10 @@ func webPackageName(relPkgPath, packagePath string) string {
 
 // scanKnownRootWebResources finds known standard web resource files at the project root
 // (e.g., sitemap.xml, robots.txt, favicon.ico, web app manifests, social images).
-func scanKnownRootWebResources(root string) *model.SourceRoot {
-	entries, err := os.ReadDir(root)
+func scanKnownRootWebResources(root string, directoryPolicies ...dirpolicy.Policy) *model.SourceRoot {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	entries, err := readDiscoveryDir(root, directoryPolicy, root)
 	if err != nil {
 		return nil
 	}
@@ -186,7 +197,7 @@ func scanKnownRootWebResources(root string) *model.SourceRoot {
 			continue
 		}
 		path := filepath.Join(root, name)
-		if shouldOmitFile(root, path, name) {
+		if shouldOmitFile(root, path, name, directoryPolicy) {
 			continue
 		}
 		info, infoErr := entry.Info()
@@ -251,7 +262,7 @@ func mergeWebSourceRoots(module *model.Module, sourceRoots []model.SourceRoot) {
 
 func mergeWebSourceRoot(module *model.Module, webRoot model.SourceRoot) {
 	for idx := range module.SourceRoots {
-		if module.SourceRoots[idx].Path == webRoot.Path {
+		if module.SourceRoots[idx].Path == webRoot.Path && module.SourceRoots[idx].Role == webRoot.Role {
 			if shouldKeepCppContextSourceRootSeparate(module, &module.SourceRoots[idx], webRoot) {
 				continue
 			}

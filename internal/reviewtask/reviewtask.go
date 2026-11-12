@@ -3,6 +3,7 @@ package reviewtask
 import (
 	"errors"
 	"fmt"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,9 +47,10 @@ func (m Mode) String() string {
 
 // Options configures review task generation.
 type Options struct {
-	Mode       Mode
-	Ref        string
-	ExtraFocus string
+	DirectoryPolicy *dirpolicy.Policy
+	Mode            Mode
+	Ref             string
+	ExtraFocus      string
 	// SelectedPaths narrows default working-tree review to literal,
 	// repository-relative changed paths. Other modes reject selected paths.
 	SelectedPaths []string
@@ -145,16 +147,20 @@ type reviewUntrackedFile struct {
 }
 
 func discoverUntrackedFiles(root string) ([]string, int, error) {
+	return discoverUntrackedFilesWithPolicy(root, dirpolicy.Policy{})
+}
+
+func discoverUntrackedFilesWithPolicy(root string, policy dirpolicy.Policy) ([]string, int, error) {
 	output, err := runGit(root, "ls-files", "--others", "--exclude-standard", "-z")
 	if err != nil {
 		return nil, 0, err
 	}
 
-	paths, omitted := rankUntrackedFiles(root, strings.Split(output, "\x00"))
+	paths, omitted := rankUntrackedFiles(root, strings.Split(output, "\x00"), policy)
 	return paths, omitted, nil
 }
 
-func rankUntrackedFiles(root string, entries []string) ([]string, int) {
+func rankUntrackedFiles(root string, entries []string, policies ...dirpolicy.Policy) ([]string, int) {
 	files := make([]reviewUntrackedFile, 0, len(entries))
 	omitted := 0
 	for _, rel := range entries {
@@ -163,7 +169,7 @@ func rankUntrackedFiles(root string, entries []string) ([]string, int) {
 		}
 		normalized := normalizeReviewPath(rel)
 		absPath := filepath.Join(root, filepath.FromSlash(normalized))
-		priority, ok := scanner.ReviewPathPriority(root, absPath)
+		priority, ok := scanner.ReviewPathPriority(root, absPath, policies...)
 		if !ok {
 			continue
 		}

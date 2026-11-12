@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
+	"github.com/PVRLabs/aibadger/internal/settings"
 	"io"
 	"os"
 	"path/filepath"
@@ -27,6 +29,7 @@ import (
 // stable text-first operations; the other current operations support
 // certification.
 type APIOptions struct {
+	directoryPolicy       *dirpolicy.Policy
 	Operation             string
 	InputPath             string
 	GoalFilePath          string
@@ -108,6 +111,11 @@ func runAPIWithReviewBuilder(cfg Config, opts APIOptions, buildReview reviewPayl
 		}
 		return err
 	}
+	policy, warnings := settings.LoadDirectoryPolicy(cfg.SettingsPath)
+	for _, warning := range warnings {
+		fmt.Fprintln(stderr, warning)
+	}
+	opts.directoryPolicy = &policy
 	if opts.Operation == "review-context" {
 		opts.MaxFilesPerDirectory = cfg.MaxFilesPerDirectory
 		return runReviewContextAPIWithBuilder(cfg.Root, input, opts, stdout, buildReview)
@@ -122,7 +130,7 @@ func runAPIWithReviewBuilder(cfg Config, opts APIOptions, buildReview reviewPayl
 		fmt.Fprintln(stdout, "----------------------")
 		scanOutput = scanOutputStable
 	}
-	eng, err := scanProject(stdout, cfg.Root, scanOutput, cfg.MaxFilesPerDirectory)
+	eng, err := scanProject(stdout, cfg.Root, scanOutput, cfg.MaxFilesPerDirectory, policy)
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
@@ -315,6 +323,7 @@ func runReviewContextAPIWithBuilder(root, guidance string, api APIOptions, stdou
 		Mode: mode, Ref: api.ReviewRef, ExtraFocus: guidance, SelectedPaths: paths,
 		MaxPayloadBytes: api.MaxReviewPayloadBytes, MaxFileBytes: api.MaxReviewFileBytes,
 		IncludeTopology:      api.IncludeReviewTopology,
+		DirectoryPolicy:      api.directoryPolicy,
 		MaxFilesPerDirectory: api.MaxFilesPerDirectory,
 	})
 	if err != nil {

@@ -105,12 +105,14 @@ func (f *Formatter) generateTopology(t *model.ProjectTopology, taggedFiles []Tag
 	sourceHeader := "\n[SOURCE TREE]\n"
 
 	var packages []string
+	var packagePaths []string
 	for _, pkg := range schemaATopologyPackages(t) {
 		line := formatPackageLine(pkg)
 		if line == "" {
 			continue
 		}
 		packages = append(packages, line)
+		packagePaths = append(packagePaths, pkg.Path)
 	}
 
 	var etcBuilder strings.Builder
@@ -134,6 +136,22 @@ func (f *Formatter) generateTopology(t *model.ProjectTopology, taggedFiles []Tag
 		bodySize := 0
 		for i := 0; i < keep; i++ {
 			bodySize += len(packages[i]) + 1
+		}
+		if bodySize > available {
+			// Remove supplemental additions to existing lines before truncating
+			// source packages. HTML-only packages already follow those lines.
+			baseline := make(map[string]string)
+			for _, base := range schemaATopologyPackages(t, false) {
+				if line := formatPackageLine(base); line != "" {
+					baseline[base.Path] = line
+				}
+			}
+			for i := 0; i < keep; i++ {
+				if line, ok := baseline[packagePaths[i]]; ok {
+					bodySize += len(line) - len(packages[i])
+					packages[i] = line
+				}
+			}
 		}
 		for keep > 0 && bodySize > available {
 			keep--
@@ -316,11 +334,24 @@ func (f *Formatter) writeTopologySection(sb *strings.Builder, t *model.ProjectTo
 	}
 }
 
-func schemaATopologyPackages(t *model.ProjectTopology) []model.Package {
+func schemaATopologyPackages(t *model.ProjectTopology, includeHTML ...bool) []model.Package {
 	var packages []model.Package
+	var html []model.Package
+	filtered := *t
+	filtered.Modules = append([]model.Module(nil), t.Modules...)
+	for i, m := range t.Modules {
+		filtered.Modules[i].SourceRoots = nil
+		for _, sr := range m.SourceRoots {
+			if sr.SupplementalHTML {
+				html = append(html, sr.Packages...)
+			} else {
+				filtered.Modules[i].SourceRoots = append(filtered.Modules[i].SourceRoots, sr)
+			}
+		}
+	}
 	packageIndexes := make(map[string]int)
 
-	for _, m := range t.Modules {
+	for _, m := range filtered.Modules {
 		for _, pkg := range schemaAPackages(m) {
 			idx, exists := packageIndexes[pkg.Path]
 			if !exists {
@@ -332,6 +363,37 @@ func schemaATopologyPackages(t *model.ProjectTopology) []model.Package {
 		}
 	}
 
+	if len(includeHTML) > 0 && !includeHTML[0] {
+		return packages
+	}
+	// Apply the supplemental cap before merging by package path.
+	sort.Slice(html, func(i, j int) bool {
+		entry := func(p model.Package) bool {
+			for _, f := range p.TopFiles {
+				if strings.EqualFold(f.Name, "index.html") || strings.EqualFold(f.Name, "index.htm") {
+					return true
+				}
+			}
+			return false
+		}
+		if entry(html[i]) != entry(html[j]) {
+			return entry(html[i])
+		}
+		return html[i].Path < html[j].Path
+	})
+	if len(html) > 8 {
+		html = html[:8]
+	}
+	for _, pkg := range html {
+		if idx, exists := packageIndexes[pkg.Path]; exists {
+			// Preserve existing source order and append HTML representatives.
+			packages[idx].FileCount += pkg.FileCount
+			packages[idx].TopFiles = append(packages[idx].TopFiles, pkg.TopFiles...)
+		} else {
+			packageIndexes[pkg.Path] = len(packages)
+			packages = append(packages, pkg)
+		}
+	}
 	return packages
 }
 

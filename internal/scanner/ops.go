@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/filegroups"
 	"github.com/PVRLabs/aibadger/internal/model"
 )
@@ -14,21 +15,25 @@ const maxOpsPackageFiles = 5
 
 // scanOpsResources finds shallow operational and deployment context without
 // reading file contents or affecting language detector output.
-func scanOpsResources(root string) ([]model.SourceRoot, error) {
+func scanOpsResources(root string, directoryPolicies ...dirpolicy.Policy) ([]model.SourceRoot, error) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	packages := make(map[string]*model.Package)
 
-	if err := scanRootOpsFiles(root, packages); err != nil {
+	if err := scanRootOpsFiles(root, packages, directoryPolicy); err != nil {
 		return nil, err
 	}
-	if err := scanOpsDirectories(root, packages); err != nil {
+	if err := scanOpsDirectories(root, packages, directoryPolicy); err != nil {
 		return nil, err
 	}
 
 	return opsPackagesToSourceRoots(packages), nil
 }
 
-func scanRootOpsFiles(root string, packages map[string]*model.Package) error {
-	entries, err := os.ReadDir(root)
+func scanRootOpsFiles(root string, packages map[string]*model.Package, directoryPolicies ...dirpolicy.Policy) error {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	entries, err := readDiscoveryDir(root, directoryPolicy, root)
 	if err != nil {
 		return err
 	}
@@ -37,13 +42,15 @@ func scanRootOpsFiles(root string, packages map[string]*model.Package) error {
 			continue
 		}
 		path := filepath.Join(root, entry.Name())
-		recordOpsFile(root, path, entry, packages)
+		recordOpsFile(root, path, entry, packages, directoryPolicy)
 	}
 	return nil
 }
 
-func scanOpsDirectories(root string, packages map[string]*model.Package) error {
-	entries, err := os.ReadDir(root)
+func scanOpsDirectories(root string, packages map[string]*model.Package, directoryPolicies ...dirpolicy.Policy) error {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	entries, err := readDiscoveryDir(root, directoryPolicy, root)
 	if err != nil {
 		return err
 	}
@@ -53,7 +60,7 @@ func scanOpsDirectories(root string, packages map[string]*model.Package) error {
 		}
 		name := entry.Name()
 		if name == ".github" {
-			if err := scanOpsDir(root, filepath.Join(root, ".github", "workflows"), packages, false); err != nil {
+			if err := scanOpsDir(root, filepath.Join(root, ".github", "workflows"), packages, false, directoryPolicy); err != nil {
 				return err
 			}
 			continue
@@ -61,40 +68,44 @@ func scanOpsDirectories(root string, packages map[string]*model.Package) error {
 		if !filegroups.IsOpsTopLevelDirName(name) {
 			continue
 		}
-		if err := scanOpsDir(root, filepath.Join(root, name), packages, true); err != nil {
+		if err := scanOpsDir(root, filepath.Join(root, name), packages, true, directoryPolicy); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func scanOpsDir(root, dir string, packages map[string]*model.Package, includeNested bool) error {
+func scanOpsDir(root, dir string, packages map[string]*model.Package, includeNested bool, directoryPolicies ...dirpolicy.Policy) error {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
 		return nil
 	}
 
-	entries, err := os.ReadDir(dir)
+	entries, err := readDiscoveryDir(dir, directoryPolicy, root)
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
 		path := filepath.Join(dir, entry.Name())
 		if entry.IsDir() {
-			if includeNested && !shouldSkipDir(entry.Name(), commonIgnoredDirs) {
-				if err := scanOpsDirDirectFiles(root, path, packages); err != nil {
+			if includeNested && !shouldSkipDir(entry.Name(), commonIgnoredDirs, directoryPolicy) {
+				if err := scanOpsDirDirectFiles(root, path, packages, directoryPolicy); err != nil {
 					return err
 				}
 			}
 			continue
 		}
-		recordOpsFile(root, path, entry, packages)
+		recordOpsFile(root, path, entry, packages, directoryPolicy)
 	}
 	return nil
 }
 
-func scanOpsDirDirectFiles(root, dir string, packages map[string]*model.Package) error {
-	entries, err := os.ReadDir(dir)
+func scanOpsDirDirectFiles(root, dir string, packages map[string]*model.Package, directoryPolicies ...dirpolicy.Policy) error {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
+	entries, err := readDiscoveryDir(dir, directoryPolicy, root)
 	if err != nil {
 		return err
 	}
@@ -102,14 +113,16 @@ func scanOpsDirDirectFiles(root, dir string, packages map[string]*model.Package)
 		if entry.IsDir() {
 			continue
 		}
-		recordOpsFile(root, filepath.Join(dir, entry.Name()), entry, packages)
+		recordOpsFile(root, filepath.Join(dir, entry.Name()), entry, packages, directoryPolicy)
 	}
 	return nil
 }
 
-func recordOpsFile(root, path string, entry os.DirEntry, packages map[string]*model.Package) {
+func recordOpsFile(root, path string, entry os.DirEntry, packages map[string]*model.Package, directoryPolicies ...dirpolicy.Policy) {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	name := entry.Name()
-	if shouldOmitOpsFile(root, path, name) || shouldOmitOpsFileName(name) {
+	if shouldOmitOpsFile(root, path, name, directoryPolicy) || shouldOmitOpsFileName(name) {
 		return
 	}
 	if relativeDirFromFile(root, path) != "" && !filegroups.IsOpsContextFileName(name) {
@@ -142,11 +155,13 @@ func recordOpsFile(root, path string, entry os.DirEntry, packages map[string]*mo
 	}
 }
 
-func shouldOmitOpsFile(root, path, name string) bool {
+func shouldOmitOpsFile(root, path, name string, directoryPolicies ...dirpolicy.Policy) bool {
+	directoryPolicy := dirpolicy.Resolve(directoryPolicies...)
+
 	if filegroups.IsOpsEnvExampleName(name) {
 		return isOmittedNoiseName(name) || isOmittedCompiledBinary(name)
 	}
-	return shouldOmitFile(root, path, name)
+	return shouldOmitFile(root, path, name, directoryPolicy)
 }
 
 func getOrCreateOpsPackage(packages map[string]*model.Package, dir string) *model.Package {

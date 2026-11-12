@@ -3,6 +3,7 @@ package codemap
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"os"
 	"path/filepath"
 	"strings"
@@ -254,5 +255,43 @@ func TestTemplateAndBuildFilenameRecognition(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestScanProjectSkipsToolArtifacts(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{".playwright-cli/noise.js", "src/.next/noise.js", "src/.ruff_cache/noise.py", "public/test-results/noise.html"} {
+		writeTestFile(t, root, path, "generated\n")
+	}
+	writeTestFile(t, root, "src/keep.go", "package keep\n")
+	got, err := scanProject(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Files != 1 {
+		t.Fatalf("generated files included: %+v", got)
+	}
+}
+
+func TestCodeMapConfiguredDirectoryPolicy(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{"build/app.js", "nested/.cache/app.js", "custom-output/hidden.js", "nested/CUSTOM-OUTPUT/hidden.js", ".git/hidden.js"} {
+		writeTestFile(t, root, path, "x\n")
+	}
+	enabled := false
+	policy := dirpolicy.New(&enabled, []string{"custom-output"})
+	tree, err := scanProjectWithExclusions(root, scanLimits{10, 100, 100, 1024}, (*os.File).ReadDir, "", nil, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tree.Files != 2 {
+		t.Fatalf("configured map file count=%d want 2", tree.Files)
+	}
+	tree, err = scanProjectWithExclusions(root, scanLimits{10, 100, 100, 1024}, (*os.File).ReadDir, "", []string{"build"}, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tree.Files != 1 {
+		t.Fatalf("command exclusions changed: files=%d", tree.Files)
 	}
 }

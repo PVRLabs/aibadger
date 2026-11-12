@@ -3,6 +3,8 @@ package reviewtask
 import (
 	"errors"
 	"fmt"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
+	"github.com/PVRLabs/aibadger/internal/settings"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,7 +48,18 @@ type ChangeSet struct {
 // BuildChangeSet inspects one Git repository and returns a deterministic,
 // structured representation of the requested review diff.
 func BuildChangeSet(root string, opts Options) (ChangeSet, error) {
-	return buildChangeSet(root, opts, buildChangePatch, discoverUntrackedFiles)
+	var policy dirpolicy.Policy
+	if opts.DirectoryPolicy != nil {
+		policy = *opts.DirectoryPolicy
+	} else {
+		policy, _ = settings.DefaultDirectoryPolicy()
+	}
+	// Literal selected paths are requests, rather than automatic discovery.
+	if len(opts.SelectedPaths) > 0 {
+		enabled := false
+		policy = dirpolicy.New(&enabled, nil)
+	}
+	return buildChangeSet(root, opts, buildChangePatch, func(root string) ([]string, int, error) { return discoverUntrackedFilesWithPolicy(root, policy) })
 }
 
 type changePatchBuilder func(string, []string, changeMetadata) (string, bool, error)

@@ -2,6 +2,7 @@ package badger
 
 import (
 	"fmt"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"io"
 	"strings"
 
@@ -28,11 +29,11 @@ func apiEngineOptions(cfg Config, focus protocol.Focus) workflow.EngineOptions {
 	}
 }
 
-func scanProject(w io.Writer, root string, output scanOutputMode, maxFilesPerDir int) (*engine.Engine, error) {
+func scanProject(w io.Writer, root string, output scanOutputMode, maxFilesPerDir int, policies ...dirpolicy.Policy) (*engine.Engine, error) {
 	if output != scanOutputSilent {
 		fmt.Fprint(w, "Scanning project... ")
 	}
-	eng, err := engine.New(root, maxFilesPerDir)
+	eng, err := engine.New(root, maxFilesPerDir, policies...)
 	if err != nil {
 		return nil, err
 	}

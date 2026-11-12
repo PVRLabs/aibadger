@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/PVRLabs/aibadger/internal/settings"
 	"io"
+	"os"
 	"runtime"
 	"strings"
 
@@ -24,6 +26,11 @@ func runMapCommandWithGenerator(args []string, stdout io.Writer, generate func(s
 	if err != nil {
 		return err
 	}
+	policy, warnings := settings.DefaultDirectoryPolicy()
+	for _, warning := range warnings {
+		fmt.Fprintln(os.Stderr, warning)
+	}
+	options.DirectoryPolicy = &policy
 	options.Version = badger.Version
 	path, err = generate(path, options)
 	if err != nil {

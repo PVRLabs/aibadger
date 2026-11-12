@@ -6,6 +6,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"os"
 	"strings"
 	"time"
@@ -216,13 +217,13 @@ func NewModel(root string, cfg Config) Model {
 		session:                workflow.NewSession(nil, cfg.WhitespaceMode),
 		reviewOptions:          reviewtask.Options{Mode: reviewtask.ModeDefault},
 		reviewMaxPromptBytes:   cfg.MaxTopologyPromptBytes,
-		externalRoots:          loadExternalRoots(root),
 		prepareReviewContext:   reviewtask.BuildInteractiveContext,
 	}
 
 	settings, resolvedCfg, showOnboarding, onboardingCompleted, settingsWriteAllowed, settingsWarnings := loadSettingsState(cfg.SettingsPath, cfg)
 	cfg = resolvedCfg
 	m.cfg = cfg
+	m.externalRoots = loadExternalRoots(root, cfg.DirectoryPolicy)
 	m.settings = settings
 	m.settingsWriteAllowed = settingsWriteAllowed
 	m.startupWarnings = settingsWarnings
@@ -260,6 +261,7 @@ func (m *Model) applyStartupGoal() {
 	m.err = nil
 	if protocol.NormalizeFocus(m.cfg.Focus) == protocol.FocusReview {
 		m.reviewOptions = reviewOptionsFromStartup(m.cfg.Startup)
+		m.reviewOptions.DirectoryPolicy = &m.cfg.DirectoryPolicy
 		m.reviewOptions.MaxPromptBytes = m.reviewMaxPromptBytes
 	}
 	m.startupGoalLiteral = m.cfg.Startup.LiteralGoal
@@ -329,8 +331,8 @@ func startupMessage(severity, text string) tuiMessage {
 	}
 }
 
-func loadExternalRoots(root string) []taggedfile.ExternalRoot {
-	contexts, err := externalcontext.Load(root)
+func loadExternalRoots(root string, policies ...dirpolicy.Policy) []taggedfile.ExternalRoot {
+	contexts, err := externalcontext.Load(root, policies...)
 	if err != nil || len(contexts) == 0 {
 		return nil
 	}
@@ -353,6 +355,7 @@ func loadSettingsState(settingsPath string, cfg Config) (Settings, Config, bool,
 		return Settings{}, cfg, false, true, false, nil
 	}
 	settings, err := LoadSettings(settingsPath)
+	cfg.DirectoryPolicy = settings.DirectoryPolicy()
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Settings{}, cfg, true, false, true, nil
@@ -364,7 +367,8 @@ func loadSettingsState(settingsPath string, cfg Config) (Settings, Config, bool,
 		return Settings{}, cfg, false, false, false, []string{settingsLoadWarning(settingsPath, err)}
 	}
 	resolved, warnings := resolveSettingsLimits(cfg, settings.Limits)
-	return settings, resolved, !settings.FirstRunOnboardingCompleted, settings.FirstRunOnboardingCompleted, true, warnings
+	warnings = append(warnings, settings.Warnings...)
+	return settings, resolved, !settings.FirstRunOnboardingCompleted, settings.FirstRunOnboardingCompleted, len(settings.Warnings) == 0, warnings
 }
 
 func (m Model) refreshTopologyPrompt() (Model, []string) {
@@ -636,7 +640,7 @@ func (m Model) submitGoal() (tea.Model, tea.Cmd) {
 	m.state = stateScanning
 	m.scanFrame = 0
 	m.goalInput.Blur()
-	return m, tea.Batch(scanProjectCmd(m.root, m.cfg.MaxFilesPerDirectory), scanTick())
+	return m, tea.Batch(scanProjectCmd(m.root, m.cfg.MaxFilesPerDirectory, m.cfg.DirectoryPolicy), scanTick())
 }
 
 func (m Model) handleDesignCommand() (tea.Model, tea.Cmd) {
@@ -708,6 +712,7 @@ func (m Model) handleReviewCommand(extraFocus string) (tea.Model, tea.Cmd) {
 		ExtraFocus:     extraFocus,
 		MaxPromptBytes: m.reviewMaxPromptBytes,
 	}
+	opts.DirectoryPolicy = &m.cfg.DirectoryPolicy
 	ctx, err := prepare(m.root, opts)
 	if err != nil {
 		m.status = errorMessage(fmt.Sprintf("Unable to prepare review prompt: %v", err))
@@ -760,6 +765,7 @@ func (m Model) handleReviewRefresh() (tea.Model, tea.Cmd) {
 	}
 	opts := m.reviewOptions
 	opts.MaxPromptBytes = m.reviewMaxPromptBytes
+	opts.DirectoryPolicy = &m.cfg.DirectoryPolicy
 	ctx, err := prepare(m.root, opts)
 	if err != nil {
 		m.status = errorMessage(fmt.Sprintf("Unable to refresh review context: %v", err))

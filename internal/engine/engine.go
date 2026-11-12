@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/PVRLabs/aibadger/internal/dirpolicy"
 	"github.com/PVRLabs/aibadger/internal/externalcontext"
 	"github.com/PVRLabs/aibadger/internal/extractor"
 	"github.com/PVRLabs/aibadger/internal/model"
 	"github.com/PVRLabs/aibadger/internal/protocol"
 	"github.com/PVRLabs/aibadger/internal/reviewtask"
 	"github.com/PVRLabs/aibadger/internal/scanner"
+	"github.com/PVRLabs/aibadger/internal/settings"
 	"github.com/PVRLabs/aibadger/internal/taggedfile"
 	"github.com/PVRLabs/aibadger/internal/writer"
 )
@@ -28,12 +30,18 @@ type Engine struct {
 
 // New scans the project root and creates an engine for follow-up workflow
 // steps. If maxFilesPerDir is 0, scanning is unlimited.
-func New(root string, maxFilesPerDir int) (*Engine, error) {
+func New(root string, maxFilesPerDir int, policies ...dirpolicy.Policy) (*Engine, error) {
 	if err := CheckDisabled(root); err != nil {
 		return nil, err
 	}
 
-	s := scanner.NewScanner(root)
+	var policy dirpolicy.Policy
+	if len(policies) > 0 {
+		policy = policies[0]
+	} else {
+		policy, _ = settings.DefaultDirectoryPolicy()
+	}
+	s := scanner.NewScanner(root, policy)
 	s.MaxFilesPerDirectory = maxFilesPerDir
 	topology, err := s.Scan()
 	if err != nil {

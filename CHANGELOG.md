@@ -23,7 +23,6 @@ Notable user-facing changes to Badger are documented here.
 
 ### Reliability and review
 
-- Allowed more time for Maven detection on Windows.
 - Reduced Git staging and commit noise in review findings.
 
 ## [v0.8.3] - 2026-10-28

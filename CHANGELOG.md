@@ -4,6 +4,28 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.9.0] - 2026-11-13
+
+### Project settings and discovery
+
+- Added project-level `.badger/settings.json` settings that override user settings,
+  making it possible to share configuration across a repository. Supported
+  settings also apply to headless and API topology operations.
+- Added settings to control generated-directory exclusions and exclude additional
+  directory names from automatic discovery across Badger workflows.
+- Added `limits.max_top_files_per_package` to control how many representative
+  files appear in package topology.
+
+### Project topology
+
+- Added a modules section to topology for projects with multiple detected modules.
+- Improved discovery of supplemental HTML files in mixed-language projects.
+
+### Reliability and review
+
+- Allowed more time for Maven detection on Windows.
+- Reduced Git staging and commit noise in review findings.
+
 ## [v0.8.3] - 2026-10-28
 
 ### Codebase Map

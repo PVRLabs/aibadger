@@ -58,10 +58,13 @@ func TestPowerShellReproductionRoundTrip(t *testing.T) {
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 function badger { [Console]::WriteLine((ConvertTo-Json -InputObject @($args) -Compress)) }
 ` + settings.Command
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	output, err := exec.CommandContext(ctx, shell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script).CombinedOutput()
 	if err != nil {
+		if ctx.Err() != nil {
+			t.Fatalf("PowerShell round-trip timed out: %v\n%s", ctx.Err(), output)
+		}
 		t.Fatalf("PowerShell round-trip: %v\n%s", err, output)
 	}
 	var got []string

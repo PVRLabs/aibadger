@@ -78,7 +78,7 @@ go install github.com/PVRLabs/aibadger/cmd/badger@latest
 
 ## Build From Source
 
-Building from source requires Go 1.27.1 or newer.
+Building from source requires Go 1.27.4 or newer.
 
 Development build:
 

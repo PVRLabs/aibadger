@@ -4,6 +4,11 @@ Notable user-facing changes to Badger are documented here.
 
 ## Unreleased
 
+## [v0.9.1] - 2026-11-23
+
+- Updated release builds to Go 1.27.4 for runtime, compiler, and security
+  fixes. Building from source now requires Go 1.27.4 or newer.
+
 ## [v0.9.0] - 2026-11-13
 
 ### Project settings and discovery

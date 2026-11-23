@@ -1,6 +1,6 @@
 module github.com/PVRLabs/aibadger
 
-go 1.27.1
+go 1.27.4
 
 require (
 	github.com/atotto/clipboard v0.1.4
